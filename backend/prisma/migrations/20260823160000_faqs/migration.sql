@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS faqs (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "isPublished" BOOLEAN NOT NULL DEFAULT TRUE,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

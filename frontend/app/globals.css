@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+    --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+    --color-background: #050508;
+    --color-foreground: #f4f4f5;
+    --color-accent: #f5c518;
+    --color-muted: #a1a1aa;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
+}
+
+html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+html,
+body {
+    overflow-x: hidden;
+    max-width: 100%;
+    min-height: 100dvh;
+}
+
+body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+}
+
+input,
+select,
+textarea {
+    font-size: 16px;
+    max-width: 100%;
+}
+
+button,
+a,
+[role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+}
+
+.hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.cookie-banner {
+    display: none !important;
+}
+
+html[data-cookie-ready]:not([data-cookie-consent]) .cookie-banner {
+    display: block !important;
+}

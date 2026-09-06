@@ -1,0 +1,7 @@
+POST http://localhost:3000/ingest/start
+Content-Type: application/json
+
+{
+  "streamId": "test123",
+  "port": 5004
+}

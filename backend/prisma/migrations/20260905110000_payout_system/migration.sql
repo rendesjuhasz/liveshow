@@ -1,0 +1,22 @@
+ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "commissionPercent" INTEGER;
+ALTER TABLE "PlatformConfig" ADD COLUMN IF NOT EXISTS "payoutCycle" TEXT NOT NULL DEFAULT 'monthly';
+ALTER TABLE "Payout" ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMP(3);
+ALTER TABLE "Payout" ADD COLUMN IF NOT EXISTS "paidAt" TIMESTAMP(3);
+ALTER TABLE "Payout" ADD COLUMN IF NOT EXISTS "method" TEXT;
+ALTER TABLE "Payout" ADD COLUMN IF NOT EXISTS "snapshot" TEXT;
+ALTER TABLE "Payout" ADD COLUMN IF NOT EXISTS "requestedBy" TEXT NOT NULL DEFAULT 'streamer';
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "invoiceCapable" BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "taxDeclarationAcceptedAt" TIMESTAMP(3);
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "contractShareAcceptedAt" TIMESTAMP(3);
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "preferredPayoutMethod" TEXT;
+
+CREATE TABLE IF NOT EXISTS "PayoutEvent" (
+    "id" TEXT NOT NULL,
+    "payoutId" TEXT NOT NULL,
+    "actorUserId" TEXT,
+    "action" TEXT NOT NULL,
+    "fromStatus" TEXT,
+    "toStatus" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "PayoutEvent_pkey" PRIMARY KEY ("id")
+);

@@ -1,0 +1,13 @@
+{
+  "name": "transcoder",
+  "version": "1.0.0",
+  "main": "dist/transcoder-pipeline.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/transcoder-pipeline.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.0.0"
+  }
+}

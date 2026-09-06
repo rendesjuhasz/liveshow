@@ -1,0 +1,2 @@
+ALTER TABLE "Review" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE "Review" ALTER COLUMN "status" SET DEFAULT 'pending';

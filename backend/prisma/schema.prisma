@@ -1,0 +1,664 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(uuid())
+  email          String          @unique
+  name           String?
+  password       String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  /// "user" | "admin" | "moderator" | "streamer"
+  role           String          @default("user")
+  /// "active" | "banned"
+  status         String          @default("active")
+  resetPasswordTokenHash String?
+  resetPasswordExpiresAt DateTime?
+  xp             Int             @default(0)
+  locale         String          @default("hu")
+  referralCode   String?         @unique
+  referredByUserId String?
+  referredBy     User?           @relation("UserReferrals", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referredUsers  User[]          @relation("UserReferrals")
+  referralsGiven Referral[]      @relation("ReferralReferrer")
+  referralReceived Referral?     @relation("ReferralReferred")
+  chatMessages   ChatMessage[]
+  payments       Payment[]
+  questions      Question[]
+  questionAudits QuestionAudit[]
+  reviews        Review[]
+  streams        Stream[]
+  streamer       Streamer?
+  tickets        Ticket[]
+  giftClaims     GiftClaim[]
+  wishes         Wish[]
+  badges         UserBadge[]
+  notifications  UserNotification[]
+  showSupport    ShowSupport[]
+  packPurchases  TicketPackPurchase[]
+  ticketSpends   TicketSpend[] @relation("TicketSpendViewer")
+  privateRequests PrivateRequest[]
+  streamerFollows StreamerFollow[]
+  categoryFollows CategoryFollow[]
+  notificationPref NotificationPref?
+
+  @@index([referredByUserId])
+}
+
+model Streamer {
+  id              String    @id @default(uuid())
+  name            String
+  email           String    @unique
+  bio             String?
+  userId          String?   @unique
+  createdAt       DateTime  @default(now())
+  avatarUrl       String?
+  category        String    @default("egyeb")
+  contactEmail    String
+  termsAcceptedAt DateTime?
+  /// "pending" | "approved" | "rejected" | "banned"
+  status          String    @default("pending")
+  invoiceCapable  Boolean   @default(false)
+  taxDeclarationAcceptedAt DateTime?
+  contractShareAcceptedAt DateTime?
+  preferredPayoutMethod String?
+  payouts         Payout[]
+  ticketSpends    TicketSpend[]
+  shows           Show[]
+  user            User?     @relation(fields: [userId], references: [id])
+  wishes          Wish[]
+  privateOffers   PrivateOffer[]
+  followers       StreamerFollow[]
+}
+
+model Stream {
+  id          String      @id @default(uuid())
+  title       String
+  description String?
+  isLive      Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String?
+  streamKey   String?     @unique
+  hlsPath     String?
+  rtpPort     Int?
+  showId      String?     @unique
+  recordings  Recording[]
+  show        Show?       @relation(fields: [showId], references: [id])
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+model Recording {
+  id        String   @id @default(uuid())
+  streamId  String
+  fileUrl   String
+  createdAt DateTime @default(now())
+  showId    String?
+  show      Show?    @relation(fields: [showId], references: [id])
+  stream    Stream   @relation(fields: [streamId], references: [id])
+}
+
+model Archive {
+  id         String   @id @default(uuid())
+  showId     String   @unique
+  filePath   String
+  publicPath String?
+  size       Int      @default(0)
+  createdAt  DateTime @default(now())
+  show       Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+}
+
+model Show {
+  id              String            @id @default(uuid())
+  title           String
+  description     String?
+  image           String?
+  startTime       DateTime?
+  price           Int
+  live            Boolean           @default(false)
+  featured        Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  streamUrl       String?
+  streamId        String?
+  streamerId      String?
+  extrasContent   String?
+  privateStreamId String?
+  /// "draft" | "pending" | "active" | "blocked" | "archived"
+  status          String            @default("draft")
+  /// platform jutalék % erre a műsorra; üres = globális
+  commissionPercent Int?
+  liveQuestionTopicKey String?
+  isPrivate       Boolean           @default(false)
+  /// élő/archív videó tartalmi kategória (turisztika, oktatas, ...)
+  videoCategory   String            @default("egyeb")
+  /// közvetlenül feltöltött VOD, nem élő adásból készült
+  isVod           Boolean           @default(false)
+  archives        Archive?
+  chatMessages    ChatMessage[]
+  questions       Question[]
+  questionAudits  QuestionAudit[]
+  recordings      Recording[]
+  reviews         Review[]
+  streamer        Streamer?         @relation(fields: [streamerId], references: [id])
+  ticketOffers    ShowTicketOffer[]
+  stream          Stream?
+  tickets         Ticket[]
+  giftCampaigns   GiftCampaign[]
+  supportMessages ShowSupport[]
+  ticketSpends    TicketSpend[]
+  mediaTracks     ShowMediaTrack[]
+}
+
+model Ticket {
+  id         String          @id @default(uuid())
+  userId     String
+  showId     String
+  price      Int
+  status     String          @default("pending")
+  createdAt  DateTime        @default(now())
+  categoryId String?
+  questionRedeemedAt DateTime?
+  payments   Payment[]
+  giftClaims GiftClaim[]
+  category   TicketCategory? @relation(fields: [categoryId], references: [id])
+  show       Show            @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, showId])
+}
+
+model GiftCampaign {
+  id          String      @id @default(uuid())
+  name        String
+  /// "first_users" | "first_buyers"
+  type        String
+  showId      String
+  categoryKey String      @default("nezo")
+  maxClaims   Int
+  /// "draft" | "active" | "paused" | "ended"
+  status      String      @default("draft")
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdAt   DateTime    @default(now())
+  show        Show        @relation(fields: [showId], references: [id], onDelete: Cascade)
+  claims      GiftClaim[]
+}
+
+model GiftClaim {
+  id         String        @id @default(uuid())
+  campaignId String?
+  userId     String
+  ticketId   String
+  /// "admin_gift" | "first_users" | "first_buyers"
+  source     String
+  createdAt  DateTime      @default(now())
+  campaign   GiftCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, userId])
+}
+
+model TicketCategory {
+  id        String            @id @default(uuid())
+  /// "nezo" | "interaktiv" | "vip"
+  key       String            @unique
+  name      String
+  price     Int
+  sortOrder Int               @default(0)
+  offers    ShowTicketOffer[]
+  tickets   Ticket[]
+}
+
+model ShowTicketOffer {
+  id         String         @id @default(uuid())
+  showId     String
+  categoryId String
+  category   TicketCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  show       Show           @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@unique([showId, categoryId])
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  showId    String
+  userId    String
+  rating    Int
+  comment   String?
+  /// "pending" | "approved" | "rejected"
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, showId])
+}
+
+model Payment {
+  id               String   @id @default(uuid())
+  userId           String
+  ticketId         String?
+  packPurchaseId   String?
+  amount           Int
+  status           String   @default("pending")
+  provider         String   @default("dev")
+  stripeSessionId  String?  @unique
+  barionPaymentId  String?  @unique
+  createdAt        DateTime @default(now())
+  ticket           Ticket?  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  packPurchase     TicketPackPurchase? @relation(fields: [packPurchaseId], references: [id], onDelete: SetNull)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Payout {
+  id          String    @id @default(uuid())
+  streamerId  String
+  amount      Int
+  /// "pending" | "approved" | "paid" | "rejected"
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  reviewedAt  DateTime?
+  paidAt      DateTime?
+  method      String?
+  snapshot    String?
+  requestedBy String    @default("streamer")
+  streamer    Streamer  @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+}
+
+model Question {
+  id           String          @id @default(uuid())
+  showId       String
+  userId       String
+  text         String
+  createdAt    DateTime        @default(now())
+  /// "pending" | "fulfilled" | "rejected"  (legacy: approved treated as pending)
+  status       String          @default("pending")
+  filterReason String?
+  topicKey     String?
+  reviewedAt   DateTime?
+  reviewedById String?
+  show         Show            @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audits       QuestionAudit[]
+}
+
+model QuestionAudit {
+  id          String   @id @default(uuid())
+  questionId  String
+  showId      String
+  actorUserId String?
+  action      String
+  fromStatus  String?
+  toStatus    String
+  note        String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  show        Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+}
+
+model BannedWord {
+  id        String   @id @default(uuid())
+  word      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  showId    String
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailLog {
+  id         String   @id @default(uuid())
+  type       String
+  toEmail    String
+  subject    String
+  body       String
+  relatedId  String?
+  status     String   @default("logged")
+  createdAt  DateTime @default(now())
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("contact_messages")
+}
+
+model Faq {
+  id          String   @id @default(uuid())
+  category    String
+  question    String
+  answer      String
+  sortOrder   Int      @default(0) @map("order")
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+/// pending | accepted | rejected | completed
+/// visibility: public | private
+model Wish {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  streamerId  String?   @map("streamer_id")
+  text        String
+  status      String    @default("pending")
+  visibility  String    @default("public")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  completedAt DateTime? @map("completed_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamer    Streamer? @relation(fields: [streamerId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([visibility])
+  @@map("wishes")
+}
+
+model UserBadge {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  key         String
+  title       String
+  description String
+  wishId      String?  @unique @map("wish_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_badges")
+}
+
+model UserNotification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  relatedId String?
+  link      String?
+  clicked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model StreamerFollow {
+  id         String   @id @default(uuid())
+  userId     String
+  streamerId String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, streamerId])
+  @@index([streamerId, createdAt])
+}
+
+/// Jövőbeli kategória-követés (turisztika, gaming, …)
+model CategoryFollow {
+  id          String   @id @default(uuid())
+  userId      String
+  categoryKey String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryKey])
+  @@index([categoryKey])
+}
+
+model NotificationPref {
+  userId        String  @id
+  notifyNewShow Boolean @default(true)
+  notify24h     Boolean @default(true)
+  notify1h      Boolean @default(true)
+  notifyLive    Boolean @default(true)
+  emailEnabled  Boolean @default(true)
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ShowNotifyStat {
+  id         String   @id @default(uuid())
+  showId     String
+  kind       String
+  sentCount  Int      @default(0)
+  clickCount Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([showId, kind])
+  @@index([showId])
+}
+
+model ShowSupport {
+  id        String   @id @default(uuid())
+  showId    String
+  userId    String
+  /// "opinion" | "feedback" | "thanks" | "support"
+  kind      String
+  text      String?
+  createdAt DateTime @default(now())
+  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([showId, createdAt])
+}
+
+model TicketPackPurchase {
+  id             String    @id @default(uuid())
+  userId         String
+  groupKey       String
+  groupName      String
+  ticketCount    Int
+  price          Int
+  unitValue      Int
+  remainingCount Int       @default(0)
+  /// "pending" | "paid" | "failed" | "cancelled"
+  status         String    @default("pending")
+  /// "purchase" | "referral" | "gift"
+  source         String    @default("purchase")
+  paidAt         DateTime?
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments       Payment[]
+  spends         TicketSpend[]
+
+  @@index([userId, status, createdAt])
+}
+
+model TicketSpend {
+  id               String   @id @default(uuid())
+  viewerUserId     String
+  streamerId       String
+  showId           String?
+  purchaseId       String?
+  ticketGroup      String
+  ticketsSpent     Int
+  ticketUnitValue  Int
+  calculatedAmount Int
+  questionId       String?
+  createdAt        DateTime @default(now())
+  viewer           User     @relation("TicketSpendViewer", fields: [viewerUserId], references: [id], onDelete: Cascade)
+  streamer         Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+  show             Show?    @relation(fields: [showId], references: [id], onDelete: SetNull)
+  purchase         TicketPackPurchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+
+  @@index([streamerId, createdAt])
+  @@index([viewerUserId, createdAt])
+}
+
+model Referral {
+  id                         String    @id @default(uuid())
+  referrerUserId             String
+  referredUserId             String    @unique
+  /// "pending" | "completed" | "rewarded"
+  status                     String    @default("pending")
+  qualifyingPurchaseTickets  Int       @default(0)
+  rewardTicketsGranted       Int       @default(0)
+  rewardedAt                 DateTime?
+  createdAt                  DateTime  @default(now())
+  referrer                   User      @relation("ReferralReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referred                   User      @relation("ReferralReferred", fields: [referredUserId], references: [id], onDelete: Cascade)
+
+  @@index([referrerUserId, status])
+}
+
+model ReferralSettings {
+  id                       String   @id
+  enabled                  Boolean  @default(true)
+  minimumPurchasedTickets  Int      @default(10)
+  rewardTicketAmount       Int      @default(5)
+  allowMultipleFromReferrer Boolean @default(true)
+  updatedAt                DateTime @updatedAt
+}
+
+model AppLanguage {
+  code      String   @id
+  name      String
+  nativeName String
+  enabled   Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  sortOrder Int      @default(0)
+}
+
+model UiTranslation {
+  id        String   @id @default(uuid())
+  key       String
+  locale    String
+  value     String
+  /// "draft" | "approved"
+  status    String   @default("approved")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@unique([key, locale])
+  @@index([locale, status])
+}
+
+model TranslationVersion {
+  id        String   @id @default(uuid())
+  key       String
+  locale    String
+  value     String
+  status    String
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  @@index([key, locale, createdAt])
+}
+
+model ContentTranslation {
+  id         String @id @default(uuid())
+  entityType String
+  entityId   String
+  field      String
+  locale     String
+  value      String
+
+  @@unique([entityType, entityId, field, locale])
+  @@index([entityType, entityId, locale])
+}
+
+model MissingTranslation {
+  id        String   @id @default(uuid())
+  key       String
+  locale    String
+  hits      Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, locale])
+}
+
+model ShowMediaTrack {
+  id       String  @id @default(uuid())
+  showId   String
+  /// "subtitle" | "audio"
+  kind     String
+  locale   String
+  label    String
+  url      String
+  isDefault Boolean @default(false)
+  show     Show    @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@index([showId, kind])
+}
+
+model PrivatePriceBand {
+  stars    Int    @id
+  minPrice Int
+  maxPrice Int
+}
+
+/// open | awarded | paid | cancelled | expired
+model PrivateRequest {
+  id              String    @id @default(uuid())
+  userId          String
+  topic           String
+  details         String
+  deadlineHours   Int
+  deadlineAt      DateTime
+  status          String    @default("open")
+  selectedOfferId String?
+  selectedStart   DateTime?
+  showId          String?
+  ticketId        String?
+  createdAt       DateTime  @default(now())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offers          PrivateOffer[]
+  backups         PrivateBackup[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// pending | selected | closed
+model PrivateOffer {
+  id             String   @id @default(uuid())
+  requestId      String
+  streamerId     String
+  plan           String
+  price          Int
+  proposedStarts String
+  starCategory   Int
+  status         String   @default("pending")
+  createdAt      DateTime @default(now())
+  request        PrivateRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  streamer       Streamer       @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, streamerId])
+  @@index([streamerId])
+}
+
+model PrivateBackup {
+  id        String   @id @default(uuid())
+  requestId String
+  showId    String?
+  filePath  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  request   PrivateRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}

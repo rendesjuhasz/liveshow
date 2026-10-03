@@ -299,7 +299,7 @@ export class PaymentsService implements OnModuleInit {
             throw new BadRequestException(err?.message || "Érvénytelen Stripe aláírás.");
         }
         const type = String(event.type || "");
-        const obj = event.data.object as Record<string, unknown>;
+        const obj = event.data.object as unknown as Record<string, unknown>;
         if (type === "checkout.session.completed" || type === "checkout.session.async_payment_succeeded") {
             if (obj.payment_status === "paid" || type === "checkout.session.async_payment_succeeded") {
                 await this.fulfillStripeSessionId(String(obj.id || ""));

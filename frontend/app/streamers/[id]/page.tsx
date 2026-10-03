@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
+import ReportButton from "@/components/ReportButton";
 
 export default function StreamerProfilePage() {
     const params = useParams<{ id: string }>();
@@ -25,7 +26,7 @@ export default function StreamerProfilePage() {
         if (!id) return;
         apiFetch(`/streamers/${id}`)
             .then(setData)
-            .catch((err: any) => setError(err.message || "A streamer nem található."));
+            .catch((err: any) => setError(err.message || "A tartalomkészítő nem található."));
     }, [id, user?.id]);
 
     const toggleFollow = async () => {
@@ -62,13 +63,13 @@ export default function StreamerProfilePage() {
     return (
         <div className="mx-auto min-h-dvh max-w-3xl px-4 py-10 text-white md:px-10">
             <Link href="/streamers" className="text-sm text-accent hover:underline">
-                ← Előadók
+                ← Tartalomkészítők
             </Link>
             <div className="mt-6 mb-4 flex flex-wrap items-center gap-4">
                 {data.avatarUrl && (
                     <img
-                        src={`${API_URL}${data.avatarUrl}`}
-                        alt=""
+                        src={publicAssetUrl(data.avatarUrl)}
+                        alt={String(data.name || "Tartalomkészítő")}
                         className="h-20 w-20 rounded-full object-cover"
                     />
                 )}
@@ -96,6 +97,11 @@ export default function StreamerProfilePage() {
             </div>
             {followError && <p className="mb-4 text-sm text-red-400">{followError}</p>}
             {data.bio && <p className="mb-6 text-neutral-300">{data.bio}</p>}
+            {user && !data.isOwn && id ? (
+                <div className="mb-6">
+                    <ReportButton targetType="streamer" targetId={id} label="Tartalomkészítő jelentése" />
+                </div>
+            ) : null}
             <p className="mb-8 font-semibold text-yellow-400">
                 Átlag: {data.average ?? 0} / 5 · {data.count ?? 0} értékelés
             </p>
@@ -103,10 +109,7 @@ export default function StreamerProfilePage() {
             <h2 className="mb-3 text-xl font-bold">Műsorok</h2>
             <ul className="mb-10 space-y-2">
                 {(data.shows || []).map((s: any) => {
-                    const ended =
-                        !s.live &&
-                        s.startTime &&
-                        new Date(s.startTime).getTime() <= Date.now();
+                    const ended = Boolean(s.status === "archived" || s.scheduleStatus === "ended" || s.wentLiveAt);
                     const href = s.live ? `/live/${s.id}` : ended ? `/archive/${s.id}` : `/shows/${s.id}`;
                     return (
                     <li key={s.id}>
@@ -141,6 +144,11 @@ export default function StreamerProfilePage() {
                             {r.show?.title} · {r.rating}/5
                         </p>
                         {r.comment && <p className="mt-1 text-neutral-300">{r.comment}</p>}
+                        {r.id && (
+                            <div className="mt-2">
+                                <ReportButton targetType="review" targetId={r.id} />
+                            </div>
+                        )}
                         <p className="mt-2 text-sm text-neutral-500">
                             {r.createdAt ? new Date(r.createdAt).toLocaleString("hu-HU") : ""}
                         </p>

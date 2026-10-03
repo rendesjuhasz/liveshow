@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ArchiveService } from "../archive/archive.service";
 import { ShowsService } from "../shows/shows.service";
 import { TicketsService } from "../tickets/tickets.service";
+import { TicketGroupsService } from "../tickets/ticket-groups.service";
 import { GiftCampaignsService } from "../tickets/gift-campaigns.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { USER_ROLES } from "../auth/roles";
@@ -25,7 +26,6 @@ type ShowInput = {
     streamUrl?: string;
     streamId?: string;
     streamerId?: string;
-    categoryKeys?: string[];
     videoCategory?: string;
     status?: string;
     commissionPercent?: number | null;
@@ -37,6 +37,7 @@ export class AdminService {
         private showsService: ShowsService,
         private archiveService: ArchiveService,
         private ticketsService: TicketsService,
+        private ticketGroups: TicketGroupsService,
         private campaigns: GiftCampaignsService,
         private prisma: PrismaService,
         private views: ViewLogService,
@@ -57,7 +58,6 @@ export class AdminService {
             streamUrl: data.streamUrl,
             streamId: data.streamId,
             streamerId: data.streamerId,
-            categoryKeys: ["interaktiv"],
             videoCategory: data.videoCategory,
             status: data.status || "draft",
         });
@@ -101,7 +101,7 @@ export class AdminService {
         const next = String(status || "").trim().toLowerCase();
         if (!isShowStatus(next)) {
             throw new BadRequestException(
-                "Érvénytelen státusz. draft, pending, active, blocked vagy archived.",
+                "Érvénytelen státusz. draft, pending, active, blocked, archived vagy missed.",
             );
         }
         await writeShowStatus(this.prisma, id, next);
@@ -123,7 +123,6 @@ export class AdminService {
             streamUrl: data.streamUrl,
             streamId: data.streamId,
             streamerId: data.streamerId,
-            categoryKeys: data.categoryKeys,
             videoCategory: data.videoCategory,
             status: data.status,
         });
@@ -155,8 +154,26 @@ export class AdminService {
         return this.ticketsService.listAll();
     }
 
-    giftTicket(email?: string, showId?: string, categoryKey?: string) {
-        return this.ticketsService.gift(String(email || ""), String(showId || ""), categoryKey);
+    async giftTicket(email?: string, ticketCount?: number) {
+        const normalized = String(email || "").trim().toLowerCase();
+        if (!normalized) throw new BadRequestException("Email kötelező.");
+        const user = await this.prisma.user.findUnique({ where: { email: normalized } });
+        if (!user) throw new NotFoundException("Nincs ilyen felhasználó.");
+        const granted = await this.ticketGroups.grantGiftUnits({
+            userId: user.id,
+            ticketCount,
+            source: "gift",
+        });
+        await this.campaigns.logAdminGift(user.id, null, null, granted.purchaseId);
+        return {
+            message: `${granted.ticketCount} kérdésjegy jóváírva.`,
+            email: user.email,
+            ...granted,
+        };
+    }
+
+    resendTicketEmail(adminUserId: string, ticketId: string) {
+        return this.ticketsService.resendPurchaseEmail(adminUserId, ticketId, true);
     }
 
     listCampaigns() {
@@ -237,7 +254,7 @@ export class AdminService {
         const spendTotals = (
             await this.prisma.$queryRaw<any[]>`
                 SELECT COALESCE(SUM("ticketsSpent"), 0)::int AS tickets,
-                       COALESCE(SUM("calculatedAmount"), 0)::int AS amount
+                       COALESCE(SUM(CASE WHEN COALESCE("isGift", false) THEN 0 ELSE "calculatedAmount" END), 0)::int AS amount
                 FROM "TicketSpend"
             `.catch(() => [{ tickets: 0, amount: 0 }])
         )[0] || { tickets: 0, amount: 0 };
@@ -248,8 +265,8 @@ export class AdminService {
 
         const topShowsRaw = await this.prisma.$queryRaw<any[]>`
             SELECT s.id, s.title, st.name AS streamer,
-                   COALESCE(SUM(sp."ticketsSpent"), 0)::int AS tickets,
-                   COALESCE(SUM(sp."calculatedAmount"), 0)::int AS gross
+                   COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."ticketsSpent" END), 0)::int AS tickets,
+                   COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."calculatedAmount" END), 0)::int AS gross
             FROM "TicketSpend" sp
             JOIN "Show" s ON s.id = sp."showId"
             LEFT JOIN "Streamer" st ON st.id = s."streamerId"
@@ -260,8 +277,8 @@ export class AdminService {
 
         const streamerPerfRaw = await this.prisma.$queryRaw<any[]>`
             SELECT st.id, st.name, st.status,
-                   COALESCE(SUM(sp."ticketsSpent"), 0)::int AS tickets,
-                   COALESCE(SUM(sp."calculatedAmount"), 0)::int AS gross,
+                   COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."ticketsSpent" END), 0)::int AS tickets,
+                   COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."calculatedAmount" END), 0)::int AS gross,
                    COUNT(DISTINCT s.id)::int AS shows
             FROM "Streamer" st
             LEFT JOIN "TicketSpend" sp ON sp."streamerId" = st.id
@@ -281,11 +298,23 @@ export class AdminService {
                 streamer: { select: { name: true } },
             },
         });
+        const showIdRows = await this.prisma.show.findMany({
+            select: { id: true, streamerId: true },
+        });
+        const allShowIds = showIdRows.map((s) => s.id);
+        const [peakMap, avgMap, peakViewers, averageWatchSeconds, streamErrors] = await Promise.all([
+            this.views.peaksByShowIds(allShowIds),
+            this.views.averageWatchByShowIds(allShowIds),
+            this.views.platformPeakViewers(),
+            this.views.platformWatchAverage(),
+            this.views.listStreamErrors(40),
+        ]);
         const liveByShow = liveShows.map((show) => ({
             showId: show.id,
             title: show.title,
             streamer: show.streamer?.name || null,
             viewers: liveMap.get(show.id) || liveMap.get(show.streamId || "") || 0,
+            peakViewers: peakMap.get(show.id) || 0,
             live: true,
         }));
 
@@ -383,6 +412,17 @@ export class AdminService {
             const archiveViews = archiveByShow
                 .filter((s) => s.streamerId === row.id)
                 .reduce((sum, s) => sum + s.views, 0);
+            const ownShows = showIdRows.filter((s) => s.streamerId === row.id);
+            const peakViewers = ownShows.reduce(
+                (max, s) => Math.max(max, peakMap.get(s.id) || 0),
+                0,
+            );
+            const avgVals = ownShows
+                .map((s) => avgMap.get(s.id) || 0)
+                .filter((n) => n > 0);
+            const averageWatchSeconds = avgVals.length
+                ? Math.round(avgVals.reduce((a, b) => a + b, 0) / avgVals.length)
+                : 0;
             return {
                 id: row.id,
                 name: row.name,
@@ -396,6 +436,8 @@ export class AdminService {
                 net: part.net,
                 liveViewers,
                 archiveViews,
+                peakViewers,
+                averageWatchSeconds,
             };
         });
 
@@ -441,12 +483,15 @@ export class AdminService {
             },
             live: {
                 now: liveByShow.reduce((sum, row) => sum + row.viewers, 0),
+                peakViewers,
                 byShow: liveByShow.sort((a, b) => b.viewers - a.viewers),
             },
             archiveViews: {
                 total: await this.views.archiveViewTotal(),
                 byShow: archiveByShow,
             },
+            averageWatchSeconds,
+            streamErrors,
             streamerPerformance,
             topShows,
             ticketRevenue: saleSplit.gross,
@@ -471,7 +516,7 @@ export class AdminService {
     async setUserRole(userIdOrEmail: string, role?: string) {
         const next = String(role || "").trim().toLowerCase();
         if (![USER_ROLES.USER, USER_ROLES.MODERATOR, USER_ROLES.STREAMER].includes(next as any)) {
-            throw new BadRequestException("Itt csak user, moderator vagy streamer szerep adható. Adminhoz külön folyamat kell.");
+            throw new BadRequestException("Itt csak user, moderator vagy tartalomkészítő szerep adható. Adminhoz külön folyamat kell.");
         }
         const key = userIdOrEmail.trim();
         const user = key.includes("@")

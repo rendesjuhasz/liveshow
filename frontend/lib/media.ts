@@ -1,3 +1,5 @@
+import { detectBrowserTimeZone, formatEventDateTime } from "@/lib/timezone";
+
 const COVER_POOL = [
     "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1600&q=80",
     "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80",
@@ -22,6 +24,11 @@ export type MediaItem = {
     description?: string;
     image?: string | null;
     startTime?: string | null;
+    startAtUtc?: string | null;
+    endAtUtc?: string | null;
+    timezone?: string | null;
+    scheduleStatus?: string | null;
+    wentLiveAt?: string | null;
     ended?: boolean;
     featured?: boolean;
     price?: number;
@@ -51,25 +58,55 @@ export function formatWhen(iso?: string | null) {
     if (!iso) return "";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString("hu-HU", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
+    return formatEventDateTime(d, detectBrowserTimeZone());
 }
 
 export function isUpcoming(item: MediaItem, now = Date.now()) {
     if (item.live) return false;
+    if (item.scheduleStatus === "delayed") return true;
+    if (item.scheduleStatus === "missed" || item.scheduleStatus === "ended") return false;
     if (item.ended) return false;
-    if (!item.startTime) return false;
-    const t = new Date(item.startTime).getTime();
-    return t > now;
+    if (item.endAtUtc && now >= new Date(item.endAtUtc).getTime() && item.wentLiveAt) return false;
+    const start = item.startAtUtc || item.startTime;
+    if (!start) return false;
+    if (new Date(start).getTime() > now) return true;
+    const startMs = new Date(start).getTime();
+    return startMs <= now && now < startMs + 2 * 60 * 60 * 1000 && !item.wentLiveAt;
 }
 
 export function isEndedShow(item: MediaItem, now = Date.now()) {
     if (item.live) return false;
-    if (item.ended) return true;
-    if (!item.startTime) return false;
-    return new Date(item.startTime).getTime() <= now;
+    if (item.scheduleStatus === "delayed" || item.scheduleStatus === "missed") return false;
+    if (item.ended || item.scheduleStatus === "ended") return true;
+    if (item.wentLiveAt) return true;
+    if (String((item as { status?: string }).status || "") === "archived") return true;
+    return false;
+}
+
+/** Streamer élő menü: meghirdetett, még nem lejátszott (vagy most élő), késő adás is. */
+export function canGoLiveOnShow(
+    item: Pick<MediaItem, "live" | "ended" | "scheduleStatus" | "startTime" | "startAtUtc" | "endAtUtc" | "wentLiveAt"> & {
+        status?: string | null;
+    },
+    now = Date.now(),
+) {
+    if (item.live) return true;
+    const status = String(item.status || "").toLowerCase();
+    if (status === "blocked" || status === "archived") return false;
+    if (status === "active" || status === "missed" || status === "pending" || status === "draft") {
+        return !isEndedShow(
+            {
+                live: false,
+                ended: item.ended,
+                scheduleStatus: item.scheduleStatus,
+                startTime: item.startTime,
+                startAtUtc: item.startAtUtc || item.startTime,
+                endAtUtc: item.endAtUtc,
+                wentLiveAt: item.wentLiveAt,
+                status,
+            },
+            now,
+        );
+    }
+    return false;
 }

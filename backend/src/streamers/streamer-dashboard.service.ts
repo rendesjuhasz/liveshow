@@ -7,17 +7,20 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { IngestService } from "../ingest/ingest.service";
+import { rtmpPullUrl } from "../ingest/ingest-ffmpeg";
 import { ArchiveService } from "../archive/archive.service";
-import { TicketCategoriesService } from "../tickets/ticket-categories.service";
 import { QuestionsService } from "../questions/questions.service";
 import { PayoutsService } from "../payouts/payouts.service";
 import { isStreamerCategory } from "./categories";
 import { ReviewsService } from "./reviews.service";
 import { LIVE_ALLOWED_STATUSES, normalizeShowStatus } from "../shows/show-status";
 import { setShowStatus, withShowStatus, withShowStatuses } from "../shows/show-status-db";
+import { shouldPersistMissed, showAudiencePhase, hasEverGoneLive } from "../shows/show-ended";
 import { sanitizeStreamId } from "../streaming/hls-paths";
 import * as fs from "fs";
 import { assertNoOffPlatformContact } from "../security/contact-leak";
+import { parseAndValidatePublicLinks } from "./public-links";
+import { assertUploadedMedia } from "../uploads/upload-magic";
 import { videoCategoryFields } from "../shows/video-categories";
 import {
     parseRequiredVideoCategory,
@@ -28,6 +31,9 @@ import { coverPublicPath } from "../uploads/vod-multer";
 import { FollowNotifyService } from "../follows/follow-notify.service";
 import { FollowsService } from "../follows/follows.service";
 import { ViewLogService } from "../stats/view-log.service";
+import { ReportsService } from "../moderation/reports.service";
+import { ChatService } from "../moderation/chat.service";
+import { parseScheduleInput } from "../time/timezone";
 
 type StreamerRow = {
     id: string;
@@ -41,23 +47,28 @@ type StreamerRow = {
     userId?: string | null;
 };
 
-function parsePublicStartTime(raw?: string) {
-    const value = String(raw || "").trim();
-    if (!value) {
+function parsePublicStartTime(data: {
+    startTime?: string;
+    startLocal?: string;
+    startAtUtc?: string;
+    date?: string;
+    timezone?: string;
+    endLocal?: string;
+    endAtUtc?: string;
+    endTime?: string;
+}) {
+    const { startAtUtc, endAtUtc, timezone } = parseScheduleInput(data);
+    if (!startAtUtc) {
         throw new BadRequestException(
             "A kezdés időpontja kötelező. Ettől jelenik meg a nézői oldalon a Hamarosan eseményeknél.",
         );
     }
-    const start = new Date(value);
-    if (Number.isNaN(start.getTime())) {
-        throw new BadRequestException("Érvénytelen kezdési időpont.");
-    }
-    if (start.getTime() <= Date.now() - 60_000) {
+    if (startAtUtc.getTime() <= Date.now() - 60_000) {
         throw new BadRequestException(
-            "A kezdésnek a jövőben kell lennie, különben a műsor nem a Hamarosan listába, hanem az archívumba kerül.",
+            "A kezdésnek a jövőben kell lennie.",
         );
     }
-    return start;
+    return { startAtUtc, endAtUtc, timezone };
 }
 
 function toLocalStreamId(streamerId: string, title: string) {
@@ -78,13 +89,14 @@ export class StreamerDashboardService {
         private readonly prisma: PrismaService,
         private readonly ingestService: IngestService,
         private readonly archiveService: ArchiveService,
-        private readonly categories: TicketCategoriesService,
         private readonly questions: QuestionsService,
         private readonly reviews: ReviewsService,
         private readonly payouts: PayoutsService,
         private readonly followNotify: FollowNotifyService,
         private readonly follows: FollowsService,
         private readonly views: ViewLogService,
+        private readonly reports: ReportsService,
+        private readonly chat: ChatService,
     ) {}
 
     private async ownShow(streamerId: string, showId: string) {
@@ -102,16 +114,30 @@ export class StreamerDashboardService {
             orderBy: { startTime: "desc" },
         });
         const tagged = await withShowStatuses(this.prisma, shows);
+        for (const show of tagged) {
+            if (show.live) continue;
+            if (shouldPersistMissed(show)) {
+                await setShowStatus(this.prisma, show.id, "missed").catch(() => undefined);
+                show.status = "missed";
+            }
+        }
         const catMap = await videoCategoryByShowIds(this.prisma, tagged.map((show) => show.id));
-        const viewCounts = await this.views.countsByShowIds(tagged.map((show) => show.id));
+        const ids = tagged.map((show) => show.id);
+        const [viewCounts, peaks, avgs] = await Promise.all([
+            this.views.countsByShowIds(ids),
+            this.views.peaksByShowIds(ids),
+            this.views.averageWatchByShowIds(ids),
+        ]);
         const liveMap = this.views.liveByShow();
         return Promise.all(
             tagged.map(async (show) => ({
                 ...show,
                 ...videoCategoryFields(catMap.get(show.id)),
+                scheduleStatus: showAudiencePhase(show),
                 viewCount: viewCounts.get(show.id) || 0,
                 viewerCount: show.live ? liveMap.get(show.id) || 0 : 0,
-                ticketCategories: await this.categories.offersForShow(show.id),
+                peakViewers: peaks.get(show.id) || 0,
+                avgWatchSeconds: avgs.get(show.id) || 0,
             })),
         );
     }
@@ -123,17 +149,22 @@ export class StreamerDashboardService {
             description?: string;
             image?: string;
             startTime?: string;
+            startLocal?: string;
+            startAtUtc?: string;
             date?: string;
+            timezone?: string;
+            endLocal?: string;
+            endAtUtc?: string;
+            endTime?: string;
             price?: number | string;
             streamId?: string;
             streamUrl?: string;
             videoCategory?: string;
-            categoryKeys?: string[];
         },
     ) {
         if (!data.title?.trim()) throw new BadRequestException("A cím kötelező.");
         const videoCategory = parseRequiredVideoCategory(data.videoCategory);
-        const startAt = parsePublicStartTime(data.startTime || data.date);
+        const schedule = parsePublicStartTime(data);
 
         const streamId =
             data.streamId?.trim() || toLocalStreamId(streamer.id, data.title);
@@ -143,7 +174,8 @@ export class StreamerDashboardService {
                 title: data.title.trim(),
                 description: data.description?.trim() || null,
                 image: data.image?.trim() || null,
-                startTime: startAt,
+                startTime: schedule.startAtUtc,
+                timezone: schedule.timezone,
                 price: 0,
                 live: false,
                 featured: false,
@@ -153,21 +185,38 @@ export class StreamerDashboardService {
             } as any,
         });
         await setShowStatus(this.prisma, show.id, "active");
-        await this.categories.setShowCategories(show.id, ["interaktiv"]);
         await setShowVideoCategory(this.prisma, show.id, videoCategory);
         void this.followNotify.notifyPublished(show.id).catch(() => undefined);
+        await this.persistSchedule(show.id, schedule);
         return {
             ...show,
             status: "active",
+            startAtUtc: schedule.startAtUtc,
+            endAtUtc: schedule.endAtUtc,
+            timezone: schedule.timezone,
             ...videoCategoryFields(videoCategory),
-            ticketCategories: await this.categories.offersForShow(show.id),
         };
+    }
+
+    private async persistSchedule(
+        showId: string,
+        schedule: { timezone: string; startAtUtc: Date | null; endAtUtc: Date | null } | null,
+    ) {
+        if (!schedule) return;
+        await this.prisma.$executeRaw`
+            UPDATE "Show"
+            SET timezone = ${schedule.timezone}, "endTime" = ${schedule.endAtUtc}
+            WHERE id = ${showId}
+        `.catch(() => undefined);
     }
 
     async uploadVod(
         streamer: StreamerRow,
         body: { title?: string; description?: string; videoCategory?: string },
-        files: { video?: { filename: string; path: string; size: number; originalname: string }[]; cover?: { filename: string; path: string; size: number }[] },
+        files: {
+            video?: { filename: string; path: string; size: number; originalname: string; mimetype?: string }[];
+            cover?: { filename: string; path: string; size: number; mimetype?: string }[];
+        },
     ) {
         const title = String(body.title || "").trim();
         const description = String(body.description || "").trim();
@@ -179,6 +228,10 @@ export class StreamerDashboardService {
         const cover = files.cover?.[0];
         if (!cover?.filename) throw new BadRequestException("A borítókép kötelező.");
         if (!video?.path) throw new BadRequestException("A videófájl kötelező.");
+        assertUploadedMedia(video.path, String((video as { mimetype?: string }).mimetype || "video/mp4"), "video");
+        if (cover?.path) {
+            assertUploadedMedia(cover.path, String((cover as { mimetype?: string }).mimetype || "image/jpeg"), "image");
+        }
         if (Number(video.size || 0) < 8 * 1024) {
             throw new BadRequestException("A videófájl túl kicsi vagy üres.");
         }
@@ -199,13 +252,9 @@ export class StreamerDashboardService {
             } as any,
         });
         await this.prisma.$executeRaw`
-            ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "isVod" BOOLEAN NOT NULL DEFAULT false
-        `.catch(() => undefined);
-        await this.prisma.$executeRaw`
             UPDATE "Show" SET "isVod" = true WHERE id = ${show.id}
         `.catch(() => undefined);
         await setShowVideoCategory(this.prisma, show.id, videoCategory);
-        await this.categories.setShowCategories(show.id, ["interaktiv"]);
 
         try {
             const archive = await this.archiveService.ingestUploaded(show.id, video.path);
@@ -228,14 +277,46 @@ export class StreamerDashboardService {
         }
     }
 
+    async ingestLiveArchive(
+        streamer: StreamerRow,
+        showId: string,
+        file?: { path?: string; size?: number; mimetype?: string; originalname?: string },
+    ) {
+        const show = await this.ownShow(streamer.id, showId);
+        if (!file?.path) throw new BadRequestException("A felvétel fájl kötelező.");
+        if (Number(file.size || 0) < 4 * 1024) {
+            fs.unlink(file.path, () => undefined);
+            throw new BadRequestException("A felvétel túl rövid vagy üres.");
+        }
+        try {
+            assertUploadedMedia(file.path, String(file.mimetype || "video/webm"), "video");
+        } catch (err) {
+            fs.unlink(file.path, () => undefined);
+            throw err;
+        }
+        try {
+            const archive = await this.archiveService.ingestUploaded(show.id, file.path);
+            return { ok: true, archive };
+        } catch (err: unknown) {
+            if (err instanceof HttpException) throw err;
+            throw new BadRequestException(
+                "A felvétel feldolgozása nem sikerült. Ellenőrizd, hogy az FFmpeg telepítve van-e.",
+            );
+        } finally {
+            fs.unlink(file.path, () => undefined);
+        }
+    }
+
     async getShow(streamer: StreamerRow, showId: string) {
         const show = await this.ownShow(streamer.id, showId);
         const tagged = await withShowStatus(this.prisma, show);
         const catMap = await videoCategoryByShowIds(this.prisma, [show.id]);
         return {
             ...tagged,
+            startAtUtc: tagged.startTime,
+            endAtUtc: (tagged as any).endTime ?? null,
+            timezone: (tagged as any).timezone || "Europe/Budapest",
             ...videoCategoryFields(catMap.get(show.id)),
-            ticketCategories: await this.categories.offersForShow(show.id),
         };
     }
 
@@ -271,11 +352,16 @@ export class StreamerDashboardService {
             description?: string;
             image?: string;
             startTime?: string;
+            startLocal?: string;
+            startAtUtc?: string;
             date?: string;
+            timezone?: string;
+            endLocal?: string;
+            endAtUtc?: string;
+            endTime?: string;
             price?: number | string;
             streamId?: string;
             streamUrl?: string;
-            categoryKeys?: string[];
             extrasContent?: string;
             privateStreamId?: string;
             videoCategory?: string;
@@ -289,6 +375,27 @@ export class StreamerDashboardService {
         if (normalizeShowStatus(current.status) === "blocked") {
             throw new ForbiddenException("A tiltott műsort nem szerkesztheted.");
         }
+        const hasSchedule =
+            data.startLocal ||
+            data.startTime ||
+            data.startAtUtc ||
+            data.date ||
+            data.timezone ||
+            data.endLocal ||
+            data.endAtUtc ||
+            data.endTime;
+        const schedule = hasSchedule
+            ? parseScheduleInput({
+                  timezone: data.timezone || (current as any).timezone,
+                  startLocal: data.startLocal,
+                  endLocal: data.endLocal,
+                  startTime: data.startTime,
+                  startAtUtc: data.startAtUtc,
+                  endTime: data.endTime,
+                  endAtUtc: data.endAtUtc,
+                  date: data.date,
+              })
+            : null;
         await this.prisma.show.update({
             where: { id: showId },
             data: {
@@ -297,17 +404,17 @@ export class StreamerDashboardService {
                     ? { description: data.description.trim() || null }
                     : {}),
                 ...(data.image !== undefined ? { image: data.image.trim() || null } : {}),
-                ...(data.startTime || data.date
-                    ? { startTime: new Date(String(data.startTime || data.date)) }
-                    : {}),
+                ...(schedule?.startAtUtc ? { startTime: schedule.startAtUtc } : {}),
+                ...(schedule ? { timezone: schedule.timezone } : {}),
                 ...(data.streamId !== undefined
                     ? { streamId: data.streamId.trim() || null }
                     : {}),
                 ...(data.streamUrl !== undefined
                     ? { streamUrl: data.streamUrl.trim() || null }
                     : {}),
-            },
+            } as any,
         });
+        await this.persistSchedule(showId, schedule);
         if (data.videoCategory !== undefined) {
             await setShowVideoCategory(this.prisma, showId, parseRequiredVideoCategory(data.videoCategory));
         }
@@ -316,7 +423,6 @@ export class StreamerDashboardService {
         return {
             ...show,
             ...videoCategoryFields(catMap.get(showId)),
-            ticketCategories: await this.categories.offersForShow(showId),
         };
     }
 
@@ -331,13 +437,28 @@ export class StreamerDashboardService {
             throw new BadRequestException("Az élő állapot (live) kötelező.");
         }
         const live = body.live === true;
-        const streamId = sanitizeStreamId((body.streamId || show.streamId || "").trim());
+        let streamId = sanitizeStreamId((body.streamId || show.streamId || "").trim());
+        if (live && !streamId) {
+            streamId = sanitizeStreamId(toLocalStreamId(streamer.id, show.title || "show"));
+        }
 
         if (live) {
-            if (!LIVE_ALLOWED_STATUSES.includes(normalizeShowStatus(tagged.status))) {
+            const status = normalizeShowStatus(tagged.status);
+            if (status === "blocked") {
+                throw new BadRequestException("Ez a műsor tiltva van, élő adás nem indítható.");
+            }
+            const allowed =
+                LIVE_ALLOWED_STATUSES.includes(status) ||
+                status === "archived" ||
+                status === "pending" ||
+                status === "draft";
+            if (!allowed) {
                 throw new BadRequestException(
-                    "Élő adást csak aktív (jóváhagyott) műsoron lehet indítani.",
+                    "Élő adást csak saját, nem tiltott műsoron lehet indítani.",
                 );
+            }
+            if (status !== "active") {
+                await setShowStatus(this.prisma, show.id, "active");
             }
             if (!streamId) {
                 throw new BadRequestException("Élő adáshoz stream ID kell.");
@@ -352,6 +473,11 @@ export class StreamerDashboardService {
                 ...(streamId ? { streamId } : {}),
             },
         });
+        if (live) {
+            await this.prisma.$executeRaw`
+                UPDATE "Show" SET "wentLiveAt" = COALESCE("wentLiveAt", NOW()) WHERE id = ${show.id}
+            `.catch(() => undefined);
+        }
 
         if (streamId) {
             await this.prisma.stream.upsert({
@@ -372,12 +498,11 @@ export class StreamerDashboardService {
 
         let ingest: unknown = null;
         if (live && streamId) {
-            const rtpPort = Number(body.rtpPort) || 5004;
-            try {
-                ingest = await this.ingestService.startIngest(streamId, rtpPort);
-            } catch (err: any) {
-                ingest = { warning: err?.message || "Az ingest nem indult el." };
-            }
+            ingest = {
+                status: "awaiting_rtmp",
+                streamId,
+                rtmp: rtmpPullUrl(streamId),
+            };
         } else if (!live && streamId) {
             ingest = await this.ingestService.stopIngest(streamId);
             const bytes = Number((ingest as { recordingBytes?: number }).recordingBytes || 0);
@@ -400,10 +525,26 @@ export class StreamerDashboardService {
         }
 
         const fresh = await this.prisma.show.findUnique({ where: { id: show.id } });
+        if (!live) {
+            const everLive = wasLive || hasEverGoneLive({
+                live: false,
+                status: tagged.status,
+                wentLiveAt: (show as { wentLiveAt?: Date | null }).wentLiveAt,
+            });
+            if (everLive) {
+                await setShowStatus(this.prisma, show.id, "archived");
+                await this.questions.markUnansweredMissedOnLiveStop(show.id).catch(() => undefined);
+            }
+        }
         if (live && !wasLive) {
             void this.followNotify.notifyGoingLive(show.id).catch(() => undefined);
         }
-        return { show: { ...(fresh || updated), status: tagged.status }, ingest };
+        const nextStatus = live
+            ? "active"
+            : wasLive || hasEverGoneLive({ live: false, status: tagged.status, wentLiveAt: (show as { wentLiveAt?: Date | null }).wentLiveAt })
+              ? "archived"
+              : tagged.status;
+        return { show: { ...(fresh || updated), status: nextStatus }, ingest };
     }
 
     async updateProfile(
@@ -414,6 +555,7 @@ export class StreamerDashboardService {
             category?: string;
             contactEmail?: string;
             avatarUrl?: string;
+            publicLinks?: unknown;
         },
     ) {
         const name = data.name?.trim();
@@ -436,6 +578,9 @@ export class StreamerDashboardService {
             assertNoOffPlatformContact(name);
         }
 
+        const links =
+            data.publicLinks !== undefined ? parseAndValidatePublicLinks(data.publicLinks) : undefined;
+
         const updated = await this.prisma.streamer.update({
             where: { id: streamer.id },
             data: {
@@ -444,7 +589,8 @@ export class StreamerDashboardService {
                 ...(category ? { category } : {}),
                 ...(contactEmail ? { contactEmail } : {}),
                 ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
-            },
+                ...(links !== undefined ? { publicLinks: links } : {}),
+            } as any,
         });
         if (name && streamer.userId) {
             await this.prisma.user.update({
@@ -502,6 +648,35 @@ export class StreamerDashboardService {
 
     listSupport(streamer: StreamerRow, showId?: string) {
         return this.questions.listSupportForStreamer(streamer.id, showId);
+    }
+
+    listQuestionQueue(streamer: StreamerRow, showId?: string) {
+        return this.questions.listQueueForStreamer(streamer.id, showId);
+    }
+
+    rejectQueuedQuestion(streamer: StreamerRow, questionId: string, note?: string) {
+        return this.questions.reviewForStreamer(streamer.id, questionId, "rejected", note);
+    }
+
+    listReports(streamer: StreamerRow, status?: string) {
+        return this.reports.listForStreamer(streamer.id, status);
+    }
+
+    resolveReport(streamer: StreamerRow, reportId: string, status?: string, note?: string) {
+        const actorId = String(streamer.userId || "");
+        if (!actorId) throw new ForbiddenException("A tartalomkészítő fiókhoz nincs felhasználó.");
+        return this.reports.resolveForStreamer(streamer.id, actorId, reportId, status, note);
+    }
+
+    listChat(streamer: StreamerRow, showId?: string) {
+        return this.chat.listForModeration(showId || "", { streamerId: streamer.id });
+    }
+
+    hideChat(streamer: StreamerRow, messageId: string) {
+        return this.chat.hide(
+            { streamerId: streamer.id, userId: String(streamer.userId || "") },
+            messageId,
+        );
     }
 
     listReviews(streamer: StreamerRow) {

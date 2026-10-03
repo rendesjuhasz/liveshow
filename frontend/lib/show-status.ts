@@ -4,6 +4,7 @@ export const SHOW_STATUSES = [
     "active",
     "blocked",
     "archived",
+    "missed",
 ] as const;
 
 export type ShowStatus = (typeof SHOW_STATUSES)[number];
@@ -18,6 +19,8 @@ export function showStatusLabel(status?: string | null) {
             return "Tiltott";
         case "archived":
             return "Archivált";
+        case "missed":
+            return "Elmaradt";
         default:
             return "Piszkozat";
     }
@@ -26,13 +29,15 @@ export function showStatusLabel(status?: string | null) {
 export function showStatusClass(status?: string | null) {
     switch (String(status || "").toLowerCase()) {
         case "pending":
-            return "text-yellow-400";
+            return "text-warning";
         case "active":
-            return "text-green-400";
+            return "text-success";
         case "blocked":
-            return "text-red-400";
+            return "text-danger";
         case "archived":
             return "text-neutral-400";
+        case "missed":
+            return "text-warning";
         default:
             return "text-blue-300";
     }

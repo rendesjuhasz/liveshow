@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Heart, Play, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { coverUrl, isEndedShow, mediaId, type MediaItem } from "@/lib/media";
-import { liveViewersShort, viewsLabel } from "@/lib/views";
+import { formatCount } from "@/lib/views";
+import { useT } from "@/lib/i18n/I18nProvider";
 import { useEventCountdown } from "@/hooks/useEventCountdown";
 import type { EventCountdown } from "@/lib/event-countdown";
 import { isFavorite, toggleFavorite } from "@/lib/library";
@@ -22,7 +23,7 @@ import {
     releasePreviewSlot,
 } from "@/lib/archive-hover";
 
-export default function EventCard({
+function EventCard({
     item,
     href,
     wide = false,
@@ -34,6 +35,7 @@ export default function EventCard({
     hoverPreview?: boolean;
 }) {
     const { user } = useAuth();
+    const { t } = useT();
     const id = mediaId(item);
     const to = href || (isEndedShow(item) ? `/archive/${id}` : `/shows/${id}`);
     const ended = isEndedShow(item);
@@ -133,16 +135,19 @@ export default function EventCard({
                     ? "w-[min(18rem,calc(100vw-2rem))] sm:w-[340px]"
                     : "w-[min(10.75rem,calc(50vw-1.5rem))] sm:w-[180px] md:w-[200px]",
             )}
-            whileHover={{ scale: 1.05, zIndex: 20 }}
-            transition={{ type: "spring", stiffness: 320, damping: 22 }}
+            initial={false}
+            whileHover={{ scale: 1.03, zIndex: 20 }}
+            transition={{ duration: 0.2 }}
             onMouseEnter={onEnter}
             onMouseLeave={onLeave}
         >
             <Link href={to} className="block">
                 <div
                     className={cn(
-                        "relative overflow-hidden rounded-2xl bg-zinc-900 shadow-lg shadow-black/40",
+                        "relative overflow-hidden rounded-2xl bg-card shadow-[0_10px_28px_rgba(0,0,0,0.4)] transition-shadow duration-200 group-hover:shadow-[0_12px_36px_rgba(77,203,255,0.15)]",
                         wide ? "aspect-video" : "aspect-[2/3]",
+                        item.live && "ring-2 ring-live shadow-[0_10px_32px_rgba(255,59,48,0.28)]",
+                        ended && "ring-1 ring-white/10",
                     )}
                 >
                     <img
@@ -170,11 +175,20 @@ export default function EventCard({
                             }}
                         />
                     )}
-                    <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black via-black/25 to-transparent opacity-80" />
+                    <div
+                        className={cn(
+                            "absolute inset-0 z-[1] bg-gradient-to-t to-transparent opacity-80",
+                            ended ? "from-[#151515] via-[#151515]/50" : "from-black via-black/25",
+                        )}
+                    />
                     <div className="absolute left-2 top-2 z-[2] flex max-w-[calc(100%-3.25rem)] flex-wrap gap-1">
                         {item.live ? (
-                            <span className="rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                                Élő
+                            <span className="rounded-md bg-live px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-[0_4px_12px_rgba(255,59,48,0.45)]">
+                                {t("media.live")}
+                            </span>
+                        ) : item.scheduleStatus === "delayed" ? (
+                            <span className="rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black">
+                                {t("media.delayed")}
                             </span>
                         ) : item.videoCategoryLabel ? (
                             <span className="truncate rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
@@ -197,16 +211,18 @@ export default function EventCard({
                         <EventCardMeta
                             live={Boolean(item.live)}
                             ended={ended}
+                            delayed={item.scheduleStatus === "delayed"}
                             countdown={countdown}
                             viewerCount={item.viewerCount}
                             viewCount={item.viewCount}
+                            t={t}
                         />
                     </div>
                 </div>
             </Link>
             <button
                 type="button"
-                aria-label={fav ? "Kedvenc törlése" : "Kedvencekhez"}
+                aria-label={fav ? t("media.favoriteRemove") : t("media.favoriteAdd")}
                 className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-2 opacity-100 backdrop-blur-md transition sm:opacity-0 sm:group-hover:opacity-100 sm:p-1.5"
                 onClick={(e) => {
                     e.preventDefault();
@@ -222,29 +238,40 @@ export default function EventCard({
 function EventCardMeta({
     live,
     ended,
+    delayed,
     countdown,
     viewerCount,
     viewCount,
+    t,
 }: {
     live: boolean;
     ended: boolean;
+    delayed?: boolean;
     countdown: EventCountdown | null;
     viewerCount?: number;
     viewCount?: number;
+    t: (key: string) => string;
 }) {
     if (live) {
         return (
-            <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-medium text-zinc-300 sm:text-[11px]">
-                <Eye className="size-3.5 shrink-0" aria-hidden />
-                {liveViewersShort(viewerCount)}
+            <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-semibold text-white sm:text-[11px]">
+                <Eye className="size-3.5 shrink-0 text-accent" aria-hidden />
+                {t("media.viewers").replace("{n}", formatCount(viewerCount))}
+            </p>
+        );
+    }
+    if (delayed) {
+        return (
+            <p className="mt-1 truncate text-[10px] font-semibold text-amber-400 sm:text-[11px]">
+                {t("media.delayed")}
             </p>
         );
     }
     if (ended) {
         return (
-            <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-medium text-zinc-300 sm:text-[11px]">
+            <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-medium text-muted sm:text-[11px]">
                 <Eye className="size-3.5 shrink-0" aria-hidden />
-                {viewsLabel(viewCount)}
+                {t("media.views").replace("{n}", formatCount(viewCount))}
             </p>
         );
     }
@@ -253,10 +280,12 @@ function EventCardMeta({
         <p
             className={cn(
                 "mt-1 truncate text-[10px] font-medium tabular-nums tracking-tight sm:text-[11px]",
-                countdown.live ? "text-red-400" : "text-zinc-400",
+                countdown.live ? "text-live" : "text-muted",
             )}
         >
             {countdown.label}
         </p>
     );
 }
+
+export default memo(EventCard);

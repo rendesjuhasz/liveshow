@@ -1,19 +1,17 @@
+import { isEndedByFields } from "./show-lifecycle";
 import { PrismaService } from "../prisma/prisma.service";
 import { normalizeShowStatus } from "./show-status";
+
+export { isEndedByFields, showAudiencePhase, shouldPersistMissed, hasEverGoneLive, SHOW_MISS_AFTER_MS } from "./show-lifecycle";
 
 type ShowLike = {
     id: string;
     live?: boolean | null;
     startTime?: Date | string | null;
+    endTime?: Date | string | null;
     status?: string | null;
+    wentLiveAt?: Date | string | null;
 };
-
-export function isEndedByFields(show: ShowLike, now = Date.now()) {
-    if (show.live) return false;
-    if (normalizeShowStatus(show.status) === "archived") return true;
-    if (show.startTime && new Date(show.startTime).getTime() <= now) return true;
-    return false;
-}
 
 export async function endedShowIdSet(prisma: PrismaService, shows: ShowLike[]) {
     const ended = new Set<string>();
@@ -24,6 +22,7 @@ export async function endedShowIdSet(prisma: PrismaService, shows: ShowLike[]) {
             ended.add(show.id);
             continue;
         }
+        if (normalizeShowStatus(show.status) === "missed") continue;
         checkArchive.push(show.id);
     }
     if (!checkArchive.length) return ended;

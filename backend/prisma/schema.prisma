@@ -11,18 +11,39 @@ model User {
   id             String          @id @default(uuid())
   email          String          @unique
   name           String?
-  password       String
+  password       String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   /// "user" | "admin" | "moderator" | "streamer"
   role           String          @default("user")
   /// "active" | "banned"
   status         String          @default("active")
+  /// "local" | "google" | "microsoft" | "apple"
+  provider       String          @default("local")
+  googleId       String?         @unique
+  microsoftId    String?         @unique
+  appleId        String?         @unique
+  avatarUrl      String?
+  lastLoginAt    DateTime?
+  lastLoginProvider String?
   resetPasswordTokenHash String?
   resetPasswordExpiresAt DateTime?
+  emailVerified  Boolean         @default(false)
+  emailVerifyTokenHash String?
+  emailVerifyExpiresAt DateTime?
   xp             Int             @default(0)
   locale         String          @default("hu")
-  referralCode   String?         @unique
+  /// IANA, e.g. Europe/Budapest — emails and default event TZ
+  timezone       String?
+  failedLoginCount Int           @default(0)
+  lockedUntil    DateTime?
+  refreshTokenHash String?
+  refreshTokenExpiresAt DateTime?
+    totpEnabled          Boolean        @default(false)
+    totpSecretEnc        String?
+    totpPendingEnc       String?
+    totpConfirmedAt      DateTime?
+    referralCode   String?         @unique
   referredByUserId String?
   referredBy     User?           @relation("UserReferrals", fields: [referredByUserId], references: [id], onDelete: SetNull)
   referredUsers  User[]          @relation("UserReferrals")
@@ -47,8 +68,29 @@ model User {
   streamerFollows StreamerFollow[]
   categoryFollows CategoryFollow[]
   notificationPref NotificationPref?
+  marketingKits    MarketingKit[]
+  socialAccounts   SocialAccount[]
+  marketingPublishes MarketingPublish[]
+  alertPref        StreamAlertPref?
+  reportsFiled     ContentReport[] @relation("ReportReporter")
+  reportsReviewed  ContentReport[] @relation("ReportReviewer")
+  authEvents       AuthEvent[]
 
   @@index([referredByUserId])
+}
+
+model AuthEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  /// register | login | link
+  action    String
+  /// local | google | microsoft | apple
+  provider  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model Streamer {
@@ -68,6 +110,13 @@ model Streamer {
   taxDeclarationAcceptedAt DateTime?
   contractShareAcceptedAt DateTime?
   preferredPayoutMethod String?
+  lastPreflightAt DateTime?
+  lastPreflightGrade String?
+  lastPreflightJson Json?
+  linkTokenHash     String?
+  linkTokenExpiresAt DateTime?
+  /// [{ label, url }] max 5; nézőknek csak archív oldalon
+  publicLinks       Json?
   payouts         Payout[]
   ticketSpends    TicketSpend[]
   shows           Show[]
@@ -110,6 +159,7 @@ model Archive {
   filePath   String
   publicPath String?
   size       Int      @default(0)
+  duration   Int      @default(0)
   createdAt  DateTime @default(now())
   show       Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
 }
@@ -119,9 +169,16 @@ model Show {
   title           String
   description     String?
   image           String?
+  /// UTC instant (API: startAtUtc)
   startTime       DateTime?
+  /// UTC instant (API: endAtUtc)
+  endTime         DateTime?
+  /// IANA zone of the streamer's original wall clock
+  timezone        String            @default("Europe/Budapest")
   price           Int
-  live            Boolean           @default(false)
+    live            Boolean           @default(false)
+    /// first time live was turned on; used so missed/delayed shows are not archived
+    wentLiveAt      DateTime?
   featured        Boolean           @default(false)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -130,8 +187,8 @@ model Show {
   streamerId      String?
   extrasContent   String?
   privateStreamId String?
-  /// "draft" | "pending" | "active" | "blocked" | "archived"
-  status          String            @default("draft")
+    /// "draft" | "pending" | "active" | "blocked" | "archived" | "missed"
+    status          String            @default("draft")
   /// platform jutalék % erre a műsorra; üres = globális
   commissionPercent Int?
   liveQuestionTopicKey String?
@@ -140,6 +197,13 @@ model Show {
   videoCategory   String            @default("egyeb")
   /// közvetlenül feltöltött VOD, nem élő adásból készült
   isVod           Boolean           @default(false)
+  archiveExists     Boolean   @default(false)
+  archiveSize       Int       @default(0)
+  archiveDuration   Int       @default(0)
+  archiveCreatedAt  DateTime?
+  transcript      String?           @db.Text
+  tags            String?
+  chapters        Json?
   archives        Archive?
   chatMessages    ChatMessage[]
   questions       Question[]
@@ -147,13 +211,27 @@ model Show {
   recordings      Recording[]
   reviews         Review[]
   streamer        Streamer?         @relation(fields: [streamerId], references: [id])
-  ticketOffers    ShowTicketOffer[]
   stream          Stream?
   tickets         Ticket[]
   giftCampaigns   GiftCampaign[]
   supportMessages ShowSupport[]
   ticketSpends    TicketSpend[]
   mediaTracks     ShowMediaTrack[]
+  marketingKits   MarketingKit[]
+  streamAlerts    StreamAlert[]
+  streamClips     StreamClip[]
+  marketingJobs   MarketingJob[]
+
+  @@index([status])
+  @@index([live])
+  @@index([featured])
+  @@index([startTime])
+  @@index([streamerId])
+  @@index([videoCategory])
+  @@index([status, live])
+  @@index([status, featured])
+  @@index([isPrivate])
+  @@index([archiveExists])
 }
 
 model Ticket {
@@ -163,11 +241,9 @@ model Ticket {
   price      Int
   status     String          @default("pending")
   createdAt  DateTime        @default(now())
-  categoryId String?
   questionRedeemedAt DateTime?
   payments   Payment[]
   giftClaims GiftClaim[]
-  category   TicketCategory? @relation(fields: [categoryId], references: [id])
   show       Show            @relation(fields: [showId], references: [id], onDelete: Cascade)
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -180,7 +256,7 @@ model GiftCampaign {
   /// "first_users" | "first_buyers"
   type        String
   showId      String
-  categoryKey String      @default("nezo")
+  ticketCount Int         @default(1)
   maxClaims   Int
   /// "draft" | "active" | "paused" | "ended"
   status      String      @default("draft")
@@ -189,42 +265,26 @@ model GiftCampaign {
   createdAt   DateTime    @default(now())
   show        Show        @relation(fields: [showId], references: [id], onDelete: Cascade)
   claims      GiftClaim[]
+
+  @@index([showId, status])
 }
 
 model GiftClaim {
-  id         String        @id @default(uuid())
-  campaignId String?
-  userId     String
-  ticketId   String
+  id             String        @id @default(uuid())
+  campaignId     String?
+  userId         String
+  ticketId       String?
+  packPurchaseId String?
   /// "admin_gift" | "first_users" | "first_buyers"
-  source     String
-  createdAt  DateTime      @default(now())
-  campaign   GiftCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source         String
+  createdAt      DateTime      @default(now())
+  campaign       GiftCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  ticket         Ticket?       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  packPurchase   TicketPackPurchase? @relation(fields: [packPurchaseId], references: [id], onDelete: SetNull)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([campaignId, userId])
-}
-
-model TicketCategory {
-  id        String            @id @default(uuid())
-  /// "nezo" | "interaktiv" | "vip"
-  key       String            @unique
-  name      String
-  price     Int
-  sortOrder Int               @default(0)
-  offers    ShowTicketOffer[]
-  tickets   Ticket[]
-}
-
-model ShowTicketOffer {
-  id         String         @id @default(uuid())
-  showId     String
-  categoryId String
-  category   TicketCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  show       Show           @relation(fields: [showId], references: [id], onDelete: Cascade)
-
-  @@unique([showId, categoryId])
+  @@index([packPurchaseId])
 }
 
 model Review {
@@ -240,6 +300,7 @@ model Review {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, showId])
+  @@index([showId, status])
 }
 
 model Payment {
@@ -279,7 +340,7 @@ model Question {
   userId       String
   text         String
   createdAt    DateTime        @default(now())
-  /// "pending" | "fulfilled" | "rejected"  (legacy: approved treated as pending)
+  /// "pending" | "fulfilled" | "rejected" | "missed"  (legacy: approved treated as pending)
   status       String          @default("pending")
   filterReason String?
   topicKey     String?
@@ -312,13 +373,42 @@ model BannedWord {
 }
 
 model ChatMessage {
-  id        String   @id @default(uuid())
-  showId    String
-  userId    String
-  text      String
-  createdAt DateTime @default(now())
-  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  showId       String
+  userId       String
+  text         String
+  /// "pending" | "approved" | "rejected"
+  status       String   @default("approved")
+  filterReason String?
+  createdAt    DateTime @default(now())
+  show         Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([showId, createdAt])
+  @@index([showId, status])
+}
+
+model ContentReport {
+  id           String    @id @default(uuid())
+  reporterId   String
+  /// "question" | "review" | "streamer" | "show" | "chat"
+  targetType   String
+  targetId     String
+  /// "spam" | "harassment" | "illegal" | "off_platform" | "other"
+  reason       String
+  details      String?
+  /// "open" | "dismissed" | "actioned"
+  status       String    @default("open")
+  createdAt    DateTime  @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+  note         String?
+  reporter     User      @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewedBy   User?     @relation("ReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
 }
 
 model EmailLog {
@@ -337,8 +427,12 @@ model ContactMessage {
   name      String
   email     String
   message   String
+  status    String   @default("new")
+  adminNote String   @default("") @map("admin_note")
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([status])
+  @@index([createdAt])
   @@map("contact_messages")
 }
 
@@ -475,7 +569,7 @@ model TicketPackPurchase {
   price          Int
   unitValue      Int
   remainingCount Int       @default(0)
-  /// "pending" | "paid" | "failed" | "cancelled"
+  /// "pending" | "paid" | "failed" | "cancelled" | "refunded"
   status         String    @default("pending")
   /// "purchase" | "referral" | "gift"
   source         String    @default("purchase")
@@ -484,6 +578,7 @@ model TicketPackPurchase {
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   payments       Payment[]
   spends         TicketSpend[]
+  giftClaims     GiftClaim[]
 
   @@index([userId, status, createdAt])
 }
@@ -499,6 +594,12 @@ model TicketSpend {
   ticketUnitValue  Int
   calculatedAmount Int
   questionId       String?
+  /// "purchase" | "gift" | "referral"
+  source           String?
+  groupKey         String?
+  isGift           Boolean  @default(false)
+  /// "question" | "support" | "review"
+  reason           String?
   createdAt        DateTime @default(now())
   viewer           User     @relation("TicketSpendViewer", fields: [viewerUserId], references: [id], onDelete: Cascade)
   streamer         Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
@@ -507,6 +608,7 @@ model TicketSpend {
 
   @@index([streamerId, createdAt])
   @@index([viewerUserId, createdAt])
+  @@index([viewerUserId, showId, isGift])
 }
 
 model Referral {
@@ -579,6 +681,7 @@ model ContentTranslation {
 
   @@unique([entityType, entityId, field, locale])
   @@index([entityType, entityId, locale])
+  @@index([entityType, locale])
 }
 
 model MissingTranslation {
@@ -662,3 +765,204 @@ model PrivateBackup {
 
   @@index([expiresAt])
 }
+
+model MarketingKit {
+  id                 String   @id @default(uuid())
+  showId             String
+  streamId           String?
+  language           String   @default("hu")
+  generatedAt        DateTime @default(now())
+  facebookPost       String   @db.Text
+  linkedinPost       String   @db.Text
+  xPost              String   @db.Text
+  newsletterContent  String   @db.Text
+  emailSubject1      String
+  emailSubject2      String
+  emailSubject3      String
+  seoTitle           String
+  seoDescription     String   @db.Text
+  youtubeDescription String   @db.Text
+  blogOutline        String   @db.Text
+  hashtags           String   @db.Text
+  ctaVariants        String   @db.Text
+  promoPhrases       String   @db.Text
+  webinarVersion     String?  @db.Text
+  businessVersion    String?  @db.Text
+  model              String
+  durationMs         Int      @default(0)
+  createdBy          String
+  show               Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+  creator            User     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  publishes          MarketingPublish[]
+
+  @@index([showId, generatedAt])
+  @@index([createdBy])
+}
+
+model MarketingKitRun {
+  id          String   @id @default(uuid())
+  showId      String
+  kitId       String?
+  createdBy   String
+  language    String
+  model       String
+  durationMs  Int
+  ok          Boolean  @default(true)
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([showId, createdAt])
+  @@index([createdBy])
+}
+
+model SocialAccount {
+  id           String    @id @default(uuid())
+  userId       String
+  /// facebook | linkedin | x
+  provider     String
+  accountId    String
+  accountName  String
+  tokenEnc     String    @db.Text
+  refreshEnc   String?   @db.Text
+  expiresAt    DateTime?
+  meta         Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, accountId])
+  @@index([userId, provider])
+}
+
+model MarketingPublish {
+  id           String    @id @default(uuid())
+  kitId        String
+  showId       String
+  createdBy    String
+  provider     String
+  accountId    String
+  /// facebookPost | linkedinPost | xPost
+  field        String
+  /// pending | scheduled | publishing | published | failed
+  status       String    @default("pending")
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+  nextAttemptAt DateTime?
+  attempts     Int       @default(0)
+  lastError    String?
+  externalId   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  kit          MarketingKit @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  creator      User         @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt])
+  @@index([showId, createdAt])
+}
+
+model MarketingSettings {
+  id                      String   @id @default("platform")
+  clipEnabled             Boolean  @default(true)
+  clipLengthSec           Int      @default(30)
+  tiktokEnabled           Boolean  @default(false)
+  tiktokMaxPerDay         Int      @default(3)
+  tiktokCaptions          Boolean  @default(true)
+  tiktokHashtags          Boolean  @default(true)
+  facebookReelsEnabled    Boolean  @default(false)
+  facebookMaxPerDay       Int      @default(3)
+  facebookAutoPublish     Boolean  @default(false)
+  facebookManualApproval  Boolean  @default(true)
+  instagramEnabled        Boolean  @default(false)
+  youtubeShortsEnabled    Boolean  @default(false)
+  imageGenEnabled         Boolean  @default(false)
+  autoKitEnabled          Boolean  @default(true)
+  nextShowPromoEnabled    Boolean  @default(true)
+  ticketPromoEnabled      Boolean  @default(true)
+  notifyEmail             Boolean  @default(true)
+  notifyPush              Boolean  @default(true)
+  notifyDiscord           Boolean  @default(false)
+  notifyTelegram          Boolean  @default(false)
+  discordWebhook          String?
+  telegramChatId          String?
+  updatedAt               DateTime @updatedAt
+}
+
+model StreamClip {
+  id           String    @id @default(uuid())
+  showId       String
+  streamId     String
+  /// seconds from recording start
+  offsetSec    Int
+  durationSec  Int
+  score        Float     @default(0)
+  reason       String
+  viewers      Int       @default(0)
+  chatCount    Int       @default(0)
+  questionCount Int      @default(0)
+  supportCount Int       @default(0)
+  rank         Int?
+  filePath     String?
+  verticalPath String?
+  publicPath   String?
+  /// pending | cutting | ready | failed
+  status       String    @default("pending")
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  show         Show      @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@index([showId, createdAt])
+  @@index([showId, rank])
+}
+
+model MarketingJob {
+  id          String    @id @default(uuid())
+  showId      String?
+  clipId      String?
+  /// clip_cut | social | next_show | ticket | kit
+  type        String
+  /// tiktok | facebook_reels | instagram | youtube_shorts | facebook | email | push
+  channel     String    @default("")
+  /// pending | scheduled | running | published | failed | skipped | needs_approval
+  status      String    @default("pending")
+  dedupeKey   String    @unique
+  payload     Json?
+  lastError   String?
+  scheduledAt DateTime?
+  ranAt       DateTime?
+  createdAt   DateTime  @default(now())
+  show        Show?     @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledAt])
+  @@index([type, createdAt])
+}
+
+model StreamAlert {
+  id             String    @id @default(uuid())
+  streamId       String
+  showId         String?
+  severity       String
+  type           String
+  title          String
+  message        String    @db.Text
+  recommendation String    @db.Text
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+  snoozedUntil   DateTime?
+  show           Show?     @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@index([showId, createdAt])
+  @@index([streamId, createdAt])
+  @@index([resolvedAt, severity])
+}
+
+model StreamAlertPref {
+  id               String  @id @default(uuid())
+  userId           String  @unique
+  emailEnabled     Boolean @default(false)
+  pushEnabled      Boolean @default(true)
+  discordWebhook   String?
+  telegramChatId   String?
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+

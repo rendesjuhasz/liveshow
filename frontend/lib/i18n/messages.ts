@@ -463,6 +463,7 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
         "Connecte-toi en spectateur et aie un ticket pour noter.",
     ),
     "review.send": row("Értékelés küldése", "Send review", "Bewertung senden", "Invia recensione", "Enviar reseña", "Envoyer l'avis"),
+    "report.cta": row("Jelentés", "Report", "Melden", "Segnala", "Denunciar", "Signaler"),
     "player.waitCamera": row("Várakozás a tartalomkészítő kamerájára...", "Waiting for the creator camera...", "Warten auf die Creator-Kamera...", "In attesa della camera del creator...", "Esperando la cámara del creador...", "En attente de la caméra du créateur..."),
     "media.viewers": row("{n} néző", "{n} viewers", "{n} Zuschauer", "{n} spettatori", "{n} espectadores", "{n} spectateurs"),
     "media.views": row("{n} megtekintés", "{n} views", "{n} Aufrufe", "{n} visualizzazioni", "{n} vistas", "{n} vues"),

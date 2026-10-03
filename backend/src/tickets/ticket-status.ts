@@ -3,6 +3,7 @@ export const TICKET_STATUSES = {
     PAID: "paid",
     FAILED: "failed",
     CANCELLED: "cancelled",
+    REFUNDED: "refunded",
     ACTIVE: "active",
     USED: "used",
 } as const;
@@ -28,6 +29,8 @@ export function ticketStatusLabelHu(status?: string | null) {
             return "Sikertelen fizetés";
         case "cancelled":
             return "Megszakítva";
+        case "refunded":
+            return "Visszatérítve";
         case "active":
             return "Aktív jegy";
         case "used":

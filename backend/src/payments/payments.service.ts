@@ -1,26 +1,37 @@
 import { randomUUID } from "crypto";
 import {
     BadRequestException,
+    ForbiddenException,
     Injectable,
     Logger,
     NotFoundException,
+    OnModuleInit,
 } from "@nestjs/common";
+import { isAdminRole } from "../auth/roles";
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
 import { isTicketActive, TICKET_STATUSES } from "../tickets/ticket-status";
-import { barionEnabled, barionGetPaymentState, barionStartPayment } from "./barion.client";
+import { barionEnabled, barionGetPaymentState, barionRefundPayment, barionStartPayment } from "./barion.client";
 import { isDevPayAllowed } from "../auth/secrets";
+import { publicBackendUrl, publicFrontendUrl } from "../auth/public-url";
 import { ReferralService } from "../referrals/referral.service";
+import { ModuleRef } from "@nestjs/core";
 
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnModuleInit {
     private readonly logger = new Logger(PaymentsService.name);
 
     constructor(
         private readonly prisma: PrismaService,
         private readonly mail: MailService,
         private readonly referrals: ReferralService,
+        private readonly moduleRef: ModuleRef,
     ) {}
+
+    async onModuleInit() {
+        await this.ensurePackColumn();
+        await this.ensureBarionColumn();
+    }
 
     stripeEnabled() {
         return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
@@ -32,7 +43,6 @@ export class PaymentsService {
         showId: string;
         price: number;
     }) {
-        await this.ensureBarionColumn();
 
         if (ticket.price <= 0) {
             await this.activateTicket(ticket.id);
@@ -70,7 +80,7 @@ export class PaymentsService {
                     /* új session */
                 }
             }
-            const frontend = process.env.FRONTEND_URL || "http://localhost:3000";
+            const frontend = publicFrontendUrl();
             const session = await stripe.checkout.sessions.create({
                 mode: "payment",
                 line_items: [
@@ -84,7 +94,7 @@ export class PaymentsService {
                     },
                 ],
                 success_url: `${frontend}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: `${frontend}/payment/failed`,
+                cancel_url: `${frontend}/payment/failed?session_id={CHECKOUT_SESSION_ID}`,
                 metadata: { ticketId: ticket.id, userId: ticket.userId },
             });
 
@@ -132,8 +142,6 @@ export class PaymentsService {
     }
 
     async createForPack(pack: { id: string; userId: string; price: number; label: string }) {
-        await this.ensureBarionColumn();
-        await this.ensurePackColumn();
 
         if (pack.price <= 0) {
             await this.activatePack(pack.id);
@@ -160,7 +168,7 @@ export class PaymentsService {
                     /* új session */
                 }
             }
-            const frontend = process.env.FRONTEND_URL || "http://localhost:3000";
+            const frontend = publicFrontendUrl();
             const session = await stripe.checkout.sessions.create({
                 mode: "payment",
                 line_items: [
@@ -174,7 +182,7 @@ export class PaymentsService {
                     },
                 ],
                 success_url: `${frontend}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: `${frontend}/payment/failed`,
+                cancel_url: `${frontend}/payment/failed?session_id={CHECKOUT_SESSION_ID}`,
                 metadata: { packPurchaseId: pack.id, userId: pack.userId },
             });
             const paymentId = randomUUID();
@@ -206,7 +214,7 @@ export class PaymentsService {
     }
 
     async confirmDev(userId: string, ticketId: string, packPurchaseId?: string) {
-        if (!isDevPayAllowed()) {
+        if (process.env.NODE_ENV === "production" || !isDevPayAllowed()) {
             throw new BadRequestException("A tesztfizetés ebben a környezetben ki van kapcsolva.");
         }
         const packId = String(packPurchaseId || "").trim();
@@ -225,7 +233,7 @@ export class PaymentsService {
 
         const ticket = await this.prisma.ticket.findFirst({
             where: { id: ticketId, userId },
-            include: { show: true, category: true },
+            include: { show: true },
         });
         if (!ticket) throw new NotFoundException("A jegy nem található.");
 
@@ -237,7 +245,7 @@ export class PaymentsService {
 
         const activated = await this.prisma.ticket.findUnique({
             where: { id: ticket.id },
-            include: { show: true, category: true },
+            include: { show: true },
         });
 
         return {
@@ -257,13 +265,9 @@ export class PaymentsService {
         const Stripe = (await import("stripe")).default;
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
         const session = await stripe.checkout.sessions.retrieve(id);
-        if (session.payment_status !== "paid") {
-            throw new BadRequestException("A Stripe fizetés még nem teljesült.");
-        }
-
         const payment = await this.prisma.payment.findUnique({
             where: { stripeSessionId: id },
-            include: { ticket: { include: { show: true, category: true } } },
+            include: { ticket: { include: { show: true } } },
         });
         if (!payment) throw new NotFoundException("A fizetés nem található.");
         if (payment.userId !== userId) {
@@ -272,18 +276,114 @@ export class PaymentsService {
         if (session.metadata?.userId && session.metadata.userId !== userId) {
             throw new BadRequestException("A Stripe session nem ehhez a felhasználóhoz tartozik.");
         }
-
-        await this.prisma.payment.update({
-            where: { id: payment.id },
-            data: { status: "paid" },
-        });
-        const extras = await this.paymentExtras(payment.id);
-        if (extras?.packPurchaseId) {
-            await this.activatePack(extras.packPurchaseId);
-            return { packPurchaseId: extras.packPurchaseId };
+        if (payment.status === "paid") {
+            return this.paidResult(payment);
         }
-        await this.activateTicket(payment.ticketId);
-        return payment.ticket;
+        if (session.payment_status !== "paid") {
+            throw new BadRequestException("A Stripe fizetés még nem teljesült.");
+        }
+        return this.fulfillPaidRecord(payment.id);
+    }
+
+    async handleStripeWebhook(rawBody: Buffer | string, signature: string) {
+        const secret = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+        if (!secret) {
+            throw new BadRequestException("STRIPE_WEBHOOK_SECRET nincs beállítva.");
+        }
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+        let event;
+        try {
+            event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+        } catch (err: any) {
+            throw new BadRequestException(err?.message || "Érvénytelen Stripe aláírás.");
+        }
+        const type = String(event.type || "");
+        const obj = event.data.object as Record<string, unknown>;
+        if (type === "checkout.session.completed" || type === "checkout.session.async_payment_succeeded") {
+            if (obj.payment_status === "paid" || type === "checkout.session.async_payment_succeeded") {
+                await this.fulfillStripeSessionId(String(obj.id || ""));
+            }
+        } else if (type === "checkout.session.expired" || type === "checkout.session.async_payment_failed") {
+            await this.failStripeSession(
+                String(obj.id || ""),
+                type === "checkout.session.expired" ? "cancelled" : "failed",
+            );
+        } else if (type === "charge.refunded" || type === "refund.created" || type === "refund.updated") {
+            if (this.stripeObjectFullyRefunded(type, obj)) {
+                const pi = this.stripePaymentIntentId(obj);
+                if (pi) await this.markRefundedByPaymentIntent(pi);
+            }
+        }
+        return { received: true, type };
+    }
+
+    async cancelStripeCheckout(userId: string, sessionId?: string, ticketId?: string) {
+        const sid = String(sessionId || "").trim();
+        const tid = String(ticketId || "").trim();
+        const payment = sid
+            ? await this.prisma.payment.findUnique({ where: { stripeSessionId: sid } })
+            : tid
+              ? await this.prisma.payment.findFirst({
+                    where: { ticketId: tid, userId, status: "pending" },
+                    orderBy: { createdAt: "desc" },
+                })
+              : null;
+        if (!payment || payment.userId !== userId) {
+            throw new NotFoundException("A függő fizetés nem található.");
+        }
+        if (payment.status !== "pending") {
+            return { message: "A fizetés már lezárult.", payment };
+        }
+        if (payment.stripeSessionId && this.stripeEnabled()) {
+            try {
+                const Stripe = (await import("stripe")).default;
+                const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+                await stripe.checkout.sessions.expire(payment.stripeSessionId);
+            } catch {
+                /* a session már lezárult */
+            }
+        }
+        await this.markFailed(
+            payment.id,
+            payment.ticketId,
+            TICKET_STATUSES.CANCELLED,
+            "cancelled",
+        );
+        return { message: "A fizetés megszakítva.", status: "cancelled" };
+    }
+
+    async refundPayment(paymentId: string) {
+        const id = String(paymentId || "").trim();
+        const payment = await this.prisma.payment.findUnique({ where: { id } });
+        if (!payment) throw new NotFoundException("A fizetés nem található.");
+        if (payment.status === "refunded") {
+            return { message: "A fizetés már vissza lett térítve.", payment };
+        }
+        if (payment.status !== "paid") {
+            throw new BadRequestException("Csak sikeres fizetés téríthető vissza.");
+        }
+        if (payment.provider === "stripe" && this.stripeEnabled() && payment.stripeSessionId) {
+            const Stripe = (await import("stripe")).default;
+            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+            const session = await stripe.checkout.sessions.retrieve(payment.stripeSessionId);
+            const intent = session.payment_intent;
+            const intentId = typeof intent === "string" ? intent : intent?.id;
+            if (!intentId) {
+                throw new BadRequestException("A Stripe payment_intent nem található.");
+            }
+            await stripe.refunds.create({ payment_intent: intentId });
+        } else if (payment.provider === "barion") {
+            const extras = await this.findByIdExtras(payment.id);
+            const barionId = extras?.barionPaymentId;
+            if (!barionId) throw new BadRequestException("Nincs Barion azonosító.");
+            await barionRefundPayment({
+                barionPaymentId: barionId,
+                amount: payment.amount,
+            });
+        }
+        await this.applyRefundLocal(payment.id, payment.ticketId);
+        return { message: "A visszatérítés rögzítve.", status: "refunded" };
     }
 
     async handleBarionWebhook(paymentId: string) {
@@ -299,11 +399,18 @@ export class PaymentsService {
         return { received: true };
     }
 
-    async getBarionStatus(paymentId: string) {
+    async getBarionStatus(
+        paymentId: string,
+        user?: { id: string; email?: string; role?: string },
+    ) {
         const id = String(paymentId || "").trim();
         if (!id) throw new BadRequestException("A PaymentId kötelező.");
+        if (!user?.id) throw new ForbiddenException("Bejelentkezés szükséges.");
         try {
             const synced = await this.syncBarionPayment(id);
+            if (synced.userId !== user.id && !isAdminRole(user)) {
+                throw new ForbiddenException("Nincs jogosultság ehhez a fizetéshez.");
+            }
             const extras = await this.paymentExtras(synced.id);
             let packPaid = false;
             if (extras?.packPurchaseId) {
@@ -321,7 +428,7 @@ export class PaymentsService {
                 paid: active,
             };
         } catch (err: any) {
-            if (err instanceof NotFoundException || err instanceof BadRequestException) {
+            if (err instanceof NotFoundException || err instanceof BadRequestException || err instanceof ForbiddenException) {
                 throw err;
             }
             throw new BadRequestException(err?.message || "A Barion állapot nem kérhető le.");
@@ -346,8 +453,8 @@ export class PaymentsService {
     }) {
         const show = await this.prisma.show.findUnique({ where: { id: ticket.showId } });
         const user = await this.prisma.user.findUnique({ where: { id: ticket.userId } });
-        const frontend = process.env.FRONTEND_URL || "http://localhost:3000";
-        const backend = process.env.BACKEND_URL || "http://127.0.0.1:3200";
+        const frontend = publicFrontendUrl();
+        const backend = publicBackendUrl();
         const payee = process.env.BARION_PAYEE!.trim();
         const title = show?.title || "LiveShow jegy";
 
@@ -371,7 +478,7 @@ export class PaymentsService {
                 FundingSources: ["All"],
                 Locale: "hu-HU",
                 Currency: "HUF",
-                RedirectUrl: `${frontend}/payment/success`,
+                RedirectUrl: `${frontend}/payment/success?paymentId=`,
                 CallbackUrl: `${backend}/api/barion/webhook`,
                 OrderNumber: ticket.id,
                 PayerHint: user?.email || undefined,
@@ -414,7 +521,6 @@ export class PaymentsService {
     }
 
     private async syncBarionPayment(barionPaymentId: string) {
-        await this.ensureBarionColumn();
         const state = await barionGetPaymentState(barionPaymentId);
         const requestId = String(state.PaymentRequestId || "").trim();
 
@@ -483,6 +589,112 @@ export class PaymentsService {
         }
     }
 
+    private async fulfillStripeSessionId(sessionId: string) {
+        const payment = await this.prisma.payment.findUnique({ where: { stripeSessionId: sessionId } });
+        if (!payment) return null;
+        if (payment.status === "paid" || payment.status === "refunded") return payment;
+        return this.fulfillPaidRecord(payment.id);
+    }
+
+    private async fulfillPaidRecord(paymentId: string) {
+        const payment = await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: { ticket: { include: { show: true } } },
+        });
+        if (!payment) throw new NotFoundException("A fizetés nem található.");
+        if (payment.status !== "paid") {
+            await this.prisma.payment.update({
+                where: { id: payment.id },
+                data: { status: "paid" },
+            });
+        }
+        const extras = await this.paymentExtras(payment.id);
+        if (extras?.packPurchaseId) {
+            await this.activatePack(extras.packPurchaseId);
+            return { packPurchaseId: extras.packPurchaseId };
+        }
+        await this.activateTicket(payment.ticketId);
+        return this.paidResult(payment);
+    }
+
+    private paidResult(payment: { ticket?: unknown; id: string }) {
+        return payment.ticket || { paymentId: payment.id, status: "paid" };
+    }
+
+    private async failStripeSession(sessionId: string, paymentStatus: "failed" | "cancelled") {
+        const payment = await this.prisma.payment.findUnique({ where: { stripeSessionId: sessionId } });
+        if (!payment || payment.status === "paid" || payment.status === "refunded") return;
+        await this.markFailed(
+            payment.id,
+            payment.ticketId,
+            paymentStatus === "failed" ? TICKET_STATUSES.FAILED : TICKET_STATUSES.CANCELLED,
+            paymentStatus,
+        );
+    }
+
+    private async applyRefundLocal(paymentId: string, ticketId?: string | null) {
+        await this.prisma.payment.update({
+            where: { id: paymentId },
+            data: { status: "refunded" },
+        });
+        if (ticketId) {
+            await this.prisma.ticket.update({
+                where: { id: ticketId },
+                data: { status: TICKET_STATUSES.REFUNDED },
+            });
+        }
+        const extras = await this.paymentExtras(paymentId);
+        if (extras?.packPurchaseId) {
+            await this.prisma.$executeRaw`
+                UPDATE "TicketPackPurchase"
+                SET status = 'refunded', "remainingCount" = 0
+                WHERE id = ${extras.packPurchaseId}
+            `;
+        }
+    }
+
+    private async findByIdExtras(paymentId: string) {
+        const rows = await this.prisma.$queryRaw<any[]>`
+            SELECT "packPurchaseId", "ticketId", "barionPaymentId"
+            FROM "Payment"
+            WHERE id = ${paymentId}
+            LIMIT 1
+        `.catch(() => []);
+        return rows[0] || null;
+    }
+
+    private stripePaymentIntentId(obj: Record<string, unknown>) {
+        const raw = obj.payment_intent;
+        if (typeof raw === "string") return raw.trim();
+        if (raw && typeof raw === "object" && "id" in raw) return String((raw as { id?: string }).id || "").trim();
+        return "";
+    }
+
+    private stripeObjectFullyRefunded(type: string, obj: Record<string, unknown>) {
+        if (type === "charge.refunded") {
+            if (obj.refunded === true) return true;
+            const amount = Number(obj.amount);
+            const refunded = Number(obj.amount_refunded);
+            return Number.isFinite(amount) && amount > 0 && refunded >= amount;
+        }
+        return String(obj.status || "") === "succeeded";
+    }
+
+    private async markRefundedByPaymentIntent(paymentIntent: string) {
+        const pi = String(paymentIntent || "").trim();
+        if (!pi || !this.stripeEnabled()) return null;
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+        const listed = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 5 });
+        const sessionId = listed.data.map((row) => row.id).find(Boolean);
+        if (!sessionId) return null;
+        const payment = await this.prisma.payment.findUnique({ where: { stripeSessionId: sessionId } });
+        if (!payment) return null;
+        if (payment.status === "refunded") return payment;
+        await this.applyRefundLocal(payment.id, payment.ticketId);
+        return payment;
+    }
+
     private async activateTicket(ticketId?: string | null) {
         if (!ticketId) return;
         const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
@@ -517,16 +729,51 @@ export class PaymentsService {
             SELECT * FROM "TicketPackPurchase" WHERE id = ${purchaseId} LIMIT 1
         `;
         if (!rows[0]) throw new NotFoundException("A jegycsomag nem található.");
-        if (rows[0].status !== "paid") {
+        const wasPaid = String(rows[0].status) === "paid";
+        if (!wasPaid) {
             await this.prisma.$executeRaw`
                 UPDATE "TicketPackPurchase"
                 SET status = 'paid', "remainingCount" = "ticketCount", "paidAt" = NOW()
                 WHERE id = ${purchaseId}
             `;
+            void this.referrals.onPaidPurchase(rows[0].userId);
+            void this.mail.packPurchased(
+                rows[0].userId,
+                rows[0].groupKey || rows[0].groupName || "pack",
+                rows[0].ticketCount,
+                purchaseId,
+            );
+            void this.maybeClaimFirstBuyerCampaign(rows[0]);
         }
-        void this.referrals.onPaidPurchase(rows[0].userId);
-        void this.mail.packPurchased(rows[0].userId, rows[0].groupKey || rows[0].groupName || "pack", rows[0].ticketCount);
         return rows[0];
+    }
+
+    private async maybeClaimFirstBuyerCampaign(pack: {
+        userId?: string;
+        price?: number;
+        source?: string;
+    }) {
+        const userId = String(pack?.userId || "").trim();
+        if (!userId) return;
+        if (String(pack.source || "purchase") !== "purchase") return;
+        if (Number(pack.price) <= 0) return;
+        try {
+            const paidPurchases = await this.prisma.$queryRaw<any[]>`
+                SELECT COUNT(*)::int AS n
+                FROM "TicketPackPurchase"
+                WHERE "userId" = ${userId}
+                  AND status = 'paid'
+                  AND COALESCE(price, 0) > 0
+                  AND COALESCE(source, 'purchase') = 'purchase'
+            `;
+            if ((paidPurchases[0]?.n || 0) !== 1) return;
+            const { GiftCampaignsService } = await import("../tickets/gift-campaigns.service");
+            const campaigns = this.moduleRef.get(GiftCampaignsService, { strict: false });
+            if (!campaigns?.tryClaimFirstBuyers) return;
+            await campaigns.tryClaimFirstBuyers(userId);
+        } catch (err: any) {
+            this.logger.warn(`Első vásárlós kampány: ${err?.message || err}`);
+        }
     }
 
     private async assertPackOwner(purchaseId: string, userId: string) {
@@ -569,8 +816,8 @@ export class PaymentsService {
         label: string;
     }) {
         const user = await this.prisma.user.findUnique({ where: { id: pack.userId } });
-        const frontend = process.env.FRONTEND_URL || "http://localhost:3000";
-        const backend = process.env.BACKEND_URL || "http://127.0.0.1:3200";
+        const frontend = publicFrontendUrl();
+        const backend = publicBackendUrl();
         const payee = process.env.BARION_PAYEE!.trim();
         const paymentId = randomUUID();
         await this.prisma.$executeRaw`
@@ -587,7 +834,7 @@ export class PaymentsService {
                 FundingSources: ["All"],
                 Locale: "hu-HU",
                 Currency: "HUF",
-                RedirectUrl: `${frontend}/payment/success`,
+                RedirectUrl: `${frontend}/payment/success?paymentId=`,
                 CallbackUrl: `${backend}/api/barion/webhook`,
                 OrderNumber: pack.id,
                 PayerHint: user?.email || undefined,

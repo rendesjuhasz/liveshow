@@ -482,6 +482,14 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
     "live.loadError": row("Nem sikerült betölteni az élő műsorokat.", "Could not load live shows.", "Livestreams konnten nicht geladen werden.", "Impossibile caricare le dirette.", "No se pudieron cargar los directos.", "Impossible de charger les directs."),
     "live.invalid": row("Érvénytelen műsor azonosító.", "Invalid show id.", "Ungültige Sendungs-ID.", "ID evento non valido.", "ID de evento no válido.", "Identifiant d'événement invalide."),
     "live.noStream": row("Ehhez a műsorhoz nincs stream ID. Add meg adminban.", "This show has no stream ID. Set it in admin.", "Diese Sendung hat keine Stream-ID.", "Questo evento non ha uno stream ID.", "Este evento no tiene stream ID.", "Cet événement n'a pas d'ID de stream."),
+    "live.loadHint": row(
+        "Ha a hiba megmarad, frissítsd az oldalt, vagy próbáld újra később.",
+        "If this continues, refresh the page or try again later.",
+        "Wenn der Fehler bleibt, lade die Seite neu oder versuche es später erneut.",
+        "Se l'errore resta, aggiorna la pagina o riprova più tardi.",
+        "Si el error continúa, recarga la página o inténtalo más tarde.",
+        "Si l'erreur persiste, actualisez la page ou réessayez plus tard.",
+    ),
     "live.watchFree": row(
         "A műsor szabadon nézhető. Jegy a kérdésbeküldéshez és a prémium interakciókhoz használható.",
         "The show is free to watch. Tickets are for questions and premium interactions.",

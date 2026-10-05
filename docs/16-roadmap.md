@@ -22,6 +22,7 @@ Jelölés: **kész** a repo alapján; **részben**; **nincs**.
 | Payout kérelem + admin approve/paid | nincs banki utalás |
 | Stripe / Barion / tesztfizetés | Barion ki, ha nincs merchant |
 | Archív lista + generate | HLS ablak korlát — lásd streaming doc |
+| Költségmonitorozás | `/admin/costs` — tárhely/CDN/transzkód/szerver/DB/e-mail vs jutalék |
 | Jogi oldalak | ASZF, cookie, adatkezelés, stb. |
 
 ---

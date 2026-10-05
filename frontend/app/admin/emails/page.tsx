@@ -9,9 +9,9 @@ const LABELS: Record<string, string> = {
     ticket_purchased: "Jegyvásárlás",
     live_reminder: "Élő emlékeztető",
     archive_ready: "Archívum elkészült",
-    streamer_approved: "Streamer jóváhagyva",
+    streamer_approved: "Tartalomkészítő jóváhagyva",
     payout_approved: "Kifizetés jóváhagyva",
-    password_reset: "Jelszó helyreállítás",
+    ops_alert: "Ops riasztás",
 };
 
 export default function AdminEmailsPage() {
@@ -37,7 +37,7 @@ export default function AdminEmailsPage() {
                     Automatikus levelek naplója. SMTP nélkül a kimenő fájlok a backend{" "}
                     <code className="text-yellow-400">mail-outbox</code> mappában vannak, a konzolon
                     is megjelennek. Típusok: regisztráció, jegy, élő emlékeztető (kezdés előtt 60
-                    perc), archívum, streamer jóváhagyás, kifizetés jóváhagyás.
+                    perc), archívum, tartalomkészítő jóváhagyás, kifizetés jóváhagyás.
                 </p>
                 {error && <p className="text-red-400 mb-4">{error}</p>}
                 {rows.length === 0 && <p className="text-gray-400">Még nincs kimenő email.</p>}

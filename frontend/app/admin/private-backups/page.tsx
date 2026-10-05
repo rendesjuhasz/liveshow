@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
-import { getAuthToken } from "@/api/auth-storage";
+import { getCsrfToken } from "@/api/auth-storage";
 import { useAdminGate } from "@/lib/useAdminGate";
 
 export default function AdminPrivateBackupsPage() {
@@ -22,8 +22,12 @@ export default function AdminPrivateBackupsPage() {
 
     async function download(id: string) {
         try {
+            const csrf = getCsrfToken();
             const res = await fetch(`/api/admin/private-backups/${id}/file`, {
-                headers: { Authorization: `Bearer ${getAuthToken() || ""}` },
+                credentials: "include",
+                headers: {
+                    ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+                },
             });
             if (!res.ok) throw new Error("A letöltés sikertelen.");
             const blob = await res.blob();

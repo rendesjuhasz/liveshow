@@ -1,30 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { AdminGuard } from "./admin.guard";
 import { AdminService } from "./admin.service";
 import { AdminUsersService } from "./admin-users.service";
 import { MailService } from "../mail/mail.service";
-
-type ShowBody = {
-    title: string;
-    description?: string;
-    image?: string;
-    date?: string;
-    startTime?: string;
-    price?: number;
-    live?: boolean;
-    featured?: boolean;
-    streamUrl?: string;
-    streamId?: string;
-    streamerId?: string;
-    categoryKeys?: string[];
-    videoCategory?: string;
-    status?: string;
-    commissionPercent?: number | null;
-};
+import { CampaignDto, CommissionDto, GiftTicketDto, SetRoleDto, ShowBodyDto, StatusDto } from "../dto/bodies";
 
 @Controller("admin")
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
 export class AdminController {
     constructor(
         private adminService: AdminService,
@@ -38,7 +22,7 @@ export class AdminController {
     }
 
     @Post("shows")
-    createShow(@Body() body: ShowBody) {
+    createShow(@Body() body: ShowBodyDto) {
         return this.adminService.createShow(body);
     }
 
@@ -53,7 +37,7 @@ export class AdminController {
     }
 
     @Patch("shows/:id/status")
-    setShowStatus(@Param("id") id: string, @Body() body: { status?: string }) {
+    setShowStatus(@Param("id") id: string, @Body() body: StatusDto) {
         return this.adminService.setShowStatus(id, body.status);
     }
 
@@ -73,7 +57,7 @@ export class AdminController {
     }
 
     @Put("shows/:id")
-    updateShow(@Param("id") id: string, @Body() body: ShowBody) {
+    updateShow(@Param("id") id: string, @Body() body: ShowBodyDto) {
         return this.adminService.updateShow(id, body);
     }
 
@@ -93,7 +77,7 @@ export class AdminController {
     }
 
     @Put("commission")
-    setCommission(@Body() body: { percent?: number; commissionPercent?: number; streamerPercent?: number; payoutCycle?: string }) {
+    setCommission(@Body() body: CommissionDto) {
         return this.adminService.setCommission(body);
     }
 
@@ -103,8 +87,13 @@ export class AdminController {
     }
 
     @Post("tickets/gift")
-    gift(@Body() body: { email?: string; showId?: string; categoryKey?: string }) {
-        return this.adminService.giftTicket(body.email, body.showId, body.categoryKey);
+    gift(@Body() body: GiftTicketDto) {
+        return this.adminService.giftTicket(body.email, body.ticketCount);
+    }
+
+    @Post("tickets/:id/resend")
+    resendTicket(@Req() req: { user: { id: string } }, @Param("id") id: string) {
+        return this.adminService.resendTicketEmail(req.user.id, id);
     }
 
     @Get("campaigns")
@@ -113,19 +102,7 @@ export class AdminController {
     }
 
     @Post("campaigns")
-    createCampaign(
-        @Body()
-        body: {
-            name?: string;
-            type?: string;
-            showId?: string;
-            categoryKey?: string;
-            maxClaims?: number;
-            status?: string;
-            startsAt?: string | null;
-            endsAt?: string | null;
-        },
-    ) {
+    createCampaign(@Body() body: CampaignDto) {
         return this.adminService.createCampaign(body);
     }
 
@@ -135,18 +112,7 @@ export class AdminController {
     }
 
     @Patch("campaigns/:id")
-    updateCampaign(
-        @Param("id") id: string,
-        @Body()
-        body: {
-            name?: string;
-            maxClaims?: number;
-            status?: string;
-            startsAt?: string | null;
-            endsAt?: string | null;
-            categoryKey?: string;
-        },
-    ) {
+    updateCampaign(@Param("id") id: string, @Body() body: CampaignDto) {
         return this.adminService.updateCampaign(id, body);
     }
 
@@ -156,7 +122,7 @@ export class AdminController {
     }
 
     @Post("moderators")
-    setRole(@Body() body: { userId?: string; email?: string; role?: string }) {
+    setRole(@Body() body: SetRoleDto) {
         return this.adminService.setUserRole(String(body.userId || body.email || ""), body.role);
     }
 
@@ -179,7 +145,7 @@ export class AdminController {
     setUserStatus(
         @Req() req: { user: { id: string; email?: string } },
         @Param("id") id: string,
-        @Body() body: { status?: string },
+        @Body() body: StatusDto,
     ) {
         return this.users.setUserStatus(req.user, id, body.status);
     }

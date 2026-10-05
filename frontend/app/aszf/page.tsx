@@ -5,8 +5,8 @@ export default function AszfPage() {
         <LegalShell title="Általános szerződési feltételek (ÁSZF)" updated="2026. augusztus 23.">
             <p>
                 A LiveShow platform (a továbbiakban: Platform) élő és archív műsorok közvetítését,
-                jegyvásárlást, streamer fiókokat és kapcsolódó szolgáltatásokat biztosít. A
-                Platform használatával — ideértve a nézői vagy streamer regisztrációt, a
+                jegyvásárlást, tartalomkészítő fiókokat és kapcsolódó szolgáltatásokat biztosít. A
+                Platform használatával — ideértve a nézői vagy tartalomkészítő regisztrációt, a
                 bejelentkezést és a jegyvásárlást — elfogadod ezeket a feltételeket.
             </p>
 
@@ -14,7 +14,7 @@ export default function AszfPage() {
             <p>
                 A Platform a műsorok közzétételéhez, a jegyértékesítéshez, a közvetítés
                 technikai hátteréhez, valamint a kifizetések adminisztrációjához ad felületet.
-                A műsor tartalmáért elsősorban a közzétevő streamer felel.
+                A műsor tartalmáért elsősorban a közzétevő tartalomkészítő felel.
             </p>
 
             <h2>2. Fióktípusok</h2>
@@ -25,7 +25,7 @@ export default function AszfPage() {
                     (kérdésbeküldés, támogatás, extra tartalom, privát stream).
                 </li>
                 <li>
-                    <strong>Streamer:</strong> külön regisztráció, profilkép és a Streamer ÁSZF
+                    <strong>Tartalomkészítő:</strong> külön regisztráció, profilkép és a Tartalomkészítő ÁSZF
                     elfogadása kötelező. A fiók pending státuszban jön létre, a vezérlőpult csak
                     admin jóváhagyás után érhető el.
                 </li>
@@ -58,9 +58,9 @@ export default function AszfPage() {
             <h2>4. Élő adás, archívum, kérdések</h2>
             <p>
                 Az élő közvetítés és az archív felvétel megtekintése ingyenes; a lejátszáshoz
-                bejelentkezés szükséges. A kérdésbeküldés, a streamer támogatása és a további
+                bejelentkezés szükséges. A kérdésbeküldés, a tartalomkészítő támogatása és a további
                 prémium interakciók érvényes jegyhez kötöttek. A kérdések nem nyilvános csevegés:
-                beküldés után függőben várnak, a streamer mindig csak az aktuálisan legfontosabb
+                beküldés után függőben várnak, a tartalomkészítő mindig csak az aktuálisan legfontosabb
                 kérdést látja. A kérdésbeküldés flood-, spam- és tiltottszó-szűrés alá esik.
             </p>
 
@@ -68,12 +68,12 @@ export default function AszfPage() {
             <p>
                 Értékelni a műsor után, 1–5 csillaggal és opcionális szöveggel, érvényes
                 jeggyel lehet. Az értékelés moderálásra vár; nyilvánosan csak a jóváhagyott
-                értékelések és azok átlaga jelenik meg a műsoroldalon és a streamer profilon.
+                értékelések és azok átlaga jelenik meg a műsoroldalon és a tartalomkészítő profilon.
             </p>
 
-            <h2>6. Streamerekre vonatkozó különös feltételek</h2>
+            <h2>6. Tartalomkészítőkre vonatkozó különös feltételek</h2>
             <p>
-                A streamer csak jogszerű tartalmat közvetíthet, tiszteletben tartja a nézők
+                A tartalomkészítő csak jogszerű tartalmat közvetíthet, tiszteletben tartja a nézők
                 adatait, és nem tölti fel más szellemi tulajdonát engedély nélkül. Felel a
                 saját adásáért, a jegyárakért, a kifizetési adatok pontosságáért.
             </p>
@@ -81,8 +81,8 @@ export default function AszfPage() {
                 A bevételből a Platform jutalékot von (az aktuális mérték az admin
                 beállítása szerint). Kifizetés a nettó egyenlegből igényelhető, pending →
                 approved → paid folyamatban, admin jóváhagyással. A kapcsolattartási email
-                a Platform és a streamer közötti hivatalos kommunikációra szolgál, nem
-                jelenik meg a nézőknek. A nézők és a streamerek egymás e-mail-címét vagy
+                a Platform és a tartalomkészítő közötti hivatalos kommunikációra szolgál, nem
+                jelenik meg a nézőknek. A nézők és a tartalomkészítők egymás e-mail-címét vagy
                 telefonszámát nem oszthatják meg; a kapcsolat a platformon belüli
                 üzeneteken, kérdéseken, kívánságokon és privát ajánlatokon keresztül
                 marad. A fiók a szabályok megsértése esetén elutasítható, felfüggeszthető
@@ -93,7 +93,7 @@ export default function AszfPage() {
             <p>
                 A Platform szoftvere, arculata és dokumentációja a szolgáltatóé. A
                 feltöltött műsor, kép, hang és szöveg a feltöltő felelőssége; a
-                közzététellel a streamer nem kizárólagos, a szolgáltatás működtetéséhez
+                közzététellel a tartalomkészítő nem kizárólagos, a szolgáltatás működtetéséhez
                 szükséges felhasználási jogot biztosít a Platformnak.
             </p>
 
@@ -101,7 +101,7 @@ export default function AszfPage() {
             <p>
                 A Platform a technikai elérhetőséget ésszerű erőfeszítéssel biztosítja, de
                 nem vállal szavatosságot a folyamatos, hibamentes működésért, a külső
-                fizetési szolgáltatók, hálózati kimaradások vagy a streamer által közzétett
+                fizetési szolgáltatók, hálózati kimaradások vagy a tartalomkészítő által közzétett
                 tartalom jogszerűségéért. A kártérítés a magyar jog kötelező szabályai szerint
                 korlátozott.
             </p>

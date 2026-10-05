@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useT } from "@/lib/i18n/I18nProvider";
+import { localizeFaqItem } from "@/lib/i18n/faq-copy";
 
 export type FaqItem = {
     id: string;
@@ -11,7 +13,13 @@ export type FaqItem = {
     order?: number;
 };
 
-const CATEGORY_ORDER = ["Jegyvásárlás", "Közvetítések", "Fiókom", "Fizetés", "Archívum"];
+const CATEGORY_ORDER_KEYS = [
+    "faq.cat.tickets",
+    "faq.cat.streams",
+    "faq.cat.account",
+    "faq.cat.payment",
+    "faq.cat.archive",
+];
 
 function matches(item: FaqItem, query: string) {
     const q = query.trim().toLowerCase();
@@ -32,45 +40,48 @@ export default function FaqList({
     showContact?: boolean;
     limit?: number;
 }) {
+    const { t } = useT();
     const [query, setQuery] = useState("");
     const [openId, setOpenId] = useState<string | null>(null);
+    const localized = useMemo(() => items.map((item) => localizeFaqItem(item, t)), [items, t]);
+    const categoryOrder = CATEGORY_ORDER_KEYS.map((key) => t(key));
 
     const filtered = useMemo(() => {
-        const list = items.filter((item) => matches(item, query));
+        const list = localized.filter((item) => matches(item, query));
         return typeof limit === "number" ? list.slice(0, limit) : list;
-    }, [items, query, limit]);
+    }, [localized, query, limit]);
 
     const grouped = useMemo(() => {
         const map = new Map<string, FaqItem[]>();
         for (const item of filtered) {
-            const key = item.category || "Egyéb";
+            const key = item.category || t("faq.other");
             if (!map.has(key)) map.set(key, []);
             map.get(key)!.push(item);
         }
         const keys = [...map.keys()].sort((a, b) => {
-            const ai = CATEGORY_ORDER.indexOf(a);
-            const bi = CATEGORY_ORDER.indexOf(b);
-            if (ai === -1 && bi === -1) return a.localeCompare(b, "hu");
+            const ai = categoryOrder.indexOf(a);
+            const bi = categoryOrder.indexOf(b);
+            if (ai === -1 && bi === -1) return a.localeCompare(b);
             if (ai === -1) return 1;
             if (bi === -1) return -1;
             return ai - bi;
         });
         return keys.map((category) => ({ category, items: map.get(category)! }));
-    }, [filtered]);
+    }, [filtered, categoryOrder, t]);
 
     return (
         <div>
             {showSearch && (
                 <input
                     className="w-full mb-8 p-3 rounded-xl text-black"
-                    placeholder="Keresés a kérdések között..."
+                    placeholder={t("faq.search")}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                 />
             )}
 
             {grouped.length === 0 && (
-                <p className="text-neutral-400 mb-8">Nincs találat a keresésre.</p>
+                <p className="text-neutral-400 mb-8">{t("faq.empty")}</p>
             )}
 
             <div className="space-y-10">
@@ -108,13 +119,13 @@ export default function FaqList({
 
             {showContact && (
                 <div className="mt-12 p-6 rounded-2xl bg-neutral-900 border border-neutral-800 text-center">
-                    <p className="text-lg font-semibold mb-1">Nem találtad a választ?</p>
-                    <p className="text-neutral-400 mb-4">Lépj kapcsolatba velünk.</p>
+                    <p className="text-lg font-semibold mb-1">{t("faq.needHelp")}</p>
+                    <p className="text-neutral-400 mb-4">{t("faq.contactLead")}</p>
                     <Link
                         href="/kapcsolat"
                         className="inline-block bg-yellow-500 text-black font-bold px-6 py-3 rounded-xl"
                     >
-                        Kapcsolat
+                        {t("legal.contact")}
                     </Link>
                 </div>
             )}

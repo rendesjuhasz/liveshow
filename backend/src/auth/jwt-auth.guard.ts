@@ -4,18 +4,20 @@ import { AuthGuard } from "@nestjs/passport";
 @Injectable()
 export class JwtAuthGuard extends AuthGuard("jwt") {}
 
+/**
+ * Optional JWT: try Bearer **or** ls_access cookie (JwtStrategy extractors).
+ * Missing/invalid token → continue as guest. Do not skip Passport just because
+ * Authorization is absent — the browser session is cookie-only.
+ */
 @Injectable()
 export class OptionalJwtAuthGuard extends AuthGuard("jwt") {
     async canActivate(context: ExecutionContext) {
-        const request = context.switchToHttp().getRequest();
-        if (!request.headers?.authorization) {
-            return true;
-        }
         try {
-            return Boolean(await super.canActivate(context));
+            await super.canActivate(context);
         } catch {
-            return true;
+            /* vendég: hiányzó vagy érvénytelen JWT */
         }
+        return true;
     }
 
     handleRequest<TUser = any>(

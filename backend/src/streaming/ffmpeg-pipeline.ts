@@ -4,7 +4,7 @@ import {
 } from "@nestjs/common";
 import { exec } from "child_process";
 import { promisify } from "util";
-import * as fs from "fs";
+import { promises as fsp } from "fs";
 import * as path from "path";
 import {
     ensureStreamOutputDir,
@@ -14,6 +14,7 @@ import {
     getRecordingFile,
     getRecordingPublicPath,
 } from "./hls-paths";
+import { fileSize, fileStat, pathExists } from "./fs-async";
 
 const execAsync = promisify(exec);
 
@@ -26,21 +27,23 @@ export class FfmpegPipeline {
         const playlist = getHlsPlaylistFile(streamId);
         const output = getArchiveFile(streamId);
 
-        const hasRecording = fs.existsSync(recording) && fs.statSync(recording).size >= 1024;
-        const hasPlaylist = fs.existsSync(playlist);
-        const playlistHasSegments =
-            hasPlaylist &&
-            fs
-                .readFileSync(playlist, "utf8")
+        const recSize = await fileSize(recording);
+        const hasRecording = recSize >= 1024;
+        const hasPlaylist = await pathExists(playlist);
+        let playlistHasSegments = false;
+        if (hasPlaylist) {
+            const text = await fsp.readFile(playlist, "utf8");
+            const names = text
                 .split("\n")
-                .some((line) => {
-                    const name = line.trim();
-                    return (
-                        name &&
-                        !name.startsWith("#") &&
-                        fs.existsSync(path.join(path.dirname(playlist), path.basename(name)))
-                    );
-                });
+                .map((line) => line.trim())
+                .filter((name) => name && !name.startsWith("#"));
+            for (const name of names) {
+                if (await pathExists(path.join(path.dirname(playlist), path.basename(name)))) {
+                    playlistHasSegments = true;
+                    break;
+                }
+            }
+        }
 
         if (!hasRecording && !playlistHasSegments) {
             throw new NotFoundException(
@@ -61,7 +64,7 @@ export class FfmpegPipeline {
             );
         }
 
-        if (!fs.existsSync(output)) {
+        if (!(await pathExists(output))) {
             throw new NotFoundException("Az FFmpeg nem hozta létre az archívumot.");
         }
 
@@ -84,42 +87,55 @@ export class FfmpegPipeline {
                 /* transcode below */
             }
         }
-        if (!fs.existsSync(output) || fs.statSync(output).size < 1024) {
+        if ((await fileSize(output)) < 1024) {
             await execAsync(
                 `ffmpeg -y -i "${sourcePath}" -c:v libx264 -preset veryfast -c:a aac -movflags +faststart "${output}"`,
                 opts,
             );
         }
-        if (!fs.existsSync(output) || fs.statSync(output).size < 1024) {
+        if ((await fileSize(output)) < 1024) {
             throw new NotFoundException("A videó feldolgozása nem sikerült. Próbáld MP4 formátumban.");
         }
         return output;
     }
 
-    getArchiveInfo(streamId: string) {
+    async probeDurationSeconds(filePath: string): Promise<number> {
+        if (!filePath) return 0;
+        try {
+            const { stdout } = await execAsync(
+                `ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 "${filePath}"`,
+            );
+            const n = Number(String(stdout || "").trim());
+            return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+        } catch {
+            return 0;
+        }
+    }
+
+    async getArchiveInfo(streamId: string) {
         const archivePath = getArchiveFile(streamId);
-        if (fs.existsSync(archivePath) && fs.statSync(archivePath).size >= 1024) {
-            const stat = fs.statSync(archivePath);
+        const archiveStat = await fileStat(archivePath);
+        if (archiveStat && archiveStat.size >= 1024) {
             return {
                 exists: true,
                 streamId,
                 filePath: archivePath,
                 publicPath: getArchivePublicPath(streamId),
-                size: stat.size,
-                createdAt: stat.mtime.toISOString(),
+                size: archiveStat.size,
+                createdAt: archiveStat.mtime.toISOString(),
             };
         }
 
         const recordingPath = getRecordingFile(streamId);
-        if (fs.existsSync(recordingPath) && fs.statSync(recordingPath).size >= 1024) {
-            const stat = fs.statSync(recordingPath);
+        const recordingStat = await fileStat(recordingPath);
+        if (recordingStat && recordingStat.size >= 1024) {
             return {
                 exists: true,
                 streamId,
                 filePath: recordingPath,
                 publicPath: getRecordingPublicPath(streamId),
-                size: stat.size,
-                createdAt: stat.mtime.toISOString(),
+                size: recordingStat.size,
+                createdAt: recordingStat.mtime.toISOString(),
             };
         }
 
@@ -133,10 +149,10 @@ export class FfmpegPipeline {
         };
     }
 
-    deleteArchive(streamId: string) {
+    async deleteArchive(streamId: string) {
         const filePath = getArchiveFile(streamId);
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
+        if (await pathExists(filePath)) {
+            await fsp.unlink(filePath);
         }
         return this.getArchiveInfo(streamId);
     }

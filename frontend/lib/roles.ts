@@ -1,3 +1,5 @@
+import { stripLocalePrefix } from "@/lib/i18n/paths";
+
 export const USER_ROLES = {
     USER: "user",
     ADMIN: "admin",
@@ -7,8 +9,6 @@ export const USER_ROLES = {
 
 export type UserRole = (typeof USER_ROLES)[keyof typeof USER_ROLES];
 
-export const BOOTSTRAP_ADMIN_EMAIL = "admin@admin.com";
-
 export function normalizeRole(role?: string | null): UserRole {
     const value = String(role || "").trim().toLowerCase();
     if (value === USER_ROLES.ADMIN) return USER_ROLES.ADMIN;
@@ -17,35 +17,71 @@ export function normalizeRole(role?: string | null): UserRole {
     return USER_ROLES.USER;
 }
 
-export function isAdminRole(user?: { role?: string | null; email?: string | null } | null) {
+export function isAdminRole(user?: { role?: string | null; isAdmin?: boolean } | null) {
     if (!user) return false;
-    const email = String(user.email || "").trim().toLowerCase();
-    return (
-        normalizeRole(user.role) === USER_ROLES.ADMIN ||
-        email === BOOTSTRAP_ADMIN_EMAIL
-    );
+    if (user.isAdmin === true) return true;
+    return normalizeRole(user.role) === USER_ROLES.ADMIN;
 }
 
-export function isModeratorRole(user?: { role?: string | null; email?: string | null } | null) {
+export function isModeratorRole(user?: { role?: string | null; isAdmin?: boolean } | null) {
     if (!user) return false;
     return isAdminRole(user) || normalizeRole(user.role) === USER_ROLES.MODERATOR;
 }
 
-export function isStreamerRole(user?: { role?: string | null; email?: string | null } | null) {
+export function isStreamerRole(user?: { role?: string | null; isAdmin?: boolean } | null) {
     if (!user) return false;
     return isAdminRole(user) || normalizeRole(user.role) === USER_ROLES.STREAMER;
 }
 
 export function isStreamerAppPath(pathname = "") {
-    return pathname === "/streamer" || pathname.startsWith("/streamer/");
+    const { path } = stripLocalePrefix(pathname);
+    return path === "/streamer" || path.startsWith("/streamer/");
+}
+
+export function isStreamerChromePath(pathname = "") {
+    const { path } = stripLocalePrefix(pathname);
+    return (
+        isStreamerAppPath(path) ||
+        path === "/streamer-login" ||
+        path === "/streamer-register" ||
+        path === "/streamer-terms"
+    );
+}
+
+export function isAdminAppPath(pathname = "") {
+    const { path } = stripLocalePrefix(pathname);
+    return path === "/admin" || path.startsWith("/admin/");
+}
+
+export function isStudioChromePath(pathname = "") {
+    return isAdminAppPath(pathname) || isStreamerChromePath(pathname);
+}
+
+export function appSurfaceKey(pathname = "") {
+    const { path } = stripLocalePrefix(pathname);
+    if (isAdminAppPath(path)) return "nav.surface.admin";
+    if (isStreamerChromePath(path)) {
+        return "nav.surface.streamer";
+    }
+    return "nav.surface.viewer";
+}
+
+export function appSurfaceLabel(pathname = "") {
+    const key = appSurfaceKey(pathname);
+    if (key === "nav.surface.admin") return "Admin";
+    if (key === "nav.surface.streamer") return "Tartalomkészítő";
+    return "Viewer";
+}
+
+/** Browser tab title so laptop windows stay distinguishable. */
+export function appWindowTitle(pathname = "") {
+    return `${appSurfaceLabel(pathname)} · LiveShow`;
 }
 
 export function sessionStatusLabel(
-    user: { role?: string | null; email?: string | null } | null,
+    user: { role?: string | null; isAdmin?: boolean } | null,
     pathname = "",
 ) {
     if (!user) return "";
-    if (pathname.startsWith("/admin") && isAdminRole(user)) return "Admin";
-    if (isStreamerAppPath(pathname)) return "Streamer";
-    return "Néző";
+    return appSurfaceLabel(pathname);
 }

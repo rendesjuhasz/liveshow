@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { STREAMER_CATEGORIES } from "@/lib/streamer-categories";
 import { contactLeakWarning } from "@/lib/contact-leak";
 import ContactLeakHint from "@/components/ContactLeakHint";
+import PasswordField from "@/components/PasswordField";
 
 export default function StreamerRegisterPage() {
     const router = useRouter();
@@ -31,7 +32,7 @@ export default function StreamerRegisterPage() {
             return;
         }
         if (!terms) {
-            setError("A Streamer ÁSZF elfogadása kötelező.");
+            setError("A Tartalomkészítő ÁSZF elfogadása kötelező.");
             return;
         }
         const leak = contactLeakWarning(bio, name);
@@ -55,7 +56,7 @@ export default function StreamerRegisterPage() {
             await registerStreamer(form);
             router.push("/streamer");
         } catch (err: any) {
-            setError(err?.message || "Hiba történt a streamer regisztráció során.");
+            setError(err?.message || "Hiba történt a tartalomkészítő regisztráció során.");
         } finally {
             setBusy(false);
         }
@@ -64,10 +65,11 @@ export default function StreamerRegisterPage() {
     return (
         <div className="min-h-dvh bg-background px-4 py-10 text-white sm:py-16">
             <div className="max-w-xl mx-auto">
-                <p className="text-sm text-yellow-400 mb-2">Streamer fiók</p>
-                <h1 className="mb-2 text-2xl font-bold md:text-3xl">Streamer regisztráció</h1>
+                <p className="text-sm text-yellow-400 mb-2">Tartalomkészítő fiók</p>
+                <h1 className="mb-2 text-2xl font-bold md:text-3xl">Tartalomkészítő regisztráció</h1>
                 <p className="text-neutral-400 mb-8">
                     A fiók pending státusszal jön létre, a dashboard csak admin jóváhagyás után nyílik meg.
+                    Megerősítő e-mailt is küldünk; jegy és tartalomkészítő műveletekhez a linkre kell kattintani.
                     Csak nézni szeretnél?{" "}
                     <Link href="/register" className="text-yellow-400 underline">
                         Nézői regisztráció
@@ -102,9 +104,9 @@ export default function StreamerRegisterPage() {
                     </label>
                     <label className="grid gap-1">
                         <span>Jelszó</span>
-                        <input
+                        <PasswordField
                             className="p-3 rounded text-black"
-                            type="password"
+                            tone="onLight"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             minLength={8}
@@ -171,7 +173,7 @@ export default function StreamerRegisterPage() {
                         <span>
                             Elfogadom a{" "}
                             <Link href="/streamer-terms" className="text-yellow-400 underline" target="_blank">
-                                Streamer ÁSZF
+                                Tartalomkészítő ÁSZF
                             </Link>
                             , az{" "}
                             <Link href="/aszf" className="text-yellow-400 underline" target="_blank">
@@ -190,7 +192,7 @@ export default function StreamerRegisterPage() {
                         disabled={busy}
                         className="bg-yellow-500 text-black font-bold p-3 rounded-xl disabled:opacity-50"
                     >
-                        {busy ? "Küldés..." : "Streamer regisztráció"}
+                        {busy ? "Küldés..." : "Tartalomkészítő regisztráció"}
                     </button>
                 </form>
             </div>

@@ -7,12 +7,15 @@ export const USER_ROLES = {
 
 export type UserRole = (typeof USER_ROLES)[keyof typeof USER_ROLES];
 
-export const BOOTSTRAP_ADMIN_EMAIL = "admin@admin.com";
+export const BLOCKED_BOOTSTRAP_ADMIN = "admin@admin.com";
 
+/** Optional mailbox for CLI seed / contact fallback. Never grants admin by itself. */
 export function bootstrapAdminEmail() {
-    return String(process.env.BOOTSTRAP_ADMIN_EMAIL || BOOTSTRAP_ADMIN_EMAIL)
-        .trim()
-        .toLowerCase();
+    const value = String(process.env.BOOTSTRAP_ADMIN_EMAIL || "").trim().toLowerCase();
+    if (process.env.NODE_ENV === "production" && value === BLOCKED_BOOTSTRAP_ADMIN) {
+        throw new Error("Élesben a BOOTSTRAP_ADMIN_EMAIL nem lehet admin@admin.com.");
+    }
+    return value;
 }
 
 export function normalizeRole(role?: string | null): UserRole {
@@ -23,27 +26,18 @@ export function normalizeRole(role?: string | null): UserRole {
     return USER_ROLES.USER;
 }
 
-export function isAdminRole(user?: { role?: string | null; email?: string | null } | null) {
+export function isAdminRole(user?: { role?: string | null; isAdmin?: boolean } | null) {
     if (!user) return false;
-    const email = String(user.email || "").trim().toLowerCase();
-    return (
-        normalizeRole(user.role) === USER_ROLES.ADMIN ||
-        email === bootstrapAdminEmail()
-    );
+    if (user.isAdmin === true) return true;
+    return normalizeRole(user.role) === USER_ROLES.ADMIN;
 }
 
-export function isModeratorRole(user?: { role?: string | null; email?: string | null } | null) {
+export function isModeratorRole(user?: { role?: string | null; isAdmin?: boolean } | null) {
     if (!user) return false;
     return isAdminRole(user) || normalizeRole(user.role) === USER_ROLES.MODERATOR;
 }
 
-export function isStreamerRole(user?: { role?: string | null; email?: string | null } | null) {
+export function isStreamerRole(user?: { role?: string | null; isAdmin?: boolean } | null) {
     if (!user) return false;
     return isAdminRole(user) || normalizeRole(user.role) === USER_ROLES.STREAMER;
-}
-
-export function roleForEmail(email: string): UserRole {
-    return isAdminRole({ email, role: USER_ROLES.USER })
-        ? USER_ROLES.ADMIN
-        : USER_ROLES.USER;
 }

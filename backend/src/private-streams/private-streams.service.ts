@@ -3,6 +3,7 @@ import {
     ForbiddenException,
     Injectable,
     NotFoundException,
+    OnModuleInit,
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import * as fs from "fs";
@@ -14,6 +15,7 @@ import { publicAuthorName } from "../wishes/wish-status";
 import { assertNoOffPlatformContact } from "../security/contact-leak";
 import { setShowVideoCategory } from "../shows/video-category-db";
 import { getArchiveFile, getRecordingFile } from "../streaming/hls-paths";
+import { resolveInside } from "../security/path-jail";
 import {
     BACKUP_DAYS,
     PRIVATE_DEADLINES,
@@ -27,12 +29,16 @@ import {
 type StreamerReq = { id: string; name: string; userId?: string | null; avatarUrl?: string | null };
 
 @Injectable()
-export class PrivateStreamsService {
+export class PrivateStreamsService implements OnModuleInit {
     constructor(
         private readonly prisma: PrismaService,
         private readonly payments: PaymentsService,
         private readonly followNotify: FollowNotifyService,
     ) {}
+
+    async onModuleInit() {
+        await ensurePrivateSchema(this.prisma);
+    }
 
     meta() {
         return {
@@ -44,14 +50,12 @@ export class PrivateStreamsService {
     }
 
     async bands() {
-        await ensurePrivateSchema(this.prisma);
         return this.prisma.$queryRaw<any[]>`
             SELECT stars, "minPrice", "maxPrice" FROM "PrivatePriceBand" ORDER BY stars
         `;
     }
 
     async saveBands(items: { stars: number; minPrice: number; maxPrice: number }[]) {
-        await ensurePrivateSchema(this.prisma);
         if (!Array.isArray(items) || items.length !== 5) {
             throw new BadRequestException("Mind az 5 csillagkategóriát meg kell adni.");
         }
@@ -76,7 +80,6 @@ export class PrivateStreamsService {
         userId: string,
         body: { topic?: string; details?: string; deadlineHours?: number },
     ) {
-        await ensurePrivateSchema(this.prisma);
         const topic = String(body.topic || "").trim();
         const details = String(body.details || "").trim();
         const hours = Number(body.deadlineHours);
@@ -154,7 +157,6 @@ export class PrivateStreamsService {
         streamer: StreamerReq,
         body: { plan?: string; price?: number; proposedStarts?: string[] },
     ) {
-        await ensurePrivateSchema(this.prisma);
         const request = await this.requireOpen(requestId);
         const plan = String(body.plan || "").trim();
         if (plan.length < 8) throw new BadRequestException("Írd le, hogyan valósítanád meg a műsort.");
@@ -242,7 +244,6 @@ export class PrivateStreamsService {
     }
 
     async checkout(userId: string, requestId: string) {
-        await ensurePrivateSchema(this.prisma);
         const request = await this.requireOwner(requestId, userId);
         if (!request.selectedOfferId) {
             throw new BadRequestException("Előbb válassz egy ajánlatot.");
@@ -256,59 +257,73 @@ export class PrivateStreamsService {
         const offer = offers[0];
         if (!offer) throw new NotFoundException("A kiválasztott ajánlat hiányzik.");
 
-        let showId = request.showId as string | null;
-        let ticketId = request.ticketId as string | null;
-        const startTime = request.selectedStart ? new Date(request.selectedStart) : new Date();
-        if (!showId) {
-            const streamId = `priv-${randomBytes(4).toString("hex")}`;
-            const show = await this.prisma.show.create({
-                data: {
-                    title: `Privát: ${request.topic}`,
-                    description: request.details,
-                    startTime,
-                    price: offer.price,
-                    live: false,
-                    featured: false,
-                    status: "active",
-                    streamId,
-                    privateStreamId: streamId,
-                    streamerId: offer.streamerId,
-                } as any,
-            });
-            showId = show.id;
-            await this.prisma.$executeRaw`
-                UPDATE "Show"
-                SET "isPrivate" = true, "privateStreamId" = ${streamId}, "featured" = false
-                WHERE id = ${showId}
+        const ticket = await this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`
+                SELECT pg_advisory_xact_lock(hashtext(${`privco:${userId}`}), hashtext(${requestId}))
             `;
-            await setShowVideoCategory(this.prisma, showId, "egyeb");
-            await this.prisma.$executeRaw`
-                UPDATE "PrivateRequest" SET "showId" = ${showId} WHERE id = ${requestId}
+            const locked = await tx.$queryRaw<any[]>`
+                SELECT * FROM "PrivateRequest" WHERE id = ${requestId} FOR UPDATE
             `;
-        }
+            const row = locked[0];
+            if (!row) throw new NotFoundException("A privát kívánság nem található.");
+            if (row.userId !== userId) throw new ForbiddenException("Ez nem a te kívánságod.");
 
-        if (!ticketId) {
-            const ticket = await this.prisma.ticket.create({
-                data: {
-                    userId,
-                    showId: showId!,
-                    price: offer.price,
-                    status: "pending",
-                },
-            });
-            ticketId = ticket.id;
-            await this.prisma.$executeRaw`
-                UPDATE "PrivateRequest" SET "ticketId" = ${ticketId} WHERE id = ${requestId}
-            `;
-        } else {
-            await this.prisma.ticket.update({
-                where: { id: ticketId },
-                data: { price: offer.price, showId: showId! },
-            });
-        }
+            let showId = row.showId as string | null;
+            let ticketId = row.ticketId as string | null;
+            const startTime = row.selectedStart ? new Date(row.selectedStart) : new Date();
+            if (!showId) {
+                const streamId = `priv-${randomBytes(4).toString("hex")}`;
+                const show = await tx.show.create({
+                    data: {
+                        title: `Privát: ${row.topic}`,
+                        description: row.details,
+                        startTime,
+                        price: offer.price,
+                        live: false,
+                        featured: false,
+                        status: "active",
+                        streamId,
+                        privateStreamId: streamId,
+                        streamerId: offer.streamerId,
+                    } as any,
+                });
+                showId = show.id;
+                await tx.$executeRaw`
+                    UPDATE "Show"
+                    SET "isPrivate" = true, "privateStreamId" = ${streamId}, "featured" = false
+                    WHERE id = ${showId}
+                `;
+                await setShowVideoCategory(tx as PrismaService, showId, "egyeb");
+                await tx.$executeRaw`
+                    UPDATE "PrivateRequest" SET "showId" = ${showId} WHERE id = ${requestId}
+                `;
+            }
 
-        const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId! } });
-        if (!ticket) throw new NotFoundException("A privát jegy nem jött létre.");
+            if (!ticketId) {
+                const created = await tx.ticket.create({
+                    data: {
+                        userId,
+                        showId: showId!,
+                        price: offer.price,
+                        status: "pending",
+                    },
+                });
+                ticketId = created.id;
+                await tx.$executeRaw`
+                    UPDATE "PrivateRequest" SET "ticketId" = ${ticketId} WHERE id = ${requestId}
+                `;
+            } else {
+                await tx.ticket.update({
+                    where: { id: ticketId },
+                    data: { price: offer.price, showId: showId! },
+                });
+            }
+
+            const saved = await tx.ticket.findUnique({ where: { id: ticketId! } });
+            if (!saved) throw new NotFoundException("A privát jegy nem jött létre.");
+            return saved;
+        });
+
         const pay = await this.payments.createForTicket({
             id: ticket.id,
             userId: ticket.userId,
@@ -383,7 +398,6 @@ export class PrivateStreamsService {
     }
 
     async captureBackup(showId: string) {
-        await ensurePrivateSchema(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT * FROM "PrivateRequest" WHERE "showId" = ${showId} LIMIT 1
         `;
@@ -419,7 +433,6 @@ export class PrivateStreamsService {
     }
 
     async listBackups() {
-        await ensurePrivateSchema(this.prisma);
         await this.purgeExpiredBackups();
         return this.prisma.$queryRaw<any[]>`
             SELECT b.*, r.topic, r."userId"
@@ -441,7 +454,7 @@ export class PrivateStreamsService {
         if (!fs.existsSync(row.filePath)) {
             throw new NotFoundException("A fájl már nincs a lemezen.");
         }
-        return row;
+        return { ...row, filePath: resolveInside(backupRoot(), row.filePath) };
     }
 
     async bandForStreamer(streamerId: string) {
@@ -561,7 +574,6 @@ export class PrivateStreamsService {
     }
 
     private async expireOpen() {
-        await ensurePrivateSchema(this.prisma);
         await this.prisma.$executeRaw`
             UPDATE "PrivateRequest" SET status = 'expired'
             WHERE status = 'open' AND "deadlineAt" < NOW()

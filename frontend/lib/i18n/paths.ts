@@ -10,19 +10,36 @@ export function stripLocalePrefix(pathname: string): { locale: Locale | string; 
 }
 
 export function withLocalePrefix(path: string, locale: string) {
-    const p = path.startsWith("/") ? path : `/${path}`;
-    if (!locale || locale === DEFAULT_LOCALE) return p;
-    if (p === "/") return `/${locale}`;
-    return `/${locale}${p}`;
+    const hashIdx = path.indexOf("#");
+    const hash = hashIdx >= 0 ? path.slice(hashIdx) : "";
+    const noHash = hashIdx >= 0 ? path.slice(0, hashIdx) : path;
+    const qIdx = noHash.indexOf("?");
+    const search = qIdx >= 0 ? noHash.slice(qIdx) : "";
+    const raw = qIdx >= 0 ? noHash.slice(0, qIdx) : noHash;
+    const p = raw.startsWith("/") ? raw : `/${raw}`;
+    if (!locale || locale === DEFAULT_LOCALE) return `${p}${search}${hash}`;
+    if (p === "/") return `/${locale}${search}${hash}`;
+    return `/${locale}${p}${search}${hash}`;
 }
 
 export function isLocalePrefixedAppPath(pathname: string) {
     if (
         pathname.startsWith("/api") ||
+        pathname.startsWith("/live-io") ||
+        pathname.startsWith("/socket.io") ||
         pathname.startsWith("/_next") ||
-        pathname.startsWith("/stream") ||
+        pathname === "/stream" ||
+        pathname.startsWith("/stream/") ||
         pathname.startsWith("/output") ||
-        pathname.startsWith("/uploads")
+        pathname.startsWith("/media")
+    ) {
+        return false;
+    }
+    if (
+        pathname === "/sitemap.xml" ||
+        pathname === "/robots.txt" ||
+        pathname.startsWith("/opengraph-image") ||
+        pathname.startsWith("/twitter-image")
     ) {
         return false;
     }

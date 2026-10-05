@@ -120,8 +120,7 @@ export default function ShowTalk({
                 body: JSON.stringify({ kind: supportKind, text: supportText }),
             });
             setSupportText("");
-            if (typeof res?.ticketBalance === "number") setTicketBalance(res.ticketBalance);
-            else await load();
+            await load();
             setSOk(
                 res?.spentTicket
                     ? "Köszönjük. 1 jegy levonva támogatásként a kérdésjegyeidből. Nem került a kérdésfolyamba."

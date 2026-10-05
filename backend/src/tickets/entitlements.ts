@@ -1,5 +1,3 @@
-import type { TicketCategoryKey } from "./ticket-categories";
-
 export type AccessFeature = "live" | "archive" | "questions" | "extras" | "privateStream";
 
 export type TicketAccess = {
@@ -10,7 +8,7 @@ export type TicketAccess = {
     privateStream: boolean;
 };
 
-const NONE: TicketAccess = {
+export const NO_ACCESS: TicketAccess = {
     live: false,
     archive: false,
     questions: false,
@@ -18,18 +16,22 @@ const NONE: TicketAccess = {
     privateStream: false,
 };
 
-export function accessForCategory(key?: string | null, paid = false): TicketAccess {
-    if (!paid) return { ...NONE };
-    if (key === "vip") {
-        return { live: true, archive: true, questions: true, extras: true, privateStream: true };
-    }
-    if (key === "interaktiv") {
-        return { live: true, archive: true, questions: true, extras: false, privateStream: false };
-    }
-    if (key === "nezo") {
-        return { live: true, archive: true, questions: false, extras: false, privateStream: false };
-    }
-    return { live: true, archive: true, questions: false, extras: false, privateStream: false };
+export const ADMIN_ACCESS: TicketAccess = {
+    live: true,
+    archive: true,
+    questions: true,
+    extras: true,
+    privateStream: true,
+};
+
+export function publicWatchAccess(canAsk: boolean): TicketAccess {
+    return {
+        live: true,
+        archive: true,
+        questions: canAsk,
+        extras: false,
+        privateStream: false,
+    };
 }
 
 export function hasFeature(access: TicketAccess, feature: AccessFeature) {
@@ -52,5 +54,3 @@ export function featureLabel(feature: AccessFeature) {
             return feature;
     }
 }
-
-export type { TicketCategoryKey };

@@ -51,7 +51,7 @@ export default function AdminUsersPage() {
             await apiFetch(`/admin/streamers/${streamerId}/approve`, { method: "POST" });
             load();
         } catch (err: any) {
-            setError(err.message || "A streamer jóváhagyása nem sikerült.");
+            setError(err.message || "A tartalomkészítő jóváhagyása nem sikerült.");
         }
     }
 
@@ -66,7 +66,7 @@ export default function AdminUsersPage() {
                 {error && <p className="text-red-400 mb-4">{error}</p>}
                 <input
                     className="p-3 rounded text-black w-full max-w-md mb-6"
-                    placeholder="Keresés email / szerepkör / streamer név"
+                    placeholder="Keresés email / szerepkör / tartalomkészítő név"
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                 />
@@ -76,9 +76,12 @@ export default function AdminUsersPage() {
                             <div>
                                 <p className="font-semibold">{u.email}</p>
                                 <p className="text-sm text-gray-400">
-                                    {u.role} · {userAccountStatusLabel(u.status)}
+                                    {u.role} · {userAccountStatusLabel(u.status)} · {u.provider || "local"}
+                                    {u.lastLoginAt
+                                        ? ` · utolsó belépés: ${new Date(u.lastLoginAt).toLocaleString("hu-HU")}`
+                                        : ""}
                                     {u.streamer
-                                        ? ` · streamer: ${u.streamer.name} (${streamerStatusLabel(u.streamer.status)})`
+                                        ? ` · tartalomkészítő: ${u.streamer.name} (${streamerStatusLabel(u.streamer.status)})`
                                         : ""}
                                 </p>
                             </div>
@@ -92,7 +95,7 @@ export default function AdminUsersPage() {
                                         className="text-green-400"
                                         onClick={() => approveStreamer(u.streamer.id)}
                                     >
-                                        streamer jóváhagyása
+                                        tartalomkészítő jóváhagyása
                                     </button>
                                 )}
                                 {u.status === "banned" ? (

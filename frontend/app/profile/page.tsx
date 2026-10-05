@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { displayInitial, displayName } from "@/lib/display-name";
 import { apiFetch, asList } from "@/api/http";
-import { ticketStatusLabelHu } from "@/lib/ticket-status";
+import { ticketStatusLabelHu, isTicketActiveStatus } from "@/lib/ticket-status";
 import TicketPackShop from "@/components/TicketPackShop";
 import { getFavorites, getWatched } from "@/lib/library";
 import EventCard from "@/components/media/EventCard";
@@ -59,7 +59,7 @@ function NotificationPrefs() {
         <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-950 p-5">
             <h2 className="mb-1 text-xl font-extrabold">Értesítési beállítások</h2>
             <p className="mb-4 text-sm text-zinc-400">
-                A követett streamerek új és közelgő eseményeiről. Privát műsorról csak a megrendelő kap
+                A követett tartalomkészítők új és közelgő eseményeiről. Privát műsorról csak a megrendelő kap
                 értesítést.
             </p>
             <ul className="space-y-2">
@@ -189,14 +189,33 @@ export default function ProfilePage() {
     const [nameMessage, setNameMessage] = useState("");
     const [nameError, setNameError] = useState("");
     const [balance, setBalance] = useState(0);
+    const [giftBalance, setGiftBalance] = useState(0);
     const [tickets, setTickets] = useState<MyTicket[]>([]);
     const [lots, setLots] = useState<any[]>([]);
     const [ticketsError, setTicketsError] = useState("");
     const [ticketsLoading, setTicketsLoading] = useState(false);
+    const [resendNote, setResendNote] = useState("");
     const [tab, setTab] = useState<Tab>("purchases");
     const [favs, setFavs] = useState<ReturnType<typeof getFavorites>>([]);
     const [watched, setWatched] = useState<ReturnType<typeof getWatched>>([]);
     const [privateRows, setPrivateRows] = useState<any[]>([]);
+
+    const applyWallet = (d: any) => {
+        const nextLots = Array.isArray(d?.lots) ? d.lots : [];
+        setLots(nextLots);
+        const total = Number(d?.balance || 0);
+        const fromLots = nextLots.reduce((sum: number, lot: any) => {
+            if (String(lot.status) !== "paid") return sum;
+            const source = String(lot.source || "purchase");
+            const groupKey = String(lot.groupKey || "");
+            const isGift = source !== "purchase" || groupKey === "gift";
+            return isGift ? sum + Number(lot.remainingCount || 0) : sum;
+        }, 0);
+        const fromApi = Number(d?.giftBalance ?? d?.giftbalance);
+        const gift = Number.isFinite(fromApi) ? Math.max(fromApi, fromLots) : fromLots;
+        setBalance(total);
+        setGiftBalance(gift);
+    };
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -215,10 +234,7 @@ export default function ProfilePage() {
             .catch((err: any) => setTicketsError(err.message || "Nem sikerült betölteni a jegyeket."))
             .finally(() => setTicketsLoading(false));
         apiFetch("/tickets/balance")
-            .then((d) => {
-                setBalance(Number(d?.balance || 0));
-                setLots(Array.isArray(d?.lots) ? d.lots : []);
-            })
+            .then((d) => applyWallet(d))
             .catch(() => undefined);
         setFavs(getFavorites(user.id));
         setWatched(getWatched(user.id));
@@ -342,50 +358,74 @@ export default function ProfilePage() {
 
             {tab === "purchases" && (
                 <div className="space-y-6">
-                    <div className="rounded-2xl border border-white/10 bg-zinc-950 p-5">
-                        <p className="text-sm text-zinc-400">{t("tickets.balance")}</p>
-                        <p className="text-3xl font-extrabold">{balance} db</p>
-                        <p className="mt-1 text-xs text-zinc-500">
-                            A felületen egy összeg látszik; a háttérben csomagonként van nyilvántartva.
-                        </p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-zinc-950 p-5">
+                            <p className="text-sm text-zinc-400">{t("tickets.balance")}</p>
+                            <p className="text-3xl font-extrabold">{Math.max(0, balance - giftBalance)} db</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-zinc-950 p-5">
+                            <p className="text-sm text-zinc-400">{t("tickets.gift")}</p>
+                            <p className="text-3xl font-extrabold">{giftBalance} db</p>
+                        </div>
                     </div>
                     <TicketPackShop
                         onBought={() => {
                             apiFetch("/tickets/balance")
-                                .then((d) => {
-                                    setBalance(Number(d?.balance || 0));
-                                    setLots(Array.isArray(d?.lots) ? d.lots : []);
-                                })
+                                .then((d) => applyWallet(d))
                                 .catch(() => undefined);
                         }}
                     />
                     {lots.length > 0 && (
                         <ul className="space-y-2 text-sm">
-                            {lots.map((lot) => (
-                                <li key={lot.id} className="rounded-xl border border-white/10 px-4 py-3">
-                                    {lot.groupName} · {lot.remainingCount}/{lot.ticketCount} jegy ·{" "}
-                                    {lot.unitValue} Ft/jegy · {lot.status}
-                                    {lot.source === "referral" ? " · ajánló jutalom" : ""}
-                                </li>
-                            ))}
+                            {lots.map((lot) => {
+                                const isGift =
+                                    String(lot.source || "purchase") !== "purchase" ||
+                                    String(lot.groupKey || "") === "gift";
+                                return (
+                                    <li key={lot.id} className="rounded-xl border border-white/10 px-4 py-3">
+                                        {isGift ? `${t("tickets.gift")} · ` : ""}
+                                        {lot.groupName} · {lot.remainingCount}/{lot.ticketCount} jegy ·{" "}
+                                        {lot.unitValue} Ft/jegy · {lot.status}
+                                        {lot.source === "referral" ? " · ajánló jutalom" : ""}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                     {ticketsLoading && <p className="text-zinc-400">Jegyek betöltése...</p>}
                     {ticketsError && <p className="text-red-400">{ticketsError}</p>}
+                    {resendNote && <p className="text-emerald-400">{resendNote}</p>}
                     {tickets.map((ticket) => (
-                        <Link
+                        <div
                             key={ticket.id}
-                            href={`/shows/${ticket.showId}`}
-                            className="flex items-center justify-between rounded-2xl border border-white/10 bg-zinc-950 p-4 hover:bg-white/5"
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-zinc-950 p-4"
                         >
-                            <div>
+                            <Link href={`/shows/${ticket.showId}`} className="min-w-0 hover:text-accent">
                                 <p className="font-semibold">{ticket.show?.title || "Esemény"}</p>
                                 <p className="text-sm text-zinc-400">
                                     {ticket.price} Ft · {ticketStatusLabelHu(ticket.status)}
                                 </p>
-                            </div>
-                            <span className="text-sm text-accent">Részletek</span>
-                        </Link>
+                            </Link>
+                            {isTicketActiveStatus(ticket.status) && (
+                                <button
+                                    type="button"
+                                    className="text-sm text-accent hover:underline"
+                                    onClick={async () => {
+                                        try {
+                                            setResendNote("");
+                                            await apiFetch(`/tickets/${ticket.id}/resend`, { method: "POST" });
+                                            setTicketsError("");
+                                            setResendNote("A jegy e-mailje újraküldve.");
+                                        } catch (err: any) {
+                                            setResendNote("");
+                                            setTicketsError(err.message || "Az újraküldés nem sikerült.");
+                                        }
+                                    }}
+                                >
+                                    E-mail újraküldése
+                                </button>
+                            )}
+                        </div>
                     ))}
                 </div>
             )}

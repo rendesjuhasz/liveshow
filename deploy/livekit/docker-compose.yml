@@ -1,0 +1,15 @@
+# Optional: LiveKit on Linux with host networking (UDP RTC).
+# Keys in livekit.yaml must match Nest. TURN certs: host Let's Encrypt paths.
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    network_mode: host
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - /etc/livekit.yaml:/etc/livekit.yaml:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE

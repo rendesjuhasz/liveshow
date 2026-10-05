@@ -46,7 +46,8 @@ npx prisma generate
 | `FRONTEND_URL` | ajánlott | e-mail linkek, Stripe/Barion return; pl. `http://localhost:3000` |
 | `BACKEND_URL` | Barionhoz | webhook URL bázis; pl. `http://127.0.0.1:3200` |
 | `ADMIN_EMAIL` | kapcsolat | admin értesítés; fallback `CONTACT_EMAIL` |
-| `STREAM_SECRET` | ajánlott | HLS token; default `dev-secret` |
+| `JWT_SECRET` | **igen** | User JWT. Nincs fallback; hiány → nincs boot. |
+| `STREAM_SECRET` | **igen** | HLS + signed media HMAC. Nincs fallback. |
 | `STRIPE_SECRET_KEY` | Stripe | ha ki van töltve, fizetős jegy **először Stripe** |
 | `BARION_ENABLED` | Barion | csak `true` kapcsolja be |
 | `BARION_POS_KEY` | Barion | |
@@ -57,11 +58,11 @@ npx prisma generate
 | `SMTP_SECURE` | nem | `true` = TLS 465 jelleg |
 | `MAIL_FROM` | nem | default SMTP user |
 
-**Nincs** `JWT_SECRET` env: a titok `auth.module.ts`-ben `secret123`. Éles előtt env-re kell vinni.
+Sablon: `backend/.env.example`. Napi útmutató: [17-fejlesztes-es-teszteles.md](./17-fejlesztes-es-teszteles.md).
 
-JWT / CORS: a backend csak `http://localhost:3000` és `http://127.0.0.1:3000` origin-t enged.
+Dev CORS: origin tágabb. Éles: `corsOrigins()` (`FRONTEND_URL`).
 
-Frontend: `frontend/api/http.ts` **beégetett** `API_URL = http://127.0.0.1:3200` — nincs `.env` a Next appban.
+Frontend böngésző: same-origin `/api` rewrite a 3200-ra. `NEXT_PUBLIC_API_URL` opcionális (default `http://127.0.0.1:3200`).
 
 ---
 
@@ -83,7 +84,7 @@ npm run dev
 - API: http://127.0.0.1:3200  
 - UI: http://localhost:3000  
 
-Első admin: regisztráld / használd a bootstrap emailt `admin@admin.com` (lásd auth role).
+Első admin (csak fejlesztés): regisztráld a `BOOTSTRAP_ADMIN_EMAIL` címet, default `admin@admin.com`. Élesen ez a default tiltott.
 
 ---
 
@@ -143,4 +144,6 @@ Frontend: `npm run lint`.
 | Prisma EPERM generate (Windows) | zárj más Node folyamatot, futtasd újra `prisma generate` |
 | HLS 404 | ingest + FFmpeg, létező output path |
 | CORS | UI-t 3000-en nyisd, ne más portról |
+| `JWT_SECRET` / `STREAM_SECRET` hiba | töltsd a `backend/.env`-et, indítsd újra |
+| `EADDRINUSE` 3000/3200 | egy process / portra; lásd 17.4 |
 | Barion nem indul | Stripe elsőbbség, vagy `BARION_ENABLED` nem true |

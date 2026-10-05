@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/api/http";
 import { Button } from "@/components/ui/button";
+import LocaleLink from "@/components/LocaleLink";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function ForgotPasswordForm() {
     const params = useSearchParams();
+    const { t } = useT();
     const streamer = params.get("role") === "streamer";
     const [email, setEmail] = useState("");
     const [busy, setBusy] = useState(false);
@@ -28,7 +30,7 @@ export default function ForgotPasswordForm() {
             const message =
                 err && typeof err === "object" && "message" in err
                     ? String((err as Error).message)
-                    : "A kérés most nem sikerült. Próbáld újra.";
+                    : t("auth.forgotError");
             setError(message);
         } finally {
             setBusy(false);
@@ -43,22 +45,19 @@ export default function ForgotPasswordForm() {
             >
                 {streamer && (
                     <p className="mb-2 text-xs font-bold uppercase tracking-widest text-accent">
-                        Streamer fiók
+                        {t("auth.streamerAccount")}
                     </p>
                 )}
-                <h1 className="mb-2 text-3xl font-extrabold">Elfelejtett jelszó</h1>
-                <p className="mb-6 text-sm text-zinc-400">
-                    Add meg a fiókod e-mail címét. Ha van ilyen fiók, küldünk egy helyreállító
-                    linket. A link 30 percig érvényes.
-                </p>
+                <h1 className="mb-2 text-3xl font-extrabold">{t("auth.forgot")}</h1>
+                <p className="mb-6 text-sm text-zinc-400">{t("auth.forgotLead")}</p>
                 {done ? (
                     <p className="mb-6 rounded-xl border border-emerald-800 bg-emerald-950/40 p-4 text-sm text-emerald-300">
-                        Ha létezik ilyen fiók, küldtünk egy helyreállító e-mailt.
+                        {t("auth.forgotSent")}
                     </p>
                 ) : (
                     <>
                         <label className="mb-6 grid gap-2 text-sm">
-                            E-mail
+                            {t("auth.email")}
                             <input
                                 className="h-11 rounded-xl border border-white/10 bg-black px-3"
                                 type="email"
@@ -70,17 +69,17 @@ export default function ForgotPasswordForm() {
                         </label>
                         {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
                         <Button type="submit" variant="gold" className="w-full" disabled={busy}>
-                            {busy ? "Küldés..." : "Helyreállító e-mail kérése"}
+                            {busy ? t("auth.sending") : t("auth.forgotSubmit")}
                         </Button>
                     </>
                 )}
                 <p className="mt-6 text-sm text-zinc-400">
-                    <Link
+                    <LocaleLink
                         href={streamer ? "/streamer-login" : "/login"}
                         className="text-white underline"
                     >
-                        Vissza a belépéshez
-                    </Link>
+                        {t("auth.backToLogin")}
+                    </LocaleLink>
                 </p>
             </form>
         </div>

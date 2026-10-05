@@ -6,10 +6,12 @@ import {
     NotFoundException,
     OnModuleInit,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { TicketGroupsService } from "../tickets/ticket-groups.service";
+import { QUESTION_HOLD_REASON, TicketGroupsService } from "../tickets/ticket-groups.service";
 import { FollowsService } from "../follows/follows.service";
 import { assertNoOffPlatformContact } from "../security/contact-leak";
+import { sanitizeUserText } from "../security/sanitize-text";
 import {
     collectBannedWords,
     findBannedWord,
@@ -26,6 +28,7 @@ import {
     viewerStatus,
     viewerStatusLabelHu,
 } from "./question-rank";
+import { isOpenQuestionStatus, planClusterResolution } from "./question-resolve";
 
 type Actor = { id: string; role?: string; email?: string };
 
@@ -130,12 +133,19 @@ export class QuestionsService implements OnModuleInit {
             return { showId: null, showTitle: null, current: null };
         }
 
-        const ids = shows.map((s) => s.id);
-        return this.currentForStreamer(streamerId, wanted || ids[0]);
+        if (!wanted) {
+            const live = await this.prisma.show.findFirst({
+                where: { streamerId, live: true },
+                orderBy: { updatedAt: "desc" },
+                select: { id: true },
+            });
+            return this.currentForStreamer(streamerId, live?.id || shows[0].id);
+        }
+        return this.currentForStreamer(streamerId, wanted);
     }
 
     async addQuestion(userId: string, showId?: string, text?: string) {
-        const body = text?.trim();
+        const body = sanitizeUserText(text, MAX_QUESTION_LEN);
         const id = showId?.trim();
         if (!id || !body) throw new BadRequestException("A showId és a kérdés szövege kötelező.");
         assertNoOffPlatformContact(body);
@@ -147,6 +157,11 @@ export class QuestionsService implements OnModuleInit {
 
         const show = await this.prisma.show.findUnique({ where: { id } });
         if (!show) throw new NotFoundException("A műsor nem található.");
+        if (!show.live) {
+            throw new BadRequestException(
+                "Az élő adásnak vége. Új kérdés már nem küldhető; a jegyed megmarad.",
+            );
+        }
         if (show.streamerId) {
             const host = await this.prisma.streamer.findUnique({
                 where: { id: show.streamerId },
@@ -159,25 +174,18 @@ export class QuestionsService implements OnModuleInit {
             }
         }
 
-        await this.ticketGroups.assertCanAsk(userId);
+        await this.ticketGroups.assertCanAsk(userId, id);
 
         const lastRows = await this.prisma.$queryRaw<any[]>`
             SELECT "createdAt" FROM "Question"
             WHERE "showId" = ${id} AND "userId" = ${userId}
+              AND status IN ('pending', 'approved')
             ORDER BY "createdAt" DESC
             LIMIT 1
         `;
         const last = lastRows[0];
         if (last && Date.now() - new Date(last.createdAt).getTime() < FLOOD_MS) {
             throw new BadRequestException("Túl gyorsan küldesz kérdést. Várj pár másodpercet.");
-        }
-
-        const pendingRows = await this.prisma.$queryRaw<any[]>`
-            SELECT COUNT(*)::int AS count FROM "Question"
-            WHERE "showId" = ${id} AND "userId" = ${userId} AND status = 'pending'
-        `;
-        if ((pendingRows[0]?.count || 0) >= MAX_PENDING_PER_USER) {
-            throw new BadRequestException("Már van függőben lévő kérdésed.");
         }
 
         const askerCount = await this.countAskers(id);
@@ -222,27 +230,76 @@ export class QuestionsService implements OnModuleInit {
         }
 
         const questionId = randomUUID();
-        const createdRows = await this.prisma.$queryRaw<any[]>`
-            INSERT INTO "Question" (id, "showId", "userId", text, status, "filterReason", "topicKey", "createdAt")
-            VALUES (${questionId}, ${id}, ${userId}, ${body}, ${status}, ${filterReason}, ${topicKey}, NOW())
-            RETURNING id, "showId", text, status, "createdAt"
-        `;
-        const created = createdRows[0];
-
-        await this.writeAudit({
-            questionId: created.id,
-            showId: id,
-            actorUserId: userId,
-            action: status === "pending" ? "submit" : "auto_reject",
-            fromStatus: null,
-            toStatus: status,
-            note: filterReason,
-        });
-
         if (status === "rejected") {
+            const createdRows = await this.prisma.$queryRaw<any[]>`
+                INSERT INTO "Question" (id, "showId", "userId", text, status, "filterReason", "topicKey", "createdAt")
+                VALUES (${questionId}, ${id}, ${userId}, ${body}, ${status}, ${filterReason}, ${topicKey}, NOW())
+                RETURNING id, "showId", text, status, "createdAt"
+            `;
+            const created = createdRows[0];
+            await this.writeAudit({
+                questionId: created.id,
+                showId: id,
+                actorUserId: userId,
+                action: "auto_reject",
+                fromStatus: null,
+                toStatus: status,
+                note: filterReason,
+            });
             await this.notify(userId, "question_rejected", "Kérdés elutasítva", filterReason || "A szűrő elutasította.", created.id);
             throw new BadRequestException(filterReason || "A kérdést a szűrő elutasította.");
         }
+
+        if (!show.streamerId) {
+            throw new BadRequestException("Ehhez a műsorhoz nem tartozik tartalomkészítő.");
+        }
+
+        const created = await this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`
+                SELECT pg_advisory_xact_lock(hashtext(${`qpend:${userId}`}), hashtext(${id}))
+            `;
+            const pendingRows = await tx.$queryRaw<any[]>`
+                SELECT COUNT(*)::int AS count FROM "Question"
+                WHERE "showId" = ${id} AND "userId" = ${userId} AND status = 'pending'
+            `;
+            if ((pendingRows[0]?.count || 0) >= MAX_PENDING_PER_USER) {
+                throw new BadRequestException("Már van függőben lévő kérdésed.");
+            }
+            const spent = await this.ticketGroups.spendOne(
+                {
+                    viewerUserId: userId,
+                    streamerId: show.streamerId as string,
+                    showId: id,
+                    questionId,
+                    reason: QUESTION_HOLD_REASON,
+                },
+                tx,
+            );
+            if (!spent) {
+                throw new BadRequestException(
+                    "Nincs felhasználható jegyed. Vásárolj jegycsomagot.",
+                );
+            }
+            const createdRows = await tx.$queryRaw<any[]>`
+                INSERT INTO "Question" (id, "showId", "userId", text, status, "filterReason", "topicKey", "createdAt")
+                VALUES (${questionId}, ${id}, ${userId}, ${body}, ${status}, ${filterReason}, ${topicKey}, NOW())
+                RETURNING id, "showId", text, status, "createdAt"
+            `;
+            const row = createdRows[0];
+            await this.writeAudit(
+                {
+                    questionId: row.id,
+                    showId: id,
+                    actorUserId: userId,
+                    action: "submit",
+                    fromStatus: null,
+                    toStatus: status,
+                    note: filterReason,
+                },
+                tx,
+            );
+            return row;
+        });
 
         await this.notify(
             userId,
@@ -262,48 +319,82 @@ export class QuestionsService implements OnModuleInit {
     async review(actor: Actor, id: string, status?: string, note?: string) {
         const next = String(status || "").trim().toLowerCase();
         if (next !== "rejected") {
-            throw new BadRequestException("Moderátor csak elutasíthat. A teljesítést a streamer gombja végzi.");
+            throw new BadRequestException("Moderátor csak elutasíthat. A teljesítést a tartalomkészítő gombja végzi.");
         }
 
-        const rows = await this.prisma.$queryRaw<any[]>`
-            SELECT * FROM "Question" WHERE id = ${id} LIMIT 1
-        `;
-        const row = rows[0];
-        if (!row) throw new NotFoundException("A kérdés nem található.");
-        if (row.status === next) return row;
-
-        const reason = next === "rejected" ? note?.trim() || row.filterReason : null;
-        const updated = await this.prisma.$queryRaw<any[]>`
-            UPDATE "Question"
-            SET status = ${next},
-                "reviewedAt" = NOW(),
-                "reviewedById" = ${actor.id},
-                "filterReason" = ${reason}
-            WHERE id = ${id}
-            RETURNING *
-        `;
-
-        await this.writeAudit({
-            questionId: row.id,
-            showId: row.showId,
-            actorUserId: actor.id,
-            action: "reject",
-            fromStatus: row.status,
-            toStatus: next,
-            note: note?.trim() || null,
+        const updated = await this.prisma.$transaction(async (tx) => {
+            const rows = await tx.$queryRaw<any[]>`
+                SELECT * FROM "Question" WHERE id = ${id} FOR UPDATE
+            `;
+            const row = rows[0];
+            if (!row) throw new NotFoundException("A kérdés nem található.");
+            if (!isOpenQuestionStatus(row.status) || row.status === next) {
+                return { row, userId: row.userId, skipped: true };
+            }
+            const reason = next === "rejected" ? note?.trim() || row.filterReason : null;
+            const nextRows = await tx.$queryRaw<any[]>`
+                UPDATE "Question"
+                SET status = ${next},
+                    "reviewedAt" = NOW(),
+                    "reviewedById" = ${actor.id},
+                    "filterReason" = ${reason}
+                WHERE id = ${id} AND status IN ('pending', 'approved')
+                RETURNING *
+            `;
+            if (!nextRows[0]) return { row, userId: row.userId, skipped: true };
+            await this.ticketGroups.releaseQuestionHold({ questionId: id }, tx);
+            await this.writeAudit(
+                {
+                    questionId: row.id,
+                    showId: row.showId,
+                    actorUserId: actor.id,
+                    action: "reject",
+                    fromStatus: row.status,
+                    toStatus: next,
+                    note: note?.trim() || null,
+                },
+                tx,
+            );
+            return { row: nextRows[0], userId: row.userId, skipped: false };
         });
 
-        if (next === "rejected") {
+        if (!updated.skipped) {
             await this.notify(
-                row.userId,
+                updated.userId,
                 "question_rejected",
                 "Kérdés elutasítva",
                 "A kérdésedet elutasították.",
-                row.id,
+                id,
             );
         }
 
-        return updated[0];
+        return updated.row;
+    }
+
+    async listQueueForStreamer(streamerId: string, showId?: string) {
+        const show = await this.requireStreamerShow(streamerId, showId);
+        return this.listForModeration(show.id);
+    }
+
+    async reviewForStreamer(streamerId: string, questionId: string, status?: string, note?: string) {
+        const actor = await this.prisma.streamer.findUnique({
+            where: { id: streamerId },
+            select: { userId: true },
+        });
+        if (!actor?.userId) throw new ForbiddenException("A tartalomkészítő fiókhoz nincs felhasználó.");
+        const rows = await this.prisma.$queryRaw<any[]>`
+            SELECT q.id, s."streamerId"
+            FROM "Question" q
+            JOIN "Show" s ON s.id = q."showId"
+            WHERE q.id = ${questionId}
+            LIMIT 1
+        `;
+        const row = rows[0];
+        if (!row) throw new NotFoundException("A kérdés nem található.");
+        if (row.streamerId !== streamerId) {
+            throw new ForbiddenException("Csak a saját műsorod kérdéseit utasíthatod el.");
+        }
+        return this.review({ id: actor.userId, role: "streamer" }, questionId, status, note);
     }
 
     async listBannedWords() {
@@ -356,6 +447,54 @@ export class QuestionsService implements OnModuleInit {
         return this.resolveCurrent(streamerId, showId, "rejected");
     }
 
+    /** Élő leállítás: megválaszolatlan kérdések „nem került sorra”, a foglalt jegy vissza. */
+    async markUnansweredMissedOnLiveStop(showId: string) {
+        const id = String(showId || "").trim();
+        if (!id) return { updated: 0 };
+        const reason = "Az élő adás véget ért, a kérdés nem került sorra.";
+        const rows = await this.prisma.$transaction(async (tx) => {
+            const updated = await tx.$queryRaw<{ id: string; userId: string }[]>`
+                UPDATE "Question"
+                SET status = 'missed',
+                    "reviewedAt" = NOW(),
+                    "filterReason" = ${reason}
+                WHERE "showId" = ${id} AND status IN ('pending', 'approved')
+                RETURNING id, "userId"
+            `.catch(() => [] as { id: string; userId: string }[]);
+            const ids = updated.map((row) => row.id);
+            if (ids.length) {
+                await this.ticketGroups.releaseQuestionHold({ questionIds: ids }, tx);
+            }
+            await tx.$executeRaw`
+                UPDATE "Show" SET "liveQuestionTopicKey" = NULL WHERE id = ${id}
+            `.catch(() => undefined);
+            return updated;
+        });
+
+        const seen = new Set<string>();
+        for (const row of rows) {
+            await this.writeAudit({
+                questionId: row.id,
+                showId: id,
+                actorUserId: null,
+                action: "missed_live_end",
+                fromStatus: "pending",
+                toStatus: "missed",
+                note: reason,
+            }).catch(() => undefined);
+            if (seen.has(row.userId)) continue;
+            seen.add(row.userId);
+            await this.notify(
+                row.userId,
+                "question_missed",
+                "Nem került sorra",
+                "Az adás véget ért, a kérdésed nem került sorra. A jegyed megmaradt.",
+                row.id,
+            );
+        }
+        return { updated: rows.length };
+    }
+
     async listNotifications(userId: string) {
         try {
             return await this.prisma.$queryRaw<any[]>`
@@ -390,18 +529,54 @@ export class QuestionsService implements OnModuleInit {
         if (!["opinion", "feedback", "thanks", "support"].includes(k)) {
             throw new BadRequestException("Érvénytelen visszajelzés típus.");
         }
-        const body = String(text || "").trim();
+        const body = sanitizeUserText(text, 800);
         if (k !== "support" && body.length < 4) {
             throw new BadRequestException("Írj legalább néhány karaktert.");
         }
         assertNoOffPlatformContact(body);
 
+        let spentTicket = false;
         const rowId = randomUUID();
-        await this.prisma.$executeRaw`
-            INSERT INTO "ShowSupport" (id, "showId", "userId", kind, text, "createdAt")
-            VALUES (${rowId}, ${id}, ${userId}, ${k}, ${body || null}, NOW())
-        `;
-        return { id: rowId, kind: k, extraTicketHint: k === "support" };
+        if (k === "support") {
+            if (!show.streamerId) {
+                throw new BadRequestException("Ehhez a műsorhoz nem küldhető jegyes támogatás.");
+            }
+            await this.ticketGroups.assertCanAsk(userId, id);
+            await this.prisma.$transaction(async (tx) => {
+                const spent = await this.ticketGroups.spendOne(
+                    {
+                        viewerUserId: userId,
+                        streamerId: show.streamerId as string,
+                        showId: id,
+                        reason: "support",
+                    },
+                    tx,
+                );
+                if (!spent) {
+                    throw new BadRequestException(
+                        "Nincs felhasználható jegyed. Vásárolj jegycsomagot, a támogatás 1 jegyet von le.",
+                    );
+                }
+                await tx.$executeRaw`
+                    INSERT INTO "ShowSupport" (id, "showId", "userId", kind, text, "createdAt")
+                    VALUES (${rowId}, ${id}, ${userId}, ${k}, ${body || null}, NOW())
+                `;
+            });
+            spentTicket = true;
+        } else {
+            await this.prisma.$executeRaw`
+                INSERT INTO "ShowSupport" (id, "showId", "userId", kind, text, "createdAt")
+                VALUES (${rowId}, ${id}, ${userId}, ${k}, ${body || null}, NOW())
+            `;
+        }
+        const wallet = spentTicket ? await this.ticketGroups.balance(userId, id).catch(() => null) : null;
+        return {
+            id: rowId,
+            kind: k,
+            spentTicket,
+            ticketsSpent: spentTicket ? 1 : 0,
+            ticketBalance: wallet ? Number(wallet.usableOnShow ?? wallet.balance) || 0 : undefined,
+        };
     }
 
     async listSupportForStreamer(streamerId: string, showId?: string) {
@@ -439,56 +614,91 @@ export class QuestionsService implements OnModuleInit {
         const actor = await this.prisma.streamer.findUnique({ where: { id: streamerId } });
         const actorUserId = actor?.userId || null;
 
-        for (const qid of ids) {
-            await this.prisma.$executeRaw`
-                UPDATE "Question" SET status = ${next}, "reviewedAt" = NOW() WHERE id = ${qid}
+        const outcome = await this.prisma.$transaction(async (tx) => {
+            const locked = await tx.$queryRaw<any[]>`
+                SELECT id, status, "userId" FROM "Question"
+                WHERE id IN (${Prisma.join(ids)})
+                FOR UPDATE
             `;
-            await this.writeAudit({
-                questionId: qid,
-                showId: show.id,
-                actorUserId,
-                action: next === "fulfilled" ? "fulfill" : "reject",
-                fromStatus: "pending",
-                toStatus: next,
-                note: null,
-            });
+            const plan = planClusterResolution(locked, next);
+            if (plan.noop) return { skipped: true, ids: [] as string[], userIds: [] as string[] };
+
+            if (next === "fulfilled") {
+                for (const uid of plan.userIds) {
+                    if (!show.streamerId) continue;
+                    const spent = await this.ticketGroups.captureQuestionTicket(
+                        {
+                            viewerUserId: uid,
+                            streamerId: show.streamerId,
+                            showId: show.id,
+                            questionIds: plan.ids,
+                        },
+                        tx,
+                    );
+                    if (!spent) {
+                        throw new BadRequestException(
+                            "A kérdés nem teljesíthető: a nézőnek nincs felhasználható jegye.",
+                        );
+                    }
+                }
+            } else {
+                await this.ticketGroups.releaseQuestionHold({ questionIds: plan.ids }, tx);
+            }
+
+            for (const qid of plan.ids) {
+                const changed = await tx.$executeRaw`
+                    UPDATE "Question"
+                    SET status = ${next}, "reviewedAt" = NOW()
+                    WHERE id = ${qid} AND status IN ('pending', 'approved')
+                `;
+                if (!changed) continue;
+                await this.writeAudit(
+                    {
+                        questionId: qid,
+                        showId: show.id,
+                        actorUserId,
+                        action: next === "fulfilled" ? "fulfill" : "reject",
+                        fromStatus: "pending",
+                        toStatus: next,
+                        note: null,
+                    },
+                    tx,
+                );
+            }
+
+            await tx.$executeRaw`
+                UPDATE "Show" SET "liveQuestionTopicKey" = NULL WHERE id = ${show.id}
+            `;
+            return { skipped: false, ids: plan.ids, userIds: plan.userIds };
+        });
+
+        if (outcome.skipped) {
+            const following = await this.currentForStreamer(streamerId, show.id);
+            return { resolved: next, cluster, next: following.current, skipped: true };
         }
 
-        const userIds = [...new Set(cluster.userIds)];
-
         if (next === "fulfilled") {
-            for (const uid of userIds) {
-                if (show.streamerId) {
-                    await this.ticketGroups.spendOne({
-                        viewerUserId: uid,
-                        streamerId: show.streamerId,
-                        showId: show.id,
-                        questionId: cluster.ids[0],
-                    });
-                }
+            for (const uid of outcome.userIds) {
                 await this.notify(
                     uid,
                     "question_fulfilled",
                     "A kérdésed teljesült",
-                    "A streamer megválaszolta a kérdésedet (vagy a hasonló kérdések csoportját).",
+                    "A tartalomkészítő megválaszolta a kérdésedet (vagy a hasonló kérdések csoportját).",
                     cluster.ids[0],
                 );
             }
         } else {
-            for (const uid of userIds) {
+            for (const uid of outcome.userIds) {
                 await this.notify(
                     uid,
                     "question_rejected",
                     "Kérdés elutasítva",
-                    "A streamer nem válaszol erre a kérdésre. A jegyed megmaradt.",
+                    "A tartalomkészítő nem válaszol erre a kérdésre. A jegyed megmaradt.",
                     cluster.ids[0],
                 );
             }
         }
 
-        await this.prisma.$executeRaw`
-            UPDATE "Show" SET "liveQuestionTopicKey" = NULL WHERE id = ${show.id}
-        `;
         const following = await this.currentForStreamer(streamerId, show.id);
         return { resolved: next, cluster, next: following.current };
     }
@@ -655,16 +865,19 @@ export class QuestionsService implements OnModuleInit {
         return rows[0]?.count || 0;
     }
 
-    private writeAudit(data: {
-        questionId: string;
-        showId: string;
-        actorUserId: string | null;
-        action: string;
-        fromStatus: string | null;
-        toStatus: string;
-        note: string | null;
-    }) {
-        return this.prisma.$executeRaw`
+    private writeAudit(
+        data: {
+            questionId: string;
+            showId: string;
+            actorUserId: string | null;
+            action: string;
+            fromStatus: string | null;
+            toStatus: string;
+            note: string | null;
+        },
+        db: { $executeRaw: PrismaService["$executeRaw"] } = this.prisma,
+    ) {
+        return db.$executeRaw`
             INSERT INTO "QuestionAudit"
                 (id, "questionId", "showId", "actorUserId", action, "fromStatus", "toStatus", note, "createdAt")
             VALUES (

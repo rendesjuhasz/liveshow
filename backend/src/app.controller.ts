@@ -1,14 +1,12 @@
 import { Controller, Get } from "@nestjs/common";
+import { OpsService } from "./ops/ops.service";
 
 @Controller()
 export class AppController {
-  @Get()
-  root() {
-    return this.health();
-  }
+    constructor(private readonly ops: OpsService) {}
 
-  @Get("health")
-  health() {
-    return { ok: true, service: "liveshow-api" };
-  }
+    @Get()
+    root() {
+        return this.ops.live();
+    }
 }

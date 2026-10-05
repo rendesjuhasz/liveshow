@@ -1,10 +1,11 @@
 import {
     BadRequestException,
+    ForbiddenException,
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { isApprovedStreamer, isStreamerStatus } from "./status";
+import { isApprovedStreamer, isStreamerStatus, initialStreamerStatus } from "./status";
 import { computeStreamerRevenue } from "../payouts/revenue";
 import { ReviewsService } from "./reviews.service";
 import { MailService } from "../mail/mail.service";
@@ -14,6 +15,7 @@ import { FollowsService } from "../follows/follows.service";
 import { assertNoOffPlatformContact } from "../security/contact-leak";
 import { privateShowIds } from "../private-streams/private-schema";
 import { ViewLogService } from "../stats/view-log.service";
+import { hashSecret, newOpaqueToken } from "../auth/secrets";
 
 @Injectable()
 export class StreamersService {
@@ -75,7 +77,7 @@ export class StreamersService {
             },
         });
         if (!streamer) {
-            throw new NotFoundException("A streamer nem található.");
+            throw new NotFoundException("A tartalomkészítő nem található.");
         }
         const { userId, ...publicStreamer } = streamer;
         const hidden = await privateShowIds(this.prisma).catch(() => new Set<string>());
@@ -139,7 +141,7 @@ export class StreamersService {
 
     async remove(id: string) {
         await this.prisma.streamer.delete({ where: { id } }).catch(() => {
-            throw new NotFoundException("A streamer nem található.");
+            throw new NotFoundException("A tartalomkészítő nem található.");
         });
         return { deleted: true };
     }
@@ -153,7 +155,7 @@ export class StreamersService {
         }
         const streamer = await this.prisma.streamer.findUnique({ where: { id } });
         if (!streamer) {
-            throw new NotFoundException("A streamer nem található.");
+            throw new NotFoundException("A tartalomkészítő nem található.");
         }
         const updated = await this.prisma.streamer.update({
             where: { id },
@@ -173,25 +175,12 @@ export class StreamersService {
 
     async getDashboard(user: { id: string; email: string }) {
         let streamer = await this.prisma.streamer.findFirst({
-            where: {
-                OR: [{ userId: user.id }, { email: user.email.toLowerCase() }],
-            },
+            where: { userId: user.id },
             include: {
                 payouts: { orderBy: { createdAt: "desc" } },
                 shows: { orderBy: { startTime: "desc" } },
             },
         });
-
-        if (streamer && !streamer.userId) {
-            streamer = await this.prisma.streamer.update({
-                where: { id: streamer.id },
-                data: { userId: user.id },
-                include: {
-                    payouts: { orderBy: { createdAt: "desc" } },
-                    shows: { orderBy: { startTime: "desc" } },
-                },
-            });
-        }
 
         if (!streamer) {
             return { streamer: null, allowed: false, shows: [], payouts: [], stats: null };
@@ -246,18 +235,26 @@ export class StreamersService {
                 newFollowers7d: follow.newFollowers7d,
                 totalViews: viewStats.totalViews,
                 averageLiveViewers: viewStats.averageLiveViewers,
+                peakLiveViewers: viewStats.peakLiveViewers,
+                averageWatchSeconds: viewStats.averageWatchSeconds,
             },
         };
     }
 
     async createOwn(user: { id: string; email: string }, data: { name?: string; bio?: string }) {
         const existing = await this.prisma.streamer.findFirst({
-            where: {
-                OR: [{ userId: user.id }, { email: user.email.toLowerCase() }],
-            },
+            where: { userId: user.id },
         });
         if (existing) {
-            throw new BadRequestException("Már van streamer profilod.");
+            throw new BadRequestException("Már van tartalomkészítő profilod.");
+        }
+        const emailTaken = await this.prisma.streamer.findFirst({
+            where: { email: user.email.toLowerCase() },
+        });
+        if (emailTaken) {
+            throw new BadRequestException(
+                "Ehhez az emailhez már tartozik tartalomkészítő profil. Az összerendelés csak admin linking tokennel lehetséges.",
+            );
         }
         return this.prisma.streamer.create({
             data: {
@@ -267,7 +264,7 @@ export class StreamersService {
                 userId: user.id,
                 category: "egyeb",
                 contactEmail: user.email.toLowerCase(),
-                status: "pending",
+                status: initialStreamerStatus(),
             },
         });
     }
@@ -281,7 +278,7 @@ export class StreamersService {
     }
 
     createPayout(streamerId?: string, amount?: number) {
-        if (!streamerId) throw new BadRequestException("Streamer kell.");
+        if (!streamerId) throw new BadRequestException("Tartalomkészítő kell.");
         return this.payouts.requestPayout({
             streamerId,
             amount,
@@ -303,5 +300,53 @@ export class StreamersService {
 
     rejectPayout(id: string) {
         return this.payouts.setStatus(id, "rejected");
+    }
+
+    async issueLinkToken(streamerId: string) {
+        const streamer = await this.prisma.streamer.findUnique({ where: { id: streamerId } });
+        if (!streamer) throw new NotFoundException("A tartalomkészítő nem található.");
+        const raw = newOpaqueToken();
+        const hash = hashSecret(raw);
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await this.prisma.$executeRaw`
+            UPDATE "Streamer"
+            SET "linkTokenHash" = ${hash},
+                "linkTokenExpiresAt" = ${expires}
+            WHERE id = ${streamerId}
+        `;
+        return { token: raw, expiresAt: expires.toISOString(), streamerId };
+    }
+
+    async claimLinkToken(user: { id: string; email: string }, token?: string) {
+        const raw = String(token || "").trim();
+        if (raw.length < 16) throw new BadRequestException("Érvénytelen linking token.");
+        const hash = hashSecret(raw);
+        const rows = await this.prisma.$queryRaw<
+            { id: string; userId?: string | null; linkTokenExpiresAt?: Date | null }[]
+        >`
+            SELECT id, "userId", "linkTokenExpiresAt" FROM "Streamer"
+            WHERE "linkTokenHash" = ${hash}
+            LIMIT 1
+        `;
+        const row = rows[0];
+        if (!row) throw new BadRequestException("Érvénytelen vagy felhasznált linking token.");
+        if (!row.linkTokenExpiresAt || new Date(row.linkTokenExpiresAt).getTime() <= Date.now()) {
+            throw new BadRequestException("A linking token lejárt.");
+        }
+        if (row.userId && row.userId !== user.id) {
+            throw new ForbiddenException("Ez a tartalomkészítő profil már másik fiókhoz tartozik.");
+        }
+        const already = await this.prisma.streamer.findFirst({ where: { userId: user.id } });
+        if (already && already.id !== row.id) {
+            throw new BadRequestException("Ehhez a fiókhoz már tartozik tartalomkészítő profil.");
+        }
+        await this.prisma.$executeRaw`
+            UPDATE "Streamer"
+            SET "userId" = ${user.id},
+                "linkTokenHash" = NULL,
+                "linkTokenExpiresAt" = NULL
+            WHERE id = ${row.id}
+        `;
+        return { ok: true, streamerId: row.id };
     }
 }

@@ -1,7 +1,9 @@
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import { publicFrontendUrl } from "../auth/public-url";
 
 import { translate } from "../i18n/messages";
+import { formatInTimeZone } from "../time/timezone";
 
 export const MAIL_TYPES = {
     registration: "registration",
@@ -15,12 +17,15 @@ export const MAIL_TYPES = {
     contact_admin: "contact_admin",
     contact_user: "contact_user",
     password_reset: "password_reset",
+    email_verification: "email_verification",
     follow_event: "follow_event",
+    ops_alert: "ops_alert",
+    safety_alert: "safety_alert",
 } as const;
 
 export type MailType = (typeof MAIL_TYPES)[keyof typeof MAIL_TYPES];
 
-const FRONTEND = () => process.env.FRONTEND_URL || "http://127.0.0.1:3000";
+const FRONTEND = () => publicFrontendUrl();
 
 function wrap(title: string, body: string, locale = "hu") {
     return {
@@ -35,23 +40,39 @@ ${body}
     };
 }
 
-export function registrationEmail(isStreamer: boolean, locale = "hu") {
+export function registrationEmail(isStreamer: boolean, locale = "hu", verifyUrl?: string) {
     const extra = isStreamer
         ? `<p>${translate("email.welcomeStreamer", locale)}</p>`
         : `<p>${translate("email.watchFree", locale)}</p>`;
+    const confirm = verifyUrl
+        ? `<p>${translate("email.verifyBody", locale)}</p>
+<p>${translate("email.verifyTtl", locale)}</p>
+<p><a href="${escapeHtml(verifyUrl)}" style="color:#facc15">${translate("email.verifyCta", locale)}</a></p>
+<p style="word-break:break-all;color:#aaa;font-size:12px">${escapeHtml(verifyUrl)}</p>`
+        : `<p><a href="${FRONTEND()}/login" style="color:#facc15">${translate("auth.submitLogin", locale)}</a></p>`;
     return wrap(
         translate("email.registrationSubject", locale),
-        `<p>${translate("email.welcome", locale)}</p>${extra}<p><a href="${FRONTEND()}/login" style="color:#facc15">${translate("auth.submitLogin", locale)}</a></p>`,
+        `<p>${translate("email.welcome", locale)}</p>${extra}${confirm}`,
         locale,
     );
 }
 
-export function ticketPurchasedEmail(showTitle: string, showId: string, categoryName?: string | null, locale = "hu") {
+export function emailVerificationEmail(verifyUrl: string, locale = "hu") {
+    return wrap(
+        translate("email.verifySubject", locale),
+        `<p>${translate("email.verifyBody", locale)}</p>
+<p>${translate("email.verifyTtl", locale)}</p>
+<p><a href="${escapeHtml(verifyUrl)}" style="color:#facc15">${translate("email.verifyCta", locale)}</a></p>
+<p style="word-break:break-all;color:#aaa;font-size:12px">${escapeHtml(verifyUrl)}</p>
+<p>${translate("email.resetIgnore", locale)}</p>`,
+        locale,
+    );
+}
+
+export function ticketPurchasedEmail(showTitle: string, showId: string, locale = "hu") {
     return wrap(
         translate("email.ticketSubject", locale),
-        `<p>${translate("email.ticketBody", locale)} <strong>${escapeHtml(showTitle)}</strong>${
-            categoryName ? ` (${escapeHtml(categoryName)})` : ""
-        }.</p>
+        `<p>${translate("email.ticketBody", locale)} <strong>${escapeHtml(showTitle)}</strong>.</p>
 <p><a href="${FRONTEND()}/shows/${showId}" style="color:#facc15">${translate("email.openShow", locale)}</a></p>`,
         locale,
     );
@@ -78,9 +99,15 @@ export function followShowEmail(title: string, body: string, href: string, local
     );
 }
 
-export function liveReminderEmail(showTitle: string, showId: string, startTime: Date | null, locale = "hu") {
+export function liveReminderEmail(
+    showTitle: string,
+    showId: string,
+    startTime: Date | null,
+    locale = "hu",
+    timeZone = "Europe/Budapest",
+) {
     const when = startTime
-        ? startTime.toLocaleString(locale === "hu" ? "hu-HU" : locale)
+        ? `${formatInTimeZone(startTime, timeZone, locale === "hu" ? "hu-HU" : locale)} (${timeZone})`
         : translate("email.soon", locale);
     return wrap(
         translate("email.liveReminderSubject", locale),
@@ -101,10 +128,10 @@ export function archiveReadyEmail(showTitle: string, showId: string) {
 
 export function streamerApprovedEmail(name: string) {
     return wrap(
-        "Streamer fiók jóváhagyva",
+        "Tartalomkészítő fiók jóváhagyva",
         `<p>Kedves ${escapeHtml(name)}!</p>
-<p>Streamer fiókodat jóváhagytuk. Mostantól elérhető a vezérlőpult.</p>
-<p><a href="${FRONTEND()}/streamer" style="color:#facc15">Streamer felület</a></p>`,
+<p>Tartalomkészítő fiókodat jóváhagytuk. Mostantól elérhető a vezérlőpult.</p>
+<p><a href="${FRONTEND()}/streamer" style="color:#facc15">Tartalomkészítő felület</a></p>`,
     );
 }
 
@@ -165,6 +192,43 @@ export function contactUserEmail(name: string) {
 <p><strong>Köszönjük!</strong></p>
 <p>Megkaptuk az üzenetedet, hamarosan válaszolunk.</p>`,
     );
+}
+
+export function safetyAlertEmail(title: string, body: string) {
+    const html = `<p>${String(body || "").replace(/</g, "&lt;").replace(/\n/g, "<br/>")}</p>`;
+    return wrap(`AI Safety · ${title}`, html);
+}
+
+export function opsAlertEmail(input: {
+    kind: string;
+    service: string;
+    message: string;
+    detail?: string | null;
+    showId?: string | null;
+    streamId?: string | null;
+    env?: string;
+    extra?: string | null;
+}) {
+    const env = input.env || process.env.NODE_ENV || "development";
+    const time = new Date().toISOString();
+    const rows = [
+        ["Időpont", time],
+        ["Környezet", env],
+        ["Szolgáltatás", input.service],
+        ["Esemény", input.kind],
+        ["Hiba", input.message],
+        input.detail ? ["Részlet", input.detail] : null,
+        input.showId ? ["Show ID", input.showId] : null,
+        input.streamId ? ["Stream ID", input.streamId] : null,
+        input.extra ? ["Extra", input.extra] : null,
+    ].filter(Boolean) as [string, string][];
+    const body = rows
+        .map(
+            ([k, v]) =>
+                `<p style="margin:6px 0"><strong>${escapeHtml(k)}:</strong> ${escapeHtml(v)}</p>`,
+        )
+        .join("");
+    return wrap(`Riasztás · ${input.kind}`, body);
 }
 
 export function writeOutboxFile(payload: {

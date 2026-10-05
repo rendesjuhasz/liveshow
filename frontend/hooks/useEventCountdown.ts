@@ -5,8 +5,8 @@ import { getEventCountdown } from "@/lib/event-countdown";
 import type { MediaItem } from "@/lib/media";
 
 export function useEventCountdown(item: MediaItem) {
-    const [now, setNow] = useState(() => Date.now());
-    const countdown = getEventCountdown(item, now);
+    const [now, setNow] = useState<number | null>(null);
+    const countdown = now == null ? null : getEventCountdown(item, now);
     const tickMs = countdown?.tickMs ?? 0;
 
     useEffect(() => {

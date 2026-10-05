@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 
@@ -18,12 +18,12 @@ export default function StreamerLeaderboardPage() {
     }, [gate.ok]);
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">A streamer felülethez jóváhagyott fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">A tartalomkészítő felülethez jóváhagyott fiók kell.</p>;
 
     return (
         <StreamerShell title="Ranglista">
             <p className="text-neutral-400 mb-6">
-                A sorrend a felhasznált jegyek bruttó értékén alapul. A számokat a streamer nem szerkesztheti.
+                A sorrend a felhasznált jegyek bruttó értékén alapul. A számokat a tartalomkészítő nem szerkesztheti.
             </p>
             {error && <p className="text-red-400 mb-4">{error}</p>}
             <ol className="space-y-2">
@@ -31,7 +31,7 @@ export default function StreamerLeaderboardPage() {
                     <li key={row.id} className="bg-neutral-900 p-4 rounded-xl flex items-center gap-4">
                         <span className="text-yellow-400 font-black w-8">{row.rank}.</span>
                         {row.avatarUrl ? (
-                            <img src={`${API_URL}${row.avatarUrl}`} alt="" className="w-10 h-10 rounded-full object-cover" />
+                            <img src={publicAssetUrl(row.avatarUrl)} alt="" className="w-10 h-10 rounded-full object-cover" />
                         ) : null}
                         <div className="flex-1">
                             <p className="font-semibold">{row.name}</p>

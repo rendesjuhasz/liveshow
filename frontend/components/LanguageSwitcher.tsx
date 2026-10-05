@@ -9,7 +9,7 @@ export default function LanguageSwitcher({ compact = false }: { compact?: boolea
             {!compact && t("nav.language")}
             <select
                 aria-label={t("nav.language")}
-                className="h-11 max-w-[9.5rem] rounded-xl border border-white/10 bg-black px-2 text-base text-white md:h-9 md:max-w-none md:text-sm"
+                className="h-11 max-w-[9.5rem] rounded-xl bg-card px-2 text-base text-white shadow-md md:h-9 md:max-w-none md:text-sm"
                 value={locale}
                 onChange={(e) => setLocale(e.target.value)}
             >

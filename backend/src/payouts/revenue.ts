@@ -7,6 +7,13 @@ import { payoutDueState } from "./payout-cycle";
 import { privateShowIds } from "../private-streams/private-schema";
 import { readShowStatuses } from "../shows/show-status-db";
 
+/** True when `amount` can be reserved from `available` without going negative. */
+export function canReservePayout(available: number, amount: number) {
+    const value = Math.round(Number(amount));
+    const cap = Math.round(Number(available) || 0);
+    return Number.isFinite(value) && value > 0 && value <= cap;
+}
+
 async function privateDeliveredShowIds(prisma: PrismaService, showIds: string[]) {
     const allPrivate = await privateShowIds(prisma);
     const privateIds = new Set(showIds.filter((id) => allPrivate.has(id)));
@@ -73,7 +80,7 @@ export async function computeStreamerRevenue(prisma: PrismaService, streamerId: 
           })
         : [];
 
-    const byShow = new Map<string, { tickets: number; gross: number }>();
+    const byShow = new Map<string, { tickets: number; gross: number; giftTickets: number }>();
     const heldByShow = new Map<string, { tickets: number; gross: number }>();
     const creditedTickets: typeof tickets = [];
     for (const t of tickets) {
@@ -85,7 +92,7 @@ export async function computeStreamerRevenue(prisma: PrismaService, streamerId: 
             continue;
         }
         creditedTickets.push(t);
-        const cur = byShow.get(t.showId) || { tickets: 0, gross: 0 };
+        const cur = byShow.get(t.showId) || { tickets: 0, gross: 0, giftTickets: 0 };
         cur.tickets += 1;
         cur.gross += t.price;
         byShow.set(t.showId, cur);
@@ -94,13 +101,16 @@ export async function computeStreamerRevenue(prisma: PrismaService, streamerId: 
     let groups = emptyGroupStats();
     let spendGross = 0;
     let spendTickets = 0;
+    let giftTicketsSpent = 0;
     try {
         const spendRows = await prisma.$queryRaw<any[]>`
             SELECT "ticketGroup" AS name,
                    SUM("ticketsSpent")::int AS tickets,
-                   SUM("calculatedAmount")::int AS amount
+                   SUM(CASE WHEN COALESCE("isGift", false) THEN 0 ELSE "calculatedAmount" END)::int AS amount,
+                   SUM(CASE WHEN COALESCE("isGift", false) THEN "ticketsSpent" ELSE 0 END)::int AS "giftTickets"
             FROM "TicketSpend"
             WHERE "streamerId" = ${streamerId}
+              AND COALESCE(reason, '') NOT IN ('refunded', 'question_hold')
             GROUP BY "ticketGroup"
         `;
         const byName = new Map(spendRows.map((r) => [String(r.name), r]));
@@ -110,24 +120,44 @@ export async function computeStreamerRevenue(prisma: PrismaService, streamerId: 
                 ...g,
                 ticketsSpent: hit?.tickets || 0,
                 creditedAmount: hit?.amount || 0,
+                giftTicketsSpent: hit?.giftTickets || 0,
             };
         });
-        spendGross = groups.reduce((s, g) => s + g.creditedAmount, 0);
-        spendTickets = groups.reduce((s, g) => s + g.ticketsSpent, 0);
+        for (const row of spendRows) {
+            if (!groups.some((g) => g.name === row.name)) {
+                groups.push({
+                    key: String(row.name || "").toLowerCase(),
+                    name: row.name,
+                    ticketsSpent: row.tickets || 0,
+                    creditedAmount: row.amount || 0,
+                    giftTicketsSpent: row.giftTickets || 0,
+                    unitValue: 0,
+                });
+            }
+        }
+        spendGross = spendRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        spendTickets = spendRows.reduce(
+            (s, r) => s + Math.max(0, (Number(r.tickets) || 0) - (Number(r.giftTickets) || 0)),
+            0,
+        );
+        giftTicketsSpent = spendRows.reduce((s, r) => s + (Number(r.giftTickets) || 0), 0);
 
         const spendByShow = await prisma.$queryRaw<any[]>`
             SELECT COALESCE("showId", '') AS "showId",
-                   SUM("ticketsSpent")::int AS tickets,
-                   SUM("calculatedAmount")::int AS amount
+                   SUM(CASE WHEN COALESCE("isGift", false) THEN 0 ELSE "ticketsSpent" END)::int AS tickets,
+                   SUM(CASE WHEN COALESCE("isGift", false) THEN "ticketsSpent" ELSE 0 END)::int AS "giftTickets",
+                   SUM(CASE WHEN COALESCE("isGift", false) THEN 0 ELSE "calculatedAmount" END)::int AS amount
             FROM "TicketSpend"
             WHERE "streamerId" = ${streamerId}
+              AND COALESCE(reason, '') NOT IN ('refunded', 'question_hold')
             GROUP BY "showId"
         `;
         for (const row of spendByShow) {
             const showId = String(row.showId || "");
             if (!showId) continue;
-            const cur = byShow.get(showId) || { tickets: 0, gross: 0 };
+            const cur = byShow.get(showId) || { tickets: 0, gross: 0, giftTickets: 0 };
             cur.tickets += Number(row.tickets) || 0;
+            cur.giftTickets += Number(row.giftTickets) || 0;
             cur.gross += Number(row.amount) || 0;
             byShow.set(showId, cur);
         }
@@ -136,7 +166,7 @@ export async function computeStreamerRevenue(prisma: PrismaService, streamerId: 
     }
 
     const showRows = shows.map((s) => {
-        const row = byShow.get(s.id) || { tickets: 0, gross: 0 };
+        const row = byShow.get(s.id) || { tickets: 0, gross: 0, giftTickets: 0 };
         const held = heldByShow.get(s.id) || { tickets: 0, gross: 0 };
         const platformPercent = overrideMap.get(s.id) ?? settings.commissionPercent;
         const part = splitRevenue(row.gross, platformPercent);
@@ -146,6 +176,7 @@ export async function computeStreamerRevenue(prisma: PrismaService, streamerId: 
         return {
             ...s,
             tickets: row.tickets,
+            giftTickets: row.giftTickets,
             heldTickets: held.tickets,
             heldGross: heldPart.gross,
             heldNet: heldPart.net,
@@ -205,6 +236,7 @@ export async function computeStreamerRevenue(prisma: PrismaService, streamerId: 
         commission,
         net,
         ticketsSpent: spendTickets,
+        giftTicketsSpent,
         ticketsSold,
         ticketGroups: groups,
         spendGross,

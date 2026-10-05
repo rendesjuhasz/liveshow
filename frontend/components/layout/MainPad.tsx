@@ -2,10 +2,11 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { stripLocalePrefix } from "@/lib/i18n/paths";
 
 export default function MainPad({ children }: { children: ReactNode }) {
     const path = usePathname();
-    const flush = path === "/";
+    const flush = stripLocalePrefix(path || "/").path === "/";
     return (
         <div
             className={

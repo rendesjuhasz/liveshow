@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { streamerStatusLabel, userAccountStatusLabel } from "@/lib/streamer-status";
 
@@ -51,8 +51,18 @@ export default function AdminUserProfilePage() {
                 <div className="bg-gray-800 p-6 rounded-xl mb-6">
                     <p className="text-xl font-semibold">{u.email}</p>
                     <p className="text-gray-400 mt-1">
-                        {u.role} · {userAccountStatusLabel(u.status)} ·{" "}
+                        {u.role} · {userAccountStatusLabel(u.status)} · {u.provider || "local"} ·{" "}
                         {new Date(u.createdAt).toLocaleString("hu-HU")}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-2">
+                        Utolsó belépés:{" "}
+                        {u.lastLoginAt
+                            ? `${new Date(u.lastLoginAt).toLocaleString("hu-HU")} (${u.lastLoginProvider || u.provider || "local"})`
+                            : "még nincs"}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">
+                        Kapcsolt: Google {u.googleLinked ? "igen" : "nem"} · Microsoft{" "}
+                        {u.microsoftLinked ? "igen" : "nem"} · Apple {u.appleLinked ? "igen" : "nem"}
                     </p>
                     <div className="flex gap-3 mt-4">
                         {u.status === "banned" ? (
@@ -69,10 +79,10 @@ export default function AdminUserProfilePage() {
 
                 {s && (
                     <section className="bg-gray-800 p-6 rounded-xl mb-6">
-                        <h2 className="text-xl font-semibold mb-3">Streamer profil</h2>
+                        <h2 className="text-xl font-semibold mb-3">Tartalomkészítő profil</h2>
                         <div className="flex gap-4">
                             {s.avatarUrl && (
-                                <img src={`${API_URL}${s.avatarUrl}`} alt="" className="w-16 h-16 rounded-full object-cover" />
+                                <img src={publicAssetUrl(s.avatarUrl)} alt="" className="w-16 h-16 rounded-full object-cover" />
                             )}
                             <div>
                                 <p className="font-semibold">{s.name}</p>
@@ -81,7 +91,7 @@ export default function AdminUserProfilePage() {
                                 </p>
                                 {s.bio && <p className="mt-2 text-gray-300">{s.bio}</p>}
                                 <Link href={`/admin/streamers/${s.id}`} className="text-blue-400 text-sm mt-2 inline-block">
-                                    Streamer adatlap
+                                    Tartalomkészítő adatlap
                                 </Link>
                             </div>
                         </div>
@@ -94,7 +104,7 @@ export default function AdminUserProfilePage() {
                     <ul className="space-y-2 text-sm">
                         {data.tickets?.map((t: any) => (
                             <li key={t.id} className="bg-gray-800 p-3 rounded">
-                                {t.show?.title} · {t.category?.name || "jegy"} · {t.status} · {t.price} Ft
+                                {t.show?.title} · {t.status} · {t.price} Ft
                             </li>
                         ))}
                     </ul>
@@ -111,6 +121,19 @@ export default function AdminUserProfilePage() {
                         ))}
                     </ul>
                 </section>
+
+                {Array.isArray(data.authEvents) && data.authEvents.length > 0 && (
+                    <section className="mb-6">
+                        <h2 className="text-xl font-semibold mb-3">Belépési napló</h2>
+                        <ul className="space-y-2 text-sm">
+                            {data.authEvents.map((e: any) => (
+                                <li key={e.id} className="bg-gray-800 p-3 rounded">
+                                    {e.action} · {e.provider} · {new Date(e.createdAt).toLocaleString("hu-HU")}
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
 
                 <Link href="/admin/users" className="text-blue-400">
                     ← Vissza a felhasználókhoz

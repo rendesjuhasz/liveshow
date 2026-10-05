@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
+import ReportButton from "@/components/ReportButton";
 
 export default function StreamerReviewsPage() {
     const gate = useStreamerGate();
@@ -18,7 +19,7 @@ export default function StreamerReviewsPage() {
     }, [gate.ok]);
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">A streamer felülethez jóváhagyott fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">A tartalomkészítő felülethez jóváhagyott fiók kell.</p>;
 
     return (
         <StreamerShell title="Értékelések">
@@ -39,6 +40,11 @@ export default function StreamerReviewsPage() {
                             </p>
                         )}
                         {r.comment && <p className="text-neutral-300 mt-1">{r.comment}</p>}
+                        {r.id && (
+                            <div className="mt-2">
+                                <ReportButton targetType="review" targetId={r.id} />
+                            </div>
+                        )}
                         <p className="text-sm text-neutral-500 mt-2">
                             {new Date(r.createdAt).toLocaleString("hu-HU")}
                         </p>

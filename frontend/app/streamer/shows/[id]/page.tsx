@@ -7,6 +7,10 @@ import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import { showStatusLabel } from "@/lib/show-status";
 import VideoCategorySelect from "@/components/VideoCategorySelect";
+import MarketingKitCard from "@/components/MarketingKitCard";
+import EventScheduleFields from "@/components/EventScheduleFields";
+import { detectBrowserTimeZone, utcToWallClock } from "@/lib/timezone";
+import { normalizeDatetimeLocal, showScheduleClientError } from "@/lib/datetime-local";
 
 export default function StreamerShowEditPage() {
     const gate = useStreamerGate();
@@ -18,6 +22,8 @@ export default function StreamerShowEditPage() {
     const [status, setStatus] = useState("draft");
     const [videoCategory, setVideoCategory] = useState("");
     const [startTime, setStartTime] = useState("");
+    const [endTime, setEndTime] = useState("");
+    const [timezone, setTimezone] = useState(detectBrowserTimeZone);
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
@@ -28,15 +34,12 @@ export default function StreamerShowEditPage() {
                 setDescription(show?.description || "");
                 setStatus(show?.status || "draft");
                 setVideoCategory(show?.videoCategory || "");
-                if (show?.startTime) {
-                    const d = new Date(show.startTime);
-                    if (!Number.isNaN(d.getTime())) {
-                        const pad = (n: number) => String(n).padStart(2, "0");
-                        setStartTime(
-                            `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
-                        );
-                    }
+                if (show?.timezone) setTimezone(show.timezone);
+                const tz = show?.timezone || detectBrowserTimeZone();
+                if (show?.startAtUtc || show?.startTime) {
+                    setStartTime(utcToWallClock(show.startAtUtc || show.startTime, tz));
                 }
+                if (show?.endAtUtc) setEndTime(utcToWallClock(show.endAtUtc, tz));
             })
             .catch((err: any) => setError(err.message || "Nem sikerült betölteni."));
     }, [gate.ok, id]);
@@ -48,13 +51,15 @@ export default function StreamerShowEditPage() {
                 title,
                 description,
                 videoCategory,
-                startTime: startTime ? new Date(startTime).toISOString() : "",
+                startLocal: normalizeDatetimeLocal(startTime),
+                endLocal: normalizeDatetimeLocal(endTime) || undefined,
+                timezone,
             }),
         });
     }
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">A streamer felülethez jóváhagyott fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">A tartalomkészítő felülethez jóváhagyott fiók kell.</p>;
 
     return (
         <StreamerShell title={`Műsor: ${title}`}>
@@ -64,9 +69,23 @@ export default function StreamerShowEditPage() {
                 Hamarosan eseményeknél látszik.
             </p>
             <form
+                noValidate
                 className="max-w-xl grid gap-3 bg-neutral-900 p-6 rounded-2xl"
                 onSubmit={async (e) => {
                     e.preventDefault();
+                    const startLocal = normalizeDatetimeLocal(startTime);
+                    const endLocal = normalizeDatetimeLocal(endTime) || undefined;
+                    const clientError = showScheduleClientError({
+                        title,
+                        videoCategory,
+                        startLocal,
+                        endLocal,
+                        timezone,
+                    });
+                    if (clientError) {
+                        setError(clientError);
+                        return;
+                    }
                     setError("");
                     setBusy(true);
                     try {
@@ -96,16 +115,14 @@ export default function StreamerShowEditPage() {
                         onChange={(e) => setDescription(e.target.value)}
                     />
                 </label>
-                <label className="grid gap-1">
-                    Kezdés
-                    <input
-                        className="p-3 rounded text-black"
-                        type="datetime-local"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        required
-                    />
-                </label>
+                <EventScheduleFields
+                    startLocal={startTime}
+                    endLocal={endTime}
+                    timezone={timezone}
+                    onStartLocal={setStartTime}
+                    onEndLocal={setEndTime}
+                    onTimezone={setTimezone}
+                />
                 <label className="grid gap-1">
                     Kategória
                     <VideoCategorySelect value={videoCategory} onChange={setVideoCategory} />
@@ -140,6 +157,7 @@ export default function StreamerShowEditPage() {
                     </button>
                 )}
             </form>
+            {id ? <MarketingKitCard showId={String(id)} /> : null}
         </StreamerShell>
     );
 }

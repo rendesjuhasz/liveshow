@@ -14,7 +14,7 @@ export default function VideoCategorySelect({
     return (
         <select
             id={id}
-            className="p-3 rounded text-black"
+            className="min-h-12 w-full rounded-xl p-3 text-base text-black"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             required={required}

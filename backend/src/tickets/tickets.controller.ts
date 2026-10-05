@@ -1,7 +1,10 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { TicketsService } from "./tickets.service";
 import { TicketGroupsService } from "./ticket-groups.service";
+import { TicketPackBuyDto } from "../dto/bodies";
+import { assertRateLimit } from "../security/rate-limit";
 
 @Controller("tickets")
 @UseGuards(JwtAuthGuard)
@@ -12,11 +15,9 @@ export class TicketsController {
     ) {}
 
     @Post("buy")
-    buy(
-        @Req() req: { user: { id: string } },
-        @Body() body: { showId?: string; categoryKey?: string },
-    ) {
-        return this.ticketsService.buy(req.user.id, body?.showId, body?.categoryKey);
+    @UseGuards(EmailVerifiedGuard)
+    buy() {
+        return this.ticketsService.buy("", "");
     }
 
     @Get("groups")
@@ -25,14 +26,15 @@ export class TicketsController {
     }
 
     @Get("balance")
-    balance(@Req() req: { user: { id: string } }) {
-        return this.groupsService.balance(req.user.id);
+    balance(@Req() req: { user: { id: string } }, @Query("showId") showId?: string) {
+        return this.groupsService.balance(req.user.id, showId);
     }
 
     @Post("packs")
+    @UseGuards(EmailVerifiedGuard)
     buyPack(
         @Req() req: { user: { id: string } },
-        @Body() body: { groupKey?: string },
+        @Body() body: TicketPackBuyDto,
     ) {
         return this.groupsService.buy(req.user.id, body?.groupKey);
     }
@@ -53,5 +55,12 @@ export class TicketsController {
         @Param("showId") showId: string,
     ) {
         return this.ticketsService.getForShow(req.user.id, showId);
+    }
+
+    @Post(":id/resend")
+    @UseGuards(EmailVerifiedGuard)
+    async resend(@Req() req: { user: { id: string } }, @Param("id") id: string) {
+        await assertRateLimit(`ticket-resend:${req.user.id}`, 5, 60 * 60_000);
+        return this.ticketsService.resendPurchaseEmail(req.user.id, id, false);
     }
 }

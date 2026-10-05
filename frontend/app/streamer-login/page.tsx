@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { isAdmin, isStreamer, useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
+import PasswordField from "@/components/PasswordField";
 
 export default function StreamerLoginPage() {
-    const { login } = useAuth();
+    const { login, ready } = useAuth();
+    const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
@@ -14,11 +17,21 @@ export default function StreamerLoginPage() {
 
     async function handleLogin(e: React.FormEvent) {
         e.preventDefault();
+        if (!ready || busy) return;
         setError("");
         setBusy(true);
         try {
-            await login(email, password);
-            window.location.assign("/streamer");
+            const nextUser = await login(email, password);
+            if (isAdmin(nextUser) && !nextUser.streamer) {
+                router.replace("/admin");
+                return;
+            }
+            if (!isStreamer(nextUser)) {
+                setError("Ez nézői fiók. A tartalomkészítő stúdióhoz a tartalomkészítő email címmel lépj be.");
+                setBusy(false);
+                return;
+            }
+            router.replace("/streamer");
         } catch (err: any) {
             setError(err.message || "Hiba történt a bejelentkezés során.");
             setBusy(false);
@@ -29,21 +42,22 @@ export default function StreamerLoginPage() {
         <div className="flex min-h-[80dvh] items-center justify-center px-4 py-10 sm:py-16">
             <form
                 onSubmit={handleLogin}
-                className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-5 sm:p-8"
+                className="w-full max-w-md rounded-2xl bg-card p-5 shadow-[0_12px_40px_rgba(0,0,0,0.4)] sm:p-8"
             >
+                <Link href="/" className="mb-6 inline-block text-sm text-accent underline">
+                    Vissza a LiveShow főoldalra
+                </Link>
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-accent">
-                    Streamer fiók
+                    Tartalomkészítő fiók
                 </p>
-                <h1 className="mb-2 text-3xl font-extrabold">Streamer belépés</h1>
+                <h1 className="mb-2 text-3xl font-extrabold">Tartalomkészítő belépés</h1>
                 <p className="mb-6 text-sm text-zinc-400">
-                    Ezt az ablakot hagyd a streamernek. Nézői teszt: másik ablak vagy privát
-                    mód, ott <span className="text-white">nézői regisztráció</span> új emaillel
-                    — ne ezzel a fiókkal.
+                    A stúdióhoz a tartalomkészítőként regisztrált email címet használd.
                 </p>
                 <label className="mb-4 grid gap-2 text-sm">
                     Email
                     <input
-                        className="h-11 rounded-xl border border-white/10 bg-black px-3"
+                        className="h-11 rounded-xl bg-[#323232] px-3 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -52,17 +66,16 @@ export default function StreamerLoginPage() {
                 </label>
                 <label className="mb-6 grid gap-2 text-sm">
                     Jelszó
-                    <input
-                        className="h-11 rounded-xl border border-white/10 bg-black px-3"
-                        type="password"
+                    <PasswordField
+                        className="h-11 rounded-xl bg-[#323232] px-3 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
                     />
                 </label>
                 {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
-                <Button type="submit" variant="gold" className="w-full" disabled={busy}>
-                    {busy ? "Belépés..." : "Streamer belépés"}
+                <Button type="submit" variant="gold" className="w-full" disabled={busy || !ready}>
+                    {busy || !ready ? "Belépés..." : "Tartalomkészítő belépés"}
                 </Button>
                 <div className="mt-6 grid gap-2 text-sm text-zinc-400">
                     <Link href="/forgot-password?role=streamer" className="hover:text-white">
@@ -72,7 +85,7 @@ export default function StreamerLoginPage() {
                         Nézői / admin belépés
                     </Link>
                     <Link href="/streamer-register" className="text-accent hover:underline">
-                        Még nincs streamer fiókom
+                        Még nincs tartalomkészítő fiókom
                     </Link>
                 </div>
             </form>

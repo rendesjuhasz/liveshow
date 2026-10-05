@@ -15,34 +15,18 @@ export class StreamerApprovedGuard implements CanActivate {
     async canActivate(context: ExecutionContext) {
         const request = context.switchToHttp().getRequest();
         const userId = request.user?.id;
-        const email = String(request.user?.email || "").toLowerCase();
-
         if (!userId) {
             throw new UnauthorizedException("Bejelentkezés szükséges.");
         }
-
         const streamer = await this.prisma.streamer.findFirst({
-            where: {
-                OR: [{ userId: String(userId) }, ...(email ? [{ email }] : [])],
-            },
+            where: { userId: String(userId) },
         });
-
         if (!streamer) {
-            throw new ForbiddenException("Nincs streamer profilod.");
+            throw new ForbiddenException("Nincs tartalomkészítő profilod.");
         }
-
         if (!isApprovedStreamer(streamer.status)) {
             throw new ForbiddenException(streamerStatusMessage(streamer.status));
         }
-
-        if (!streamer.userId) {
-            await this.prisma.streamer.update({
-                where: { id: streamer.id },
-                data: { userId: String(userId) },
-            });
-            streamer.userId = String(userId);
-        }
-
         request.streamer = streamer;
         return true;
     }

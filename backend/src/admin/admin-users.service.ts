@@ -5,7 +5,7 @@ import {
     NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { isAdminRole, BOOTSTRAP_ADMIN_EMAIL } from "../auth/roles";
+import { isAdminRole } from "../auth/roles";
 import { isBannedAccount, isUserAccountStatus } from "../auth/account-status";
 import { isStreamerStatus } from "../streamers/status";
 import { MailService } from "../mail/mail.service";
@@ -23,6 +23,9 @@ export class AdminUsersService {
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT u.id, u.email, u.role, u."createdAt",
                    COALESCE(u.status, 'active') AS status,
+                   COALESCE(u.provider, 'local') AS provider,
+                   u."lastLoginAt",
+                   u."lastLoginProvider",
                    s.id AS "streamerId",
                    s.name AS "streamerName",
                    s.status AS "streamerStatus",
@@ -37,7 +40,14 @@ export class AdminUsersService {
     async getUserProfile(id: string) {
         const users = await this.prisma.$queryRaw<any[]>`
             SELECT u.id, u.email, u.role, u."createdAt",
-                   COALESCE(u.status, 'active') AS status
+                   COALESCE(u.status, 'active') AS status,
+                   COALESCE(u.provider, 'local') AS provider,
+                   u."lastLoginAt",
+                   u."lastLoginProvider",
+                   u."googleId",
+                   u."microsoftId",
+                   u."appleId",
+                   u."avatarUrl"
             FROM "User" u
             WHERE u.id = ${id}
             LIMIT 1
@@ -45,13 +55,12 @@ export class AdminUsersService {
         const user = users[0];
         if (!user) throw new NotFoundException("A felhasználó nem található.");
 
-        const [tickets, payments, questions, streamer] = await Promise.all([
+        const [tickets, payments, questions, streamer, authEvents] = await Promise.all([
             this.prisma.ticket.findMany({
                 where: { userId: id },
                 orderBy: { createdAt: "desc" },
                 include: {
                     show: { select: { id: true, title: true } },
-                    category: { select: { key: true, name: true } },
                 },
             }),
             this.prisma.payment.findMany({
@@ -73,6 +82,13 @@ export class AdminUsersService {
                     payouts: { orderBy: { createdAt: "desc" } },
                 },
             }),
+            this.prisma.$queryRaw<any[]>`
+                SELECT id, action, provider, "createdAt"
+                FROM "AuthEvent"
+                WHERE "userId" = ${id}
+                ORDER BY "createdAt" DESC
+                LIMIT 30
+            `.catch(() => []),
         ]);
 
         return {
@@ -82,11 +98,19 @@ export class AdminUsersService {
                 role: user.role,
                 status: user.status,
                 createdAt: user.createdAt,
+                provider: user.provider || "local",
+                lastLoginAt: user.lastLoginAt || null,
+                lastLoginProvider: user.lastLoginProvider || null,
+                googleLinked: Boolean(user.googleId),
+                microsoftLinked: Boolean(user.microsoftId),
+                appleLinked: Boolean(user.appleId),
+                avatarUrl: user.avatarUrl || null,
             },
             tickets,
             payments,
             questions,
             streamer,
+            authEvents,
         };
     }
 
@@ -134,7 +158,7 @@ export class AdminUsersService {
                 user: { select: { id: true, email: true, role: true } },
             },
         });
-        if (!streamer) throw new NotFoundException("A streamer nem található.");
+        if (!streamer) throw new NotFoundException("A tartalomkészítő nem található.");
 
         const userStatusRows = streamer.userId
             ? await this.prisma.$queryRaw<any[]>`
@@ -163,7 +187,7 @@ export class AdminUsersService {
             );
         }
         const streamer = await this.prisma.streamer.findUnique({ where: { id } });
-        if (!streamer) throw new NotFoundException("A streamer nem található.");
+        if (!streamer) throw new NotFoundException("A tartalomkészítő nem található.");
         if (streamer.userId) {
             await this.assertCanChangeUser(actor, streamer.userId);
         }
@@ -199,8 +223,7 @@ export class AdminUsersService {
         }
         const target = await this.prisma.user.findUnique({ where: { id: targetId } });
         if (!target) throw new NotFoundException("A felhasználó nem található.");
-        const email = String(target.email || "").trim().toLowerCase();
-        if (email === BOOTSTRAP_ADMIN_EMAIL || isAdminRole(target)) {
+        if (isAdminRole(target)) {
             throw new ForbiddenException("Admin fiókot nem lehet tiltani vagy módosítani.");
         }
     }
@@ -212,6 +235,9 @@ export class AdminUsersService {
             role: u.role,
             status: u.status,
             createdAt: u.createdAt,
+            provider: u.provider || "local",
+            lastLoginAt: u.lastLoginAt || null,
+            lastLoginProvider: u.lastLoginProvider || null,
             banned: isBannedAccount(u.status),
             streamer: u.streamerId
                 ? {

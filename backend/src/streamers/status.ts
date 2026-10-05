@@ -10,13 +10,18 @@ export function isApprovedStreamer(status?: string | null) {
     return String(status || "").trim().toLowerCase() === "approved";
 }
 
+/** Fejlesztésben a streamer azonnal approved, élesen admin jóváhagyás kell. */
+export function initialStreamerStatus(): StreamerStatus {
+    return process.env.NODE_ENV === "production" ? "pending" : "approved";
+}
+
 export function streamerStatusMessage(status?: string | null) {
     switch (String(status || "").trim().toLowerCase()) {
         case "banned":
-            return "A streamer fiókod tiltva van.";
+            return "A tartalomkészítő fiókod tiltva van.";
         case "rejected":
-            return "A streamer jelentkezésed el lett utasítva.";
+            return "A tartalomkészítő jelentkezésed el lett utasítva.";
         default:
-            return "A streamer fiókod még jóváhagyásra vár.";
+            return "A tartalomkészítő fiókod még jóváhagyásra vár.";
     }
 }

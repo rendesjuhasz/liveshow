@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import LocaleLink from "@/components/LocaleLink";
 import { useT } from "@/lib/i18n/I18nProvider";
 
@@ -14,7 +14,7 @@ export default function StreamersPage() {
     useEffect(() => {
         apiFetch("/streamers")
             .then((d) => setRows(Array.isArray(d) ? d : []))
-            .catch((err: any) => setError(err.message || "Nem sikerült betölteni a streamereket."));
+            .catch((err: any) => setError(err.message || "Nem sikerült betölteni a tartalomkészítőket."));
     }, []);
 
     return (
@@ -26,7 +26,7 @@ export default function StreamersPage() {
                 </LocaleLink>
             </div>
             {error && <p className="text-red-400">{error}</p>}
-            {rows.length === 0 && !error && <p className="text-zinc-400">Még nincs jóváhagyott streamer.</p>}
+            {rows.length === 0 && !error && <p className="text-zinc-400">Még nincs jóváhagyott tartalomkészítő.</p>}
             <div className="grid gap-4 sm:grid-cols-2">
                 {rows.map((s) => (
                     <Link
@@ -36,7 +36,7 @@ export default function StreamersPage() {
                     >
                         {s.avatarUrl ? (
                             <img
-                                src={`${API_URL}${s.avatarUrl}`}
+                                src={publicAssetUrl(s.avatarUrl)}
                                 alt=""
                                 className="size-16 rounded-2xl object-cover"
                             />

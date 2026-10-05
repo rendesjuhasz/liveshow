@@ -1,61 +1,56 @@
-import { Controller, Get, Param, Query, Res } from "@nestjs/common";
-import { Response } from "express";
+import { Controller, Get, Param, Req, Res } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { promises as fsp } from "fs";
 import { TokenService } from "../security/token/token.service";
-import * as fs from "fs";
 import { getHlsPlaylistFile, getHlsSegmentFile } from "./hls-paths";
+import { HLS_COOKIE } from "../security/http-guard";
+import { clientKey } from "../security/rate-limit";
+import { readCookie } from "../auth/auth.cookies";
+import { pathExists } from "./fs-async";
 
 @Controller("stream")
 export class StreamingController {
     constructor(private readonly tokenService: TokenService) {}
 
     @Get(":id/index.m3u8")
-    async getPlaylist(
-        @Param("id") id: string,
-        @Query("token") token: string,
-        @Query("expiresAt") expiresAt: string,
-        @Query("userId") userId: string,
-        @Res() res: Response,
-    ) {
-        if (!this.valid(id, token, expiresAt, userId)) {
+    async getPlaylist(@Param("id") id: string, @Req() req: Request, @Res() res: Response) {
+        if (!this.valid(req, id)) {
             return res.status(403).send("Invalid token");
         }
-
         const filePath = getHlsPlaylistFile(id);
-        if (!fs.existsSync(filePath)) {
+        if (!(await pathExists(filePath))) {
             return res.status(404).send("A HLS playlist nem található.");
         }
-        const playlist = fs.readFileSync(filePath, "utf8");
-        const protectedPlaylist = playlist.replace(
-            /\.ts/g,
-            (match) =>
-                `${match}?token=${token}&expiresAt=${expiresAt}&userId=${encodeURIComponent(userId)}`,
-        );
-        return res.send(protectedPlaylist);
+        return res.send(await fsp.readFile(filePath, "utf8"));
     }
 
     @Get(":id/:segment")
     async getSegment(
         @Param("id") id: string,
         @Param("segment") segment: string,
-        @Query("token") token: string,
-        @Query("expiresAt") expiresAt: string,
-        @Query("userId") userId: string,
+        @Req() req: Request,
         @Res() res: Response,
     ) {
-        if (!this.valid(id, token, expiresAt, userId)) {
+        if (!this.valid(req, id)) {
             return res.status(403).send("Invalid token");
         }
-
+        if (!/\.(ts|m4s|mp4|m3u8)$/i.test(segment)) {
+            return res.status(403).send("Érvénytelen HLS szegmens.");
+        }
         const filePath = getHlsSegmentFile(id, segment);
-        if (!fs.existsSync(filePath)) {
+        if (!(await pathExists(filePath))) {
             return res.status(404).send("A HLS szegmens nem található.");
         }
         return res.sendFile(filePath);
     }
 
-    private valid(id: string, token: string, expiresAt: string, userId: string) {
-        const now = Math.floor(Date.now() / 1000);
-        if (!expiresAt || Number(expiresAt) < now) return false;
-        return this.tokenService.validateStreamToken(id, token, Number(expiresAt), userId);
+    private valid(req: Request, streamId: string) {
+        const ip = clientKey(req);
+        const cookie = this.tokenService.decodeCookie(readCookie(req, HLS_COOKIE));
+        const q = req.query || {};
+        const token = String(q.token || (cookie?.streamId === streamId ? cookie.token : "") || "");
+        const expiresAt = String(q.expiresAt || (cookie?.streamId === streamId ? cookie.expiresAt : "") || "");
+        const userId = String(q.userId || (cookie?.streamId === streamId ? cookie.userId : "") || "");
+        return this.tokenService.validateStreamToken(streamId, token, Number(expiresAt), userId, ip);
     }
 }

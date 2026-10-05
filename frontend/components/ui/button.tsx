@@ -4,15 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
     {
         variants: {
             variant: {
-                default: "bg-white text-black hover:bg-zinc-200",
-                gold: "bg-accent text-black hover:bg-accent/90",
-                ghost: "bg-white/10 text-white hover:bg-white/20 backdrop-blur-md",
-                outline: "border border-white/20 bg-black/40 text-white hover:bg-white/10",
-                danger: "bg-red-600 text-white hover:bg-red-500",
+                default:
+                    "bg-primary text-[#0b1220] shadow-[0_8px_20px_rgba(0,194,255,0.18)] hover:bg-accent hover:shadow-[0_8px_24px_rgba(77,203,255,0.28)]",
+                gold: "bg-primary text-[#0b1220] shadow-[0_8px_20px_rgba(0,194,255,0.18)] hover:bg-accent hover:shadow-[0_8px_24px_rgba(77,203,255,0.28)]",
+                ghost: "bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:shadow-[0_8px_24px_rgba(77,203,255,0.15)]",
+                outline:
+                    "border border-white/10 bg-card text-white shadow-md hover:border-accent/40 hover:shadow-[0_8px_24px_rgba(77,203,255,0.15)]",
+                danger: "bg-danger text-white hover:bg-danger/90",
             },
             size: {
                 default: "h-11 px-5",

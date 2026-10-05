@@ -95,7 +95,7 @@ export default function AdminTicketCategoriesPage() {
                                         }}
                                     />
                                 </label>
-                                <p className="text-xs text-gray-400">{unit} Ft/jegy a streamer jóváírásnál</p>
+                                <p className="text-xs text-gray-400">{unit} Ft/jegy a tartalomkészítő jóváírásnál</p>
                             </div>
                         );
                     })}

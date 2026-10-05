@@ -50,7 +50,7 @@ export default function AdminReviewsPage() {
                 <h1 className="text-3xl font-bold mb-2">Értékelések moderálása</h1>
                 <p className="text-gray-400 mb-6">
                     Új értékelések pending státuszban várnak. Csak a jóváhagyottak jelennek meg a
-                    streamer profilon és a műsoroldalon.
+                    tartalomkészítő profilon és a műsoroldalon.
                 </p>
                 {error && <p className="text-red-400 mb-4">{error}</p>}
 

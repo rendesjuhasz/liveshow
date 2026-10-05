@@ -8,6 +8,7 @@ import type { MediaItem } from "@/lib/media";
 import { isVideoCategory, videoCategoryLabel } from "@/lib/video-categories";
 import { ARCHIVE_SORTS, type ArchiveSortId } from "@/lib/views";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 function mapArchive(item: any): MediaItem {
     return {
@@ -27,6 +28,7 @@ function mapArchive(item: any): MediaItem {
 }
 
 export default function ArchiveBrowser({ category }: { category?: string }) {
+    const { t } = useT();
     const [items, setItems] = useState<MediaItem[]>([]);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export default function ArchiveBrowser({ category }: { category?: string }) {
         if (category && !isVideoCategory(category)) {
             setLoading(false);
             setItems([]);
-            setError("Ismeretlen kategória.");
+            setError(t("archive.unknownCat"));
             return;
         }
         setLoading(true);
@@ -46,20 +48,16 @@ export default function ArchiveBrowser({ category }: { category?: string }) {
         if (category) params.set("category", category);
         apiFetch(`/archives?${params.toString()}`)
             .then((data) => setItems((Array.isArray(data) ? data : []).map(mapArchive)))
-            .catch((err: any) => setError(err.message || "Nem sikerült betölteni az archívumot."))
+            .catch((err: any) => setError(err.message || t("archive.loadError")))
             .finally(() => setLoading(false));
-    }, [category, sort]);
+    }, [category, sort, t]);
 
-    const heading = category && valid ? videoCategoryLabel(category) : "Visszanézhető tartalmak";
+    const heading = category && valid ? videoCategoryLabel(category) : t("archive.heading");
 
     return (
         <div className="min-h-dvh px-4 py-8 md:px-10">
             <h1 className="mb-2 text-3xl font-extrabold">{heading}</h1>
-            <p className="mb-6 text-sm text-zinc-400">
-                Lezárt élő adások és feltöltött videók. A felvétel szabadon megtekinthető, ha
-                elkészült; az interaktív funkciókhoz jegy használható.
-                {category && valid ? ` Csak a(z) ${videoCategoryLabel(category)} kategória.` : ""}
-            </p>
+            <p className="mb-6 text-sm text-zinc-400">{t("archive.lead")}</p>
             <ArchiveCategoryFilter active={valid ? category : undefined} />
             <div className="mb-6 flex flex-wrap gap-2">
                 {ARCHIVE_SORTS.map((option) => (
@@ -74,18 +72,14 @@ export default function ArchiveBrowser({ category }: { category?: string }) {
                                 : "border-white/15 text-zinc-300 hover:border-white/40",
                         )}
                     >
-                        {option.label}
+                        {t(`archive.sort.${option.id}`)}
                     </button>
                 ))}
             </div>
-            {loading && <p className="text-zinc-400">Betöltés...</p>}
+            {loading && <p className="text-zinc-400">{t("common.loading")}</p>}
             {error && <p className="text-red-400">{error}</p>}
             {!loading && !error && items.length === 0 && (
-                <p className="text-zinc-400">
-                    {category
-                        ? "Ebben a kategóriában még nincs visszanézhető műsor."
-                        : "Még nincs lezárt, visszanézhető műsor."}
-                </p>
+                <p className="text-zinc-400">{category ? t("archive.emptyCat") : t("archive.empty")}</p>
             )}
             <div className="flex flex-wrap justify-center gap-3 sm:justify-start sm:gap-4">
                 {items.map((item) => (

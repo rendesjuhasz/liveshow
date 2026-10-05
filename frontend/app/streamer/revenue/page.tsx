@@ -18,13 +18,13 @@ export default function StreamerRevenuePage() {
     }, [gate.ok]);
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">A streamer felülethez jóváhagyott fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">A tartalomkészítő felülethez jóváhagyott fiók kell.</p>;
 
     return (
         <StreamerShell title="Bevételek">
             {error && <p className="text-red-400 mb-4">{error}</p>}
             <p className="text-neutral-400 mb-2">
-                Streamer részesedés: {data?.streamerPercent ?? 80}% · platform: {data?.commissionPercent ?? 20}%.
+                Tartalomkészítő részesedés: {data?.streamerPercent ?? 80}% · platform: {data?.commissionPercent ?? 20}%.
                 A bevétel a műsoron felhasznált jegyek értékéből számolódik automatikusan.
                 Privát jegy összege csak a műsor leadása után jelenik meg (élő adás befejezése vagy archívum).
             </p>
@@ -33,8 +33,13 @@ export default function StreamerRevenuePage() {
             )}
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <div className="bg-neutral-900 p-4 rounded-xl">
-                    <p className="text-neutral-400 text-sm">Felhasznált jegyek</p>
-                    <p className="text-2xl font-bold">{data?.ticketsSold ?? 0}</p>
+                    <p className="text-neutral-400 text-sm">Felhasznált fizetett jegyek</p>
+                    <p className="text-2xl font-bold">{data?.ticketsSpent ?? data?.ticketsSold ?? 0}</p>
+                </div>
+                <div className="bg-neutral-900 p-4 rounded-xl">
+                    <p className="text-neutral-400 text-sm">Felhasznált ajándékjegy</p>
+                    <p className="text-2xl font-bold">{data?.giftTicketsSpent ?? 0}</p>
+                    <p className="text-xs text-neutral-500 mt-1">Nem számít bele a kifizetésbe</p>
                 </div>
                 <div className="bg-neutral-900 p-4 rounded-xl">
                     <p className="text-neutral-400 text-sm">Bruttó bevétel</p>
@@ -93,7 +98,8 @@ export default function StreamerRevenuePage() {
                         <div>
                             <p className="font-semibold">{s.title}</p>
                             <p className="text-sm text-neutral-400">
-                                {s.tickets} jegy · bruttó {s.gross} Ft · platform {s.platformPercent}% ({s.commission} Ft)
+                                {s.tickets} fizetett jegy
+                                {s.giftTickets ? ` · ${s.giftTickets} ajándékjegy` : ""} · bruttó {s.gross} Ft · platform {s.platformPercent}% ({s.commission} Ft)
                             </p>
                             {s.privatePending && (
                                 <p className="mt-1 text-sm text-yellow-300">

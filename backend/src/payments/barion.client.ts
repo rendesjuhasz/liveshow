@@ -65,3 +65,43 @@ export async function barionGetPaymentState(paymentId: string) {
     }
     return data;
 }
+
+export async function barionRefundPayment(opts: {
+    barionPaymentId: string;
+    amount: number;
+    comment?: string;
+}) {
+    const state = (await barionGetPaymentState(opts.barionPaymentId)) as BarionStateResult & {
+        Transactions?: { TransactionId?: string; POSTransactionId?: string }[];
+    };
+    const tx = state.Transactions?.[0];
+    if (!tx?.TransactionId) {
+        throw new Error("A Barion fizetéshez nincs visszautalható tranzakció.");
+    }
+    const response = await fetch(`${barionApiBase()}/v2/Payment/Refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            POSKey: process.env.BARION_POS_KEY,
+            PaymentId: opts.barionPaymentId,
+            TransactionsToRefund: [
+                {
+                    TransactionId: tx.TransactionId,
+                    POSTransactionId: tx.POSTransactionId || `${opts.barionPaymentId}-t1`,
+                    AmountToRefund: opts.amount,
+                    Comment: opts.comment || "LiveShow visszatérítés",
+                },
+            ],
+        }),
+    });
+    const data = (await response.json().catch(() => ({}))) as {
+        Errors?: { Description?: string; Title?: string }[];
+    };
+    if (!response.ok) {
+        const detail =
+            data?.Errors?.map((e) => e.Description || e.Title).filter(Boolean).join("; ") ||
+            `Barion visszatérítés sikertelen (${response.status})`;
+        throw new Error(detail);
+    }
+    return data;
+}

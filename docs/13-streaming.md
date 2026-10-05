@@ -16,7 +16,7 @@ Ez a platform legösszetettebb, legnehezebben visszafejthető része. A leírás
 | `Show.streamUrl` | opcionális külső/sablon HLS URL (`{streamId}` helyettesítés) |
 | `Stream` tábla | `streamKey` = sanitizált streamId; `rtpPort`, `hlsPath`, `isLive`, `showId` |
 | User JWT | login; **nem** elég a `.m3u8` letöltéshez |
-| Stream token | HMAC (`STREAM_SECRET`), query: `token` + `expiresAt` |
+| Stream token | HMAC (`STREAM_SECRET`) `streamId:expiresAt:userId:ip`; HttpOnly `ls_hls` süti; élő 120s / archív 300s |
 
 ---
 
@@ -52,30 +52,30 @@ Egy `streamId` egy HLS könyvtár: `output/<streamId>/`.
 ## 13.3 Nézői lejátszás (HLS)
 
 ```
-Böngésző (Hls.js)
-  → GET /token/generate?streamId=&showId=&expires=3600&purpose=live|archive|private
-       JWT + assertCanWatch (érvényes paid/active jegy, kategória feature, admin kivétel)
-  → HMAC token + expiresAt (unix mp)
-  → GET {API_URL}/output/{streamId}/index.m3u8?token=&expiresAt=
-  → playlistben a .ts / .m4s URL-ekhez a backend hozzáfűzi ugyanazt a query-t
-  → GET /output/{streamId}/{segment}?token=&expiresAt=
+Böngésző (Hls.js, xhr.withCredentials)
+  → GET /token/generate?streamId=&showId=&purpose=live|archive|private
+       JWT vagy vendég viewerKey + assertCanWatch
+  → Set-Cookie ls_hls (HttpOnly); JSON-ben nincs token
+  → GET /output/{streamId}/index.m3u8  (same-origin rewrite, süti)
+  → szegmensek ugyanígy, token nincs a URL-ben
 ```
 
 Frontend: `frontend/lib/getStreamToken.ts`, player: `frontend/app/live/[id]/Player.tsx`.  
-Alap playlist: `http://127.0.0.1:3200/output/<streamId>/index.m3u8`.
+Playlist: `/output/<streamId>/index.m3u8` (Next rewrite a 3200-ra).
 
-**Második path (legacy):** `GET /stream/:id/index.m3u8` — ugyanaz a token, kevesebb header / `.m4s` kezelés. A UI az **`/output/`** útvonalat használja.
+**Második path:** `GET /stream/:id/index.m3u8` — ugyanaz a token-ellenőrzés. A UI az **`/output/`** útvonalat használja.
 
-Archív MP4: `GET /output/{streamId}/archive.mp4?token=&expiresAt=` (szegmens endpoint, `archive.mp4` engedélyezett kiterjesztés). Token purpose: `archive`.
+Archív MP4: `GET /output/{streamId}/archive.mp4` (süti). Token purpose: `archive`.
 
 ### Token számítás
 
 ```
-expiresAt = now_unix + expiresInSeconds   // default 3600
-token = HMAC-SHA256(STREAM_SECRET, `${streamId}:${expiresAt}`) hex
+ttl = live 120s / archive 300s
+expiresAt = now_unix + ttl
+token = HMAC-SHA256(STREAM_SECRET, `${streamId}:${expiresAt}:${userId}:${ip}`) hex
 ```
 
-Összehasonlítás: string `!==` (nem `timingSafeEqual`). Lejárat után 403 szöveg, nem JSON.
+Lejárat / rossz IP / rossz HMAC → 403 szöveg, nem JSON. Query `token` + `expiresAt` + `userId` másodlagos fallback (rövid TTL + IP).
 
 ### Jegy vs stream
 
@@ -100,18 +100,21 @@ token = HMAC-SHA256(STREAM_SECRET, `${streamId}:${expiresAt}`) hex
 ### Amit a kód csinál (`ingest.service.ts`)
 
 1. `ensureStreamOutputDir` → `backend/output/<id>/` (cwd = backend)
-2. UDP4 socket **bind `0.0.0.0:rtpPort`**
-3. **Első bejövő UDP csomagra** spawn:
+2. **UDP `udp://0.0.0.0:{rtpPort}`**, spawn FFmpeg (`cwd` = `output/<streamId>/`):
 
 ```text
-ffmpeg -i udp://127.0.0.1:{rtpPort}
+ffmpeg -threads 2 -i udp://0.0.0.0:{rtpPort}
+       -filter:v scale=1280:720:... ,fps=30
        -c:v libx264 -preset veryfast -tune zerolatency
+       -b:v 2000k -maxrate 2500k -bufsize 5000k
        -c:a aac
-       -f hls -hls_time 2 -hls_list_size 6 -hls_flags delete_segments
-       output/<streamId>/index.m3u8
+       -f tee "[f=hls:hls_time=2:hls_list_size=6:hls_flags=delete_segments]index.m3u8|
+               [f=mp4:movflags=+frag_keyframe+empty_moov+default_base_moof]recording.mp4"
 ```
 
-4. Prisma `Stream` upsert `streamKey`, `isLive true`, `hlsPath`, `rtpPort`; kapcsolódó Show `live true`
+Egy x264 encode; a `recording.mp4` a **tee másolat**. FFmpeg `PRIORITY_BELOW_NORMAL` (`os.setPriority`). Részletek: [scalability-p0.md](./scalability-p0.md).
+
+3. Prisma `Stream` upsert `streamKey`, `isLive true`, `hlsPath`, `rtpPort`; kapcsolódó Show `live true`
 
 ### Encoder (külső)
 
@@ -119,11 +122,7 @@ A stúdió szoftver (OBS stb.) **RTP/UDP** csomagot küld a szerver `rtpPort` po
 
 ### Ismert ütközés (átvételkor olvasd el)
 
-A Node **elfoglalja** az UDP portot. Az FFmpeg ugyanerre a `udp://127.0.0.1:port`-ra akar csatlakozni. Sok környezetben ez **portütközés**: az FFmpeg nem kapja az inputot, vagy a Node nyeli a csomagokat és **nem továbbítja** FFmpegnek (a `message` handler csak az első csomagnál indít, a payloadot eldobja).
-
-A `RtpListener` osztály (`rtp-listener.ts`) fájlba írná a datagramokat — **az IngestService nem használja**.
-
-A `StreamingService.startLiveStream` FFmpeg `rtp://localhost:5004`, hls_time 4 — **nincs controller hívás**, holt kód.
+Az **FFmpeg** köti a `udp://0.0.0.0:rtpPort` portot (a Nest nem). Két ingest ugyanarra a portra = Conflict vagy bind hiba. A `RtpListener` / `StreamingService.startLiveStream` **holt kód**.
 
 Ha az élő kép nem jelenik meg: (1) FFmpeg a PATH-on van-e, (2) van-e `index.m3u8` a lemezen, (3) UDP eléri-e a processt, (4) ez a bind vs FFmpeg verseny.
 
@@ -167,7 +166,7 @@ A show-nak kell `streamId`.
 6. Ha van recording fájl: `Recording` sor (hiba elnyelve)  
 7. Email `archive_ready`
 
-**Veszély:** `delete_segments` miatt a playlist **nem** a teljes adás. Teljes archívhoz kell `recording.mp4` (ezt a jelenlegi ingest **nem** írja), vagy FFmpeg `-hls_flags` / külön record kimenet bevezetése.
+**Veszély:** `delete_segments` miatt a playlist **nem** a teljes adás. A teljes archívum a tee `recording.mp4`-ből készül (`-c copy`, fallback re-encode).
 
 Törlés: `DELETE /archive/:showId` — lemez `archive.mp4` + DB sor.
 
@@ -175,9 +174,11 @@ Publikus lista: `GET /archives` — fájl vagy DB Archive.
 
 ---
 
-## 13.7 WebRTC
+## 13.7 Élő videó (WebRTC)
 
-`webrtc.gateway.ts`: Socket.IO `offer` / `answer` / `ice` → `broadcast` minden más kliensnek. Nincs show szoba, nincs JWT. **Nem** helyettesíti a HLS ingestet; kísérleti signaling.
+Alap: mesh (`StreamerLiveCamera` + `LiveWebRtcWatch` + `webrtc.gateway.ts` offer/ice). Chat/reactions maradnak `/live-io`-n.
+
+B fázis: ha `GET /livekit/config` `backend=livekit`, a publisher/néző LiveKit SFU (`docs/19-livekit.md`). A mesh ugyanazon `showId`-n nem fut párhuzamosan.
 
 ---
 

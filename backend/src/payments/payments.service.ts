@@ -11,6 +11,14 @@ import { isAdminRole } from "../auth/roles";
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
 import { isTicketActive, TICKET_STATUSES } from "../tickets/ticket-status";
+import {
+    canActivateFromBarion,
+    isBarionRefundStatus,
+    isLocalRefundedStatus,
+    isProtectedPackStatus,
+    REFUND_SPEND_REASON,
+    stripeObjectFullyRefunded,
+} from "./payments-state";
 import { barionEnabled, barionGetPaymentState, barionRefundPayment, barionStartPayment } from "./barion.client";
 import { isDevPayAllowed } from "../auth/secrets";
 import { publicBackendUrl, publicFrontendUrl } from "../auth/public-url";
@@ -117,6 +125,9 @@ export class PaymentsService implements OnModuleInit {
         }
 
         if (barionEnabled()) {
+            if (existingPending?.provider === "barion") {
+                return { payment: existingPending, checkoutUrl: null, devPay: false };
+            }
             return this.createBarionPayment(ticket);
         }
 
@@ -262,9 +273,6 @@ export class PaymentsService implements OnModuleInit {
             throw new BadRequestException("A Stripe nincs beállítva.");
         }
 
-        const Stripe = (await import("stripe")).default;
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-        const session = await stripe.checkout.sessions.retrieve(id);
         const payment = await this.prisma.payment.findUnique({
             where: { stripeSessionId: id },
             include: { ticket: { include: { show: true } } },
@@ -273,11 +281,18 @@ export class PaymentsService implements OnModuleInit {
         if (payment.userId !== userId) {
             throw new BadRequestException("Ez a fizetés nem a te fiókodhoz tartozik.");
         }
-        if (session.metadata?.userId && session.metadata.userId !== userId) {
-            throw new BadRequestException("A Stripe session nem ehhez a felhasználóhoz tartozik.");
-        }
         if (payment.status === "paid") {
             return this.paidResult(payment);
+        }
+        if (isLocalRefundedStatus(payment.status)) {
+            return this.refundedResult(payment);
+        }
+
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+        const session = await stripe.checkout.sessions.retrieve(id);
+        if (session.metadata?.userId && session.metadata.userId !== userId) {
+            throw new BadRequestException("A Stripe session nem ehhez a felhasználóhoz tartozik.");
         }
         if (session.payment_status !== "paid") {
             throw new BadRequestException("A Stripe fizetés még nem teljesült.");
@@ -310,7 +325,7 @@ export class PaymentsService implements OnModuleInit {
                 type === "checkout.session.expired" ? "cancelled" : "failed",
             );
         } else if (type === "charge.refunded" || type === "refund.created" || type === "refund.updated") {
-            if (this.stripeObjectFullyRefunded(type, obj)) {
+            if (stripeObjectFullyRefunded(type, obj)) {
                 const pi = this.stripePaymentIntentId(obj);
                 if (pi) await this.markRefundedByPaymentIntent(pi);
             }
@@ -538,7 +553,15 @@ export class PaymentsService implements OnModuleInit {
         }
 
         const barionStatus = String(state.Status || "").trim();
-        if (barionStatus === "Succeeded") {
+        if (isLocalRefundedStatus(payment.status)) {
+            return this.prisma.payment.findUniqueOrThrow({
+                where: { id: payment.id },
+                include: { ticket: true },
+            });
+        }
+        if (isBarionRefundStatus(barionStatus)) {
+            await this.applyRefundLocal(payment.id, payment.ticketId);
+        } else if (canActivateFromBarion(payment.status, barionStatus)) {
             await this.prisma.payment.update({
                 where: { id: payment.id },
                 data: { status: "paid" },
@@ -584,7 +607,10 @@ export class PaymentsService implements OnModuleInit {
         const extras = await this.paymentExtras(paymentId);
         if (extras?.packPurchaseId) {
             await this.prisma.$executeRaw`
-                UPDATE "TicketPackPurchase" SET status = ${paymentStatus} WHERE id = ${extras.packPurchaseId}
+                UPDATE "TicketPackPurchase"
+                SET status = ${paymentStatus}
+                WHERE id = ${extras.packPurchaseId}
+                  AND status NOT IN ('paid', 'refunded')
             `;
         }
     }
@@ -602,6 +628,9 @@ export class PaymentsService implements OnModuleInit {
             include: { ticket: { include: { show: true } } },
         });
         if (!payment) throw new NotFoundException("A fizetés nem található.");
+        if (isLocalRefundedStatus(payment.status)) {
+            return this.refundedResult(payment);
+        }
         if (payment.status !== "paid") {
             await this.prisma.payment.update({
                 where: { id: payment.id },
@@ -619,6 +648,10 @@ export class PaymentsService implements OnModuleInit {
 
     private paidResult(payment: { ticket?: unknown; id: string }) {
         return payment.ticket || { paymentId: payment.id, status: "paid" };
+    }
+
+    private refundedResult(payment: { ticket?: unknown; id: string }) {
+        return payment.ticket || { paymentId: payment.id, status: "refunded" };
     }
 
     private async failStripeSession(sessionId: string, paymentStatus: "failed" | "cancelled") {
@@ -646,9 +679,16 @@ export class PaymentsService implements OnModuleInit {
         const extras = await this.paymentExtras(paymentId);
         if (extras?.packPurchaseId) {
             await this.prisma.$executeRaw`
+                UPDATE "TicketSpend"
+                SET reason = ${REFUND_SPEND_REASON}, "calculatedAmount" = 0
+                WHERE "purchaseId" = ${extras.packPurchaseId}
+                  AND COALESCE(reason, '') <> ${REFUND_SPEND_REASON}
+            `;
+            await this.prisma.$executeRaw`
                 UPDATE "TicketPackPurchase"
                 SET status = 'refunded', "remainingCount" = 0
                 WHERE id = ${extras.packPurchaseId}
+                  AND status <> 'refunded'
             `;
         }
     }
@@ -670,16 +710,6 @@ export class PaymentsService implements OnModuleInit {
         return "";
     }
 
-    private stripeObjectFullyRefunded(type: string, obj: Record<string, unknown>) {
-        if (type === "charge.refunded") {
-            if (obj.refunded === true) return true;
-            const amount = Number(obj.amount);
-            const refunded = Number(obj.amount_refunded);
-            return Number.isFinite(amount) && amount > 0 && refunded >= amount;
-        }
-        return String(obj.status || "") === "succeeded";
-    }
-
     private async markRefundedByPaymentIntent(paymentIntent: string) {
         const pi = String(paymentIntent || "").trim();
         if (!pi || !this.stripeEnabled()) return null;
@@ -699,6 +729,7 @@ export class PaymentsService implements OnModuleInit {
         if (!ticketId) return;
         const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
         if (!ticket) throw new NotFoundException("A jegy nem található.");
+        if (isLocalRefundedStatus(ticket.status)) return;
         const already = isTicketActive(ticket.status);
         await this.prisma.ticket.update({
             where: { id: ticketId },
@@ -729,22 +760,27 @@ export class PaymentsService implements OnModuleInit {
             SELECT * FROM "TicketPackPurchase" WHERE id = ${purchaseId} LIMIT 1
         `;
         if (!rows[0]) throw new NotFoundException("A jegycsomag nem található.");
-        const wasPaid = String(rows[0].status) === "paid";
-        if (!wasPaid) {
-            await this.prisma.$executeRaw`
-                UPDATE "TicketPackPurchase"
-                SET status = 'paid', "remainingCount" = "ticketCount", "paidAt" = NOW()
-                WHERE id = ${purchaseId}
+        if (isProtectedPackStatus(rows[0].status)) return rows[0];
+        const updated = await this.prisma.$executeRaw`
+            UPDATE "TicketPackPurchase"
+            SET status = 'paid', "remainingCount" = "ticketCount", "paidAt" = NOW()
+            WHERE id = ${purchaseId}
+              AND status NOT IN ('paid', 'refunded')
+        `;
+        if (!updated) {
+            const current = await this.prisma.$queryRaw<any[]>`
+                SELECT * FROM "TicketPackPurchase" WHERE id = ${purchaseId} LIMIT 1
             `;
-            void this.referrals.onPaidPurchase(rows[0].userId);
-            void this.mail.packPurchased(
-                rows[0].userId,
-                rows[0].groupKey || rows[0].groupName || "pack",
-                rows[0].ticketCount,
-                purchaseId,
-            );
-            void this.maybeClaimFirstBuyerCampaign(rows[0]);
+            return current[0] || rows[0];
         }
+        void this.referrals.onPaidPurchase(rows[0].userId);
+        void this.mail.packPurchased(
+            rows[0].userId,
+            rows[0].groupKey || rows[0].groupName || "pack",
+            rows[0].ticketCount,
+            purchaseId,
+        );
+        void this.maybeClaimFirstBuyerCampaign(rows[0]);
         return rows[0];
     }
 
@@ -896,6 +932,11 @@ export class PaymentsService implements OnModuleInit {
         ).catch(() => undefined);
         await this.prisma.$executeRawUnsafe(
             `CREATE UNIQUE INDEX IF NOT EXISTS "Payment_barionPaymentId_key" ON "Payment" ("barionPaymentId")`,
+        ).catch(() => undefined);
+        await this.prisma.$executeRawUnsafe(
+            `CREATE UNIQUE INDEX IF NOT EXISTS "Payment_ticket_pending_once"
+             ON "Payment" ("ticketId")
+             WHERE status = 'pending' AND "ticketId" IS NOT NULL`,
         ).catch(() => undefined);
     }
 }

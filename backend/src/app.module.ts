@@ -1,6 +1,8 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
+import { APP_INTERCEPTOR } from "@nestjs/core";
+import { SignedMediaInterceptor } from "./uploads/signed-media.interceptor";
 
 import { MailModule } from "./mail/mail.module";
 import { AuthModule } from "./auth/auth.module";
@@ -26,9 +28,23 @@ import { PayoutsModule } from "./payouts/payouts.module";
 import { I18nModule } from "./i18n/i18n.module";
 import { PrivateStreamsModule } from "./private-streams/private-streams.module";
 import { FollowsModule } from "./follows/follows.module";
+import { BackupModule } from "./backup/backup.module";
+import { OpsModule } from "./ops/ops.module";
+import { CostModule } from "./cost/cost.module";
+import { MarketingModule } from "./marketing/marketing.module";
+import { AlertsModule } from "./alerts/alerts.module";
+import { WebrtcModule } from "./webrtc-signaling/webrtc.module";
+import { ModerationModule } from "./moderation/moderation.module";
+import { PreflightModule } from "./preflight/preflight.module";
+import { PublicCacheModule } from "./cache/public-cache.module";
+import { HomeModule } from "./home/home.module";
+import { LivekitModule } from "./livekit/livekit.module";
+import { MaintenanceModule } from "./maintenance/maintenance.module";
+import { securityMiddleware } from "./security/http-guard";
 
 @Module({
     imports: [
+        PublicCacheModule,
         MailModule,
         AuthModule,
         UsersModule,
@@ -52,8 +68,26 @@ import { FollowsModule } from "./follows/follows.module";
         PayoutsModule,
         I18nModule,
         PrivateStreamsModule,
+        BackupModule,
+        OpsModule,
+        CostModule,
+        MarketingModule,
+        AlertsModule,
+        WebrtcModule,
+        ModerationModule,
+        PreflightModule,
+        HomeModule,
+        LivekitModule,
+        MaintenanceModule,
     ],
     controllers: [AppController],
-    providers: [AppService],
+    providers: [
+        AppService,
+        { provide: APP_INTERCEPTOR, useClass: SignedMediaInterceptor },
+    ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+    configure(consumer: MiddlewareConsumer) {
+        consumer.apply(securityMiddleware).forRoutes("*");
+    }
+}

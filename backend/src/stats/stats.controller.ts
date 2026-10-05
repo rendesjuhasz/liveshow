@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
-import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { JwtAuthGuard, OptionalJwtAuthGuard } from "../auth/jwt-auth.guard";
 import { ViewLogService } from "./view-log.service";
+import { guestViewerId } from "./viewer-id";
+import { ArchiveViewDto, LiveViewDto } from "../dto/bodies";
 
 @Controller("views")
 export class StatsController {
@@ -18,15 +20,15 @@ export class StatsController {
     }
 
     @Post("live")
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(OptionalJwtAuthGuard)
     ping(
-        @Req() req: { user: { id: string } },
-        @Body() body: { showId?: string; streamId?: string },
+        @Req() req: { user?: { id: string } },
+        @Body() body: LiveViewDto,
     ) {
         this.views.heartbeatLive({
             showId: body.showId,
             streamId: body.streamId,
-            userId: req.user.id,
+            userId: req.user?.id || guestViewerId(body.viewerKey),
         });
         return { viewerCount: this.views.liveCountFor(String(body.showId || "")) };
     }
@@ -35,7 +37,7 @@ export class StatsController {
     @UseGuards(JwtAuthGuard)
     qualify(
         @Req() req: { user: { id: string } },
-        @Body() body: { showId?: string; seconds?: number; duration?: number },
+        @Body() body: ArchiveViewDto,
     ) {
         return this.views.qualifyArchiveView({
             showId: String(body.showId || ""),

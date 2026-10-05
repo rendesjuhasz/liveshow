@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard, OptionalJwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { ModeratorGuard } from "../questions/moderator.guard";
 import { ReviewsService } from "./reviews.service";
+import { ReviewCreateDto, StatusDto } from "../dto/bodies";
 
 @Controller("reviews")
 export class ReviewsController {
@@ -24,15 +26,15 @@ export class ReviewsController {
 
     @Patch(":id/status")
     @UseGuards(JwtAuthGuard, ModeratorGuard)
-    setStatus(@Param("id") id: string, @Body() body: { status?: string }) {
+    setStatus(@Param("id") id: string, @Body() body: StatusDto) {
         return this.reviews.setStatus(id, body.status);
     }
 
     @Post()
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
     async create(
         @Req() req: { user: { id: string } },
-        @Body() body: { showId?: string; rating?: number; comment?: string },
+        @Body() body: ReviewCreateDto,
     ) {
         return this.reviews.create(req.user.id, body.showId, body.rating, body.comment);
     }

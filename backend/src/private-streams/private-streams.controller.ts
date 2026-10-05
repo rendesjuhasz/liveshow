@@ -1,11 +1,13 @@
 import { Body, Controller, Get, Param, Post, Put, Req, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { AdminGuard } from "../admin/admin.guard";
 import { StreamerApprovedGuard } from "../streamers/streamer-approved.guard";
 import { isAdminUser } from "../auth/is-admin";
 import { assertRateLimit } from "../security/rate-limit";
 import { PrivateStreamsService } from "./private-streams.service";
+import { PriceBandsDto, PrivateApplyDto, PrivateRequestDto, PrivateSelectDto } from "../dto/bodies";
 
 type Authed = { user: { id: string; role?: string } };
 type StreamerReq = Authed & { streamer: { id: string; name: string; userId?: string | null } };
@@ -48,27 +50,27 @@ export class PrivateStreamsController {
     }
 
     @Post("private-requests")
-    @UseGuards(JwtAuthGuard)
-    create(
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
+    async create(
         @Req() req: Authed,
-        @Body() body: { topic?: string; details?: string; deadlineHours?: number },
+        @Body() body: PrivateRequestDto,
     ) {
-        assertRateLimit(`private-req:${req.user.id}`, 8, 15 * 60_000);
+        await assertRateLimit(`private-req:${req.user.id}`, 8, 15 * 60_000);
         return this.privateStreams.createRequest(req.user.id, body);
     }
 
     @Post("private-requests/:id/select")
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
     select(
         @Req() req: Authed,
         @Param("id") id: string,
-        @Body() body: { offerId?: string; startAt?: string },
+        @Body() body: PrivateSelectDto,
     ) {
         return this.privateStreams.selectOffer(req.user.id, id, String(body.offerId || ""), body.startAt);
     }
 
     @Post("private-requests/:id/checkout")
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
     checkout(@Req() req: Authed, @Param("id") id: string) {
         return this.privateStreams.checkout(req.user.id, id);
     }
@@ -106,31 +108,31 @@ export class PrivateStreamsController {
     apply(
         @Req() req: StreamerReq,
         @Param("id") id: string,
-        @Body() body: { plan?: string; price?: number; proposedStarts?: string[] },
+        @Body() body: PrivateApplyDto,
     ) {
         return this.privateStreams.apply(id, req.streamer, body);
     }
 
     @Get("admin/private-price-bands")
-    @UseGuards(JwtAuthGuard, AdminGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
     adminBands() {
         return this.privateStreams.bands();
     }
 
     @Put("admin/private-price-bands")
-    @UseGuards(JwtAuthGuard, AdminGuard)
-    saveBands(@Body() body: { items?: { stars: number; minPrice: number; maxPrice: number }[] }) {
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
+    saveBands(@Body() body: PriceBandsDto) {
         return this.privateStreams.saveBands(body.items || []);
     }
 
     @Get("admin/private-backups")
-    @UseGuards(JwtAuthGuard, AdminGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
     backups() {
         return this.privateStreams.listBackups();
     }
 
     @Get("admin/private-backups/:id/file")
-    @UseGuards(JwtAuthGuard, AdminGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
     async backupFile(@Param("id") id: string, @Res() res: Response) {
         const row = await this.privateStreams.backupFile(id);
         res.setHeader("Content-Type", "video/mp4");

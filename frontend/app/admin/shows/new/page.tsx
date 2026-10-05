@@ -6,12 +6,16 @@ import { isAdmin, useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/api/http";
 import { SHOW_STATUSES, showStatusLabel } from "@/lib/show-status";
 import VideoCategorySelect from "@/components/VideoCategorySelect";
+import EventScheduleFields from "@/components/EventScheduleFields";
+import { detectBrowserTimeZone } from "@/lib/timezone";
 
 export default function NewShowPage() {
     const { user, ready } = useAuth();
     const router = useRouter();
     const [title, setTitle] = useState("");
     const [date, setDate] = useState("");
+    const [endLocal, setEndLocal] = useState("");
+    const [timezone, setTimezone] = useState(() => detectBrowserTimeZone());
     const [streamUrl, setStreamUrl] = useState("");
     const [streamId, setStreamId] = useState("");
     const [error, setError] = useState("");
@@ -27,8 +31,9 @@ export default function NewShowPage() {
                 method: "POST",
                 body: JSON.stringify({
                     title,
-                    date,
-                    startTime: date,
+                    startLocal: date,
+                    endLocal: endLocal || undefined,
+                    timezone,
                     streamUrl,
                     streamId,
                     status,
@@ -82,11 +87,14 @@ export default function NewShowPage() {
                         </div>
                     </label>
 
-                    <input
-                        type="date"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="w-full p-3 rounded bg-gray-700 text-white"
+                    <EventScheduleFields
+                        startLocal={date}
+                        endLocal={endLocal}
+                        timezone={timezone}
+                        onStartLocal={setDate}
+                        onEndLocal={setEndLocal}
+                        onTimezone={setTimezone}
+                        requiredStart={false}
                     />
 
                     <label className="block text-sm text-gray-300">

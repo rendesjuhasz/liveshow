@@ -35,7 +35,6 @@ export async function ensureVideoCategoryColumn(prisma: PrismaService) {
 }
 
 export async function setShowVideoCategory(prisma: PrismaService, showId: string, category: string) {
-    await ensureVideoCategoryColumn(prisma);
     const value = normalizeVideoCategory(category);
     await prisma.$executeRaw`
         UPDATE "Show" SET "videoCategory" = ${value} WHERE id = ${showId}
@@ -45,7 +44,6 @@ export async function setShowVideoCategory(prisma: PrismaService, showId: string
 export async function videoCategoryByShowIds(prisma: PrismaService, ids: string[]) {
     const map = new Map<string, string>();
     if (!ids.length) return map;
-    await ensureVideoCategoryColumn(prisma);
     const rows = await prisma.$queryRaw<{ id: string; videoCategory: string }[]>`
         SELECT id, "videoCategory" FROM "Show" WHERE id IN (${Prisma.join(ids)})
     `;

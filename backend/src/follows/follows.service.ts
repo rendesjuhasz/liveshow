@@ -35,10 +35,9 @@ export class FollowsService implements OnModuleInit {
     }
 
     async follow(userId: string, streamerId: string) {
-        await ensureFollowSchema(this.prisma);
         const streamer = await this.prisma.streamer.findUnique({ where: { id: streamerId } });
         if (!streamer || !isApprovedStreamer(streamer.status)) {
-            throw new NotFoundException("A streamer nem található.");
+            throw new NotFoundException("A tartalomkészítő nem található.");
         }
         if (streamer.userId && streamer.userId === userId) {
             throw new BadRequestException("Saját magadat nem követheted.");
@@ -57,7 +56,6 @@ export class FollowsService implements OnModuleInit {
     }
 
     async unfollow(userId: string, streamerId: string) {
-        await ensureFollowSchema(this.prisma);
         await this.prisma.$executeRaw`
             DELETE FROM "StreamerFollow" WHERE "userId" = ${userId} AND "streamerId" = ${streamerId}
         `;
@@ -66,7 +64,6 @@ export class FollowsService implements OnModuleInit {
 
     async isFollowing(userId: string | undefined, streamerId: string) {
         if (!userId) return false;
-        await ensureFollowSchema(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT id FROM "StreamerFollow" WHERE "userId" = ${userId} AND "streamerId" = ${streamerId} LIMIT 1
         `;
@@ -74,7 +71,6 @@ export class FollowsService implements OnModuleInit {
     }
 
     async followerCount(streamerId: string) {
-        await ensureFollowSchema(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT COUNT(*)::int AS count FROM "StreamerFollow" WHERE "streamerId" = ${streamerId}
         `;
@@ -82,7 +78,6 @@ export class FollowsService implements OnModuleInit {
     }
 
     async getPrefs(userId: string): Promise<NotifyPrefs> {
-        await ensureFollowSchema(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT "notifyNewShow", "notify24h", "notify1h", "notifyLive", "emailEnabled"
             FROM "NotificationPref" WHERE "userId" = ${userId} LIMIT 1
@@ -124,11 +119,11 @@ export class FollowsService implements OnModuleInit {
         if (kind === FOLLOW_NOTIFY.newShow) return prefs.notifyNewShow;
         if (kind === FOLLOW_NOTIFY.reminder24h) return prefs.notify24h;
         if (kind === FOLLOW_NOTIFY.reminder1h) return prefs.notify1h;
+        if (kind === FOLLOW_NOTIFY.reminder2h || kind === FOLLOW_NOTIFY.reminder30m) return prefs.notify1h;
         return prefs.notifyLive;
     }
 
     async dashboardStats(streamerId: string) {
-        await ensureFollowSchema(this.prisma);
         const followerCount = await this.followerCount(streamerId);
         const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         const week = await this.prisma.$queryRaw<any[]>`
@@ -183,7 +178,6 @@ export class FollowsService implements OnModuleInit {
     }
 
     async recordOpen(userId: string, notificationId: string) {
-        await ensureFollowSchema(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT id, type, "relatedId", clicked, link
             FROM "UserNotification"

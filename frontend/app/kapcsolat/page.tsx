@@ -36,7 +36,7 @@ export default function ContactPage() {
                 <h1 className="text-3xl font-bold mb-2">Kapcsolat</h1>
                 <p className="text-neutral-400 mb-8">
                     Ez az űrlap a LiveShow ügyfélszolgálatának szól (jegyek, fiók, közvetítés).
-                    Streamerekkel és nézőkkel e-mailben vagy telefonon nem lehet közvetlenül
+                    Tartalomkészítőkkel és nézőkkel e-mailben vagy telefonon nem lehet közvetlenül
                     kapcsolatot keresni: a beszélgetés a platformon belüli kérdéseken, kívánságokon
                     és privát műsorajánlatokon keresztül marad.
                 </p>

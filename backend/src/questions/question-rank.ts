@@ -62,6 +62,7 @@ export function viewerStatus(status?: string | null) {
     const value = String(status || "").toLowerCase();
     if (value === "fulfilled" || value === "completed" || value === "answered") return "fulfilled";
     if (value === "rejected") return "rejected";
+    if (value === "missed" || value === "skipped" || value === "not_reached") return "missed";
     return "pending";
 }
 
@@ -69,5 +70,6 @@ export function viewerStatusLabelHu(status?: string | null) {
     const v = viewerStatus(status);
     if (v === "fulfilled") return "Teljesült";
     if (v === "rejected") return "Elutasítva";
+    if (v === "missed") return "Nem került sorra";
     return "Függőben";
 }

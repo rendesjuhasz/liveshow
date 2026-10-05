@@ -6,6 +6,7 @@ import {
     Patch,
     Post,
     Req,
+    Res,
     UploadedFile,
     UseGuards,
     UseInterceptors,
@@ -15,9 +16,26 @@ import { diskStorage } from "multer";
 import { existsSync, mkdirSync } from "fs";
 import { extname, join } from "path";
 import { randomUUID } from "crypto";
+import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
-import { JwtAuthGuard } from "./jwt-auth.guard";
+import { JwtAuthGuard, OptionalJwtAuthGuard } from "./jwt-auth.guard";
+import { EmailVerifiedGuard } from "./email-verified.guard";
 import { assertRateLimit, clientKey } from "../security/rate-limit";
+import { assertUploadedMedia } from "../uploads/upload-magic";
+import {
+    ForgotPasswordDto,
+    LoginDto,
+    RegisterDto,
+    ResendVerificationDto,
+    ResetPasswordDto,
+    TotpCodeDto,
+    TotpDisableDto,
+    VerifyEmailDto,
+} from "./auth.dto";
+import { AuthProfileDto, RegisterStreamerDto } from "../dto/bodies";
+import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies, setCsrfCookie } from "./auth.cookies";
+import { newOpaqueToken } from "./secrets";
+import { CSRF_COOKIE } from "../security/http-guard";
 
 const AVATAR_DIR = join(process.cwd(), "uploads", "avatars");
 
@@ -34,17 +52,41 @@ function avatarStorage() {
     });
 }
 
+function publicSession(session: {
+    token: string;
+    csrfToken: string;
+    expiresAt: number;
+    user: unknown;
+    streamer?: unknown;
+}) {
+    return {
+        csrfToken: session.csrfToken,
+        expiresAt: session.expiresAt,
+        user: session.user,
+        streamer: session.streamer,
+    };
+}
+
 @Controller("auth")
 export class AuthController {
     constructor(private authService: AuthService) {}
 
     @Post("register")
-    register(
-        @Req() req: { ip?: string; headers?: Record<string, unknown>; socket?: { remoteAddress?: string } },
-        @Body() body: { email: string; password: string; name?: string; referralCode?: string; locale?: string },
+    async register(
+        @Req() req: Request,
+        @Res({ passthrough: true }) res: Response,
+        @Body() body: RegisterDto,
     ) {
-        assertRateLimit(`reg:${clientKey(req)}`, 8, 15 * 60_000);
-        return this.authService.register(body.email, body.password, body.name, body.referralCode, body.locale);
+        await assertRateLimit(`reg:${clientKey(req)}`, 8, 15 * 60_000);
+        const session = await this.authService.register(
+            body.email,
+            body.password,
+            body.name,
+            body.referralCode,
+            body.locale,
+        );
+        setAuthCookies(req, res, session);
+        return publicSession(session);
     }
 
     @Post("register-streamer")
@@ -64,27 +106,20 @@ export class AuthController {
             },
         }),
     )
-    registerStreamer(
-        @Req() req: { ip?: string; headers?: Record<string, unknown>; socket?: { remoteAddress?: string } },
-        @UploadedFile() file: { filename?: string } | undefined,
-        @Body()
-        body: {
-            name?: string;
-            email?: string;
-            password?: string;
-            bio?: string;
-            category?: string;
-            contactEmail?: string;
-            termsAccepted?: string;
-        },
+    async registerStreamer(
+        @Req() req: Request,
+        @Res({ passthrough: true }) res: Response,
+        @UploadedFile() file: { filename?: string; mimetype?: string; path?: string } | undefined,
+        @Body() body: RegisterStreamerDto,
     ) {
         if (!file?.filename) {
             throw new BadRequestException("A profilkép kötelező.");
         }
+        assertUploadedMedia(file.path || join(AVATAR_DIR, file.filename), String(file.mimetype || ""), "image");
 
         const accepted = String(body.termsAccepted || "").toLowerCase();
-        assertRateLimit(`reg-st:${clientKey(req)}`, 8, 15 * 60_000);
-        return this.authService.registerStreamer({
+        await assertRateLimit(`reg-st:${clientKey(req)}`, 8, 15 * 60_000);
+        const session = await this.authService.registerStreamer({
             name: body.name || "",
             email: body.email || "",
             password: body.password || "",
@@ -94,30 +129,86 @@ export class AuthController {
             termsAccepted: accepted === "true" || accepted === "on" || accepted === "1",
             avatarUrl: `/uploads/avatars/${file.filename}`,
         });
+        setAuthCookies(req, res, session);
+        return publicSession(session);
     }
 
     @Post("login")
-    login(@Req() req: { ip?: string; headers?: Record<string, unknown>; socket?: { remoteAddress?: string } }, @Body() body: { email: string; password: string }) {
-        assertRateLimit(`login:${clientKey(req)}`, 20, 15 * 60_000);
-        return this.authService.login(body.email, body.password);
+    async login(
+        @Req() req: Request,
+        @Res({ passthrough: true }) res: Response,
+        @Body() body: LoginDto,
+    ) {
+        const ip = clientKey(req);
+        await assertRateLimit(`login:${ip}`, 8, 15 * 60_000);
+        await assertRateLimit(`login-email:${String(body.email || "").trim().toLowerCase()}`, 5, 15 * 60_000);
+        const session = await this.authService.login(body.email, body.password);
+        setAuthCookies(req, res, session);
+        return publicSession(session);
+    }
+
+    @Post("refresh")
+    async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+        const session = await this.authService.refreshSession(readCookie(req, REFRESH_COOKIE));
+        setAuthCookies(req, res, session);
+        return publicSession(session);
+    }
+
+    @Post("logout")
+    async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+        await this.authService.logoutRefresh(readCookie(req, REFRESH_COOKIE));
+        clearAuthCookies(req, res);
+        return { ok: true };
     }
 
     @Post("forgot-password")
-    forgotPassword(
-        @Req() req: { ip?: string; headers?: Record<string, unknown>; socket?: { remoteAddress?: string } },
-        @Body() body: { email?: string },
-    ) {
-        assertRateLimit(`forgot:${clientKey(req)}`, 8, 15 * 60_000);
+    async forgotPassword(@Req() req: Request, @Body() body: ForgotPasswordDto) {
+        await assertRateLimit(`forgot:${clientKey(req)}`, 8, 15 * 60_000);
         return this.authService.forgotPassword(body?.email);
     }
 
     @Post("reset-password")
-    resetPassword(
-        @Req() req: { ip?: string; headers?: Record<string, unknown>; socket?: { remoteAddress?: string } },
-        @Body() body: { token?: string; password?: string; passwordConfirm?: string },
+    async resetPassword(
+        @Req() req: Request,
+        @Res({ passthrough: true }) res: Response,
+        @Body() body: ResetPasswordDto,
     ) {
-        assertRateLimit(`reset:${clientKey(req)}`, 12, 15 * 60_000);
-        return this.authService.resetPassword(body?.token, body?.password, body?.passwordConfirm);
+        await assertRateLimit(`reset:${clientKey(req)}`, 12, 15 * 60_000);
+        const session = await this.authService.resetPassword(body?.token, body?.password, body?.passwordConfirm);
+        setAuthCookies(req, res, session);
+        return publicSession(session);
+    }
+
+    @Post("verify-email")
+    async verifyEmail(
+        @Req() req: Request,
+        @Res({ passthrough: true }) res: Response,
+        @Body() body: VerifyEmailDto,
+    ) {
+        await assertRateLimit(`verify:${clientKey(req)}`, 12, 15 * 60_000);
+        const session = await this.authService.verifyEmail(body?.token);
+        setAuthCookies(req, res, session);
+        return publicSession(session);
+    }
+
+    @Post("resend-verification")
+    @UseGuards(OptionalJwtAuthGuard)
+    async resendVerification(
+        @Req() req: Request & { user?: { id?: string } },
+        @Body() body: ResendVerificationDto,
+    ) {
+        await assertRateLimit(`resend-verify:${clientKey(req)}`, 5, 15 * 60_000);
+        return this.authService.resendVerification(req.user?.id, body?.email);
+    }
+
+    @Get("csrf")
+    csrf(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+        let token = readCookie(req, CSRF_COOKIE);
+        if (!token) {
+            token = newOpaqueToken();
+            setCsrfCookie(req, res, token);
+        }
+        return { csrfToken: token };
     }
 
     @Get("me")
@@ -126,12 +217,40 @@ export class AuthController {
         return this.authService.getMe(req.user.id);
     }
 
+    @Get("ws-ticket")
+    @UseGuards(JwtAuthGuard)
+    async wsTicket(@Req() req: Request & { user: { id: string } }) {
+        await assertRateLimit(`ws-ticket:${clientKey(req)}`, 30, 60_000);
+        return this.authService.issueWsTicket(req.user.id);
+    }
+
     @Patch("profile")
     @UseGuards(JwtAuthGuard)
-    updateProfile(
-        @Req() req: { user: { id: string } },
-        @Body() body: { name?: string; locale?: string },
-    ) {
+    updateProfile(@Req() req: { user: { id: string } }, @Body() body: AuthProfileDto) {
         return this.authService.updateProfile(req.user.id, body);
+    }
+
+    @Get("2fa/status")
+    @UseGuards(JwtAuthGuard)
+    totpStatus(@Req() req: { user: { id: string } }) {
+        return this.authService.totpStatus(req.user.id);
+    }
+
+    @Post("2fa/setup")
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
+    totpSetup(@Req() req: { user: { id: string } }) {
+        return this.authService.totpSetup(req.user.id);
+    }
+
+    @Post("2fa/confirm")
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
+    totpConfirm(@Req() req: { user: { id: string } }, @Body() body: TotpCodeDto) {
+        return this.authService.totpConfirm(req.user.id, body.code);
+    }
+
+    @Post("2fa/disable")
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
+    totpDisable(@Req() req: { user: { id: string } }, @Body() body: TotpDisableDto) {
+        return this.authService.totpDisable(req.user.id, body.password, body.code);
     }
 }

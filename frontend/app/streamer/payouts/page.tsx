@@ -29,7 +29,7 @@ export default function StreamerPayoutsPage() {
     }, [gate.ok]);
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">A streamer felülethez jóváhagyott fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">A tartalomkészítő felülethez jóváhagyott fiók kell.</p>;
 
     const available = revenue?.available ?? 0;
 

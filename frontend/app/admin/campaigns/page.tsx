@@ -15,7 +15,7 @@ export default function AdminCampaignsPage() {
         name: "",
         type: "first_users",
         showId: "",
-        categoryKey: "nezo",
+        ticketCount: 1,
         maxClaims: 10,
         status: "active",
     });
@@ -40,8 +40,9 @@ export default function AdminCampaignsPage() {
         <div className="min-h-dvh bg-gray-900 text-white p-4 md:p-8">
             <div className="max-w-5xl mx-auto">
                 <h1 className="text-3xl font-bold mb-2">Ajándékjegy-kampányok</h1>
-                <p className="text-gray-400 mb-6">
-                    Első X felhasználó vagy első X vásárló ingyenjegye. Az egyszeri kiosztás a{" "}
+                    <p className="text-gray-400 mb-6">
+                    Első X felhasználó vagy első X vásárló kérdésjegye a TicketPack egyenlegre.
+                    Az egyszeri kiosztás a{" "}
                     <a className="text-blue-400 underline" href="/admin/tickets">
                         Jegyek
                     </a>{" "}
@@ -62,6 +63,7 @@ export default function AdminCampaignsPage() {
                                 method: "POST",
                                 body: JSON.stringify({
                                     ...form,
+                                    ticketCount: Number(form.ticketCount) || 1,
                                     maxClaims: Number(form.maxClaims),
                                 }),
                             });
@@ -86,7 +88,7 @@ export default function AdminCampaignsPage() {
                         onChange={(e) => setForm({ ...form, type: e.target.value })}
                     >
                         <option value="first_users">Első X felhasználó (regisztrációkor)</option>
-                        <option value="first_buyers">Első X vásárló (jegyvásárláskor)</option>
+                        <option value="first_buyers">Első X vásárló (jegycsomag-vásárláskor)</option>
                     </select>
                     <select
                         className="p-2 text-black rounded"
@@ -101,15 +103,18 @@ export default function AdminCampaignsPage() {
                             </option>
                         ))}
                     </select>
-                    <select
-                        className="p-2 text-black rounded"
-                        value={form.categoryKey}
-                        onChange={(e) => setForm({ ...form, categoryKey: e.target.value })}
-                    >
-                        <option value="nezo">Néző jegy</option>
-                        <option value="interaktiv">Interaktív jegy</option>
-                        <option value="vip">VIP jegy</option>
-                    </select>
+                    <label className="text-sm text-gray-300">
+                        Kérdésjegy / kiosztás
+                        <input
+                            className="mt-1 p-2 text-black rounded w-full"
+                            type="number"
+                            min={1}
+                            max={10000}
+                            value={form.ticketCount}
+                            onChange={(e) => setForm({ ...form, ticketCount: Number(e.target.value) })}
+                            required
+                        />
+                    </label>
                     <label className="text-sm text-gray-300">
                         Ingyenjegyek száma (X)
                         <input
@@ -143,7 +148,7 @@ export default function AdminCampaignsPage() {
                                 <div>
                                     <p className="font-semibold">{c.name}</p>
                                     <p className="text-sm text-gray-300">
-                                        {c.typeLabel} · {c.showTitle} · {c.categoryKey} · {c.claimCount}/
+                                        {c.typeLabel} · {c.showTitle} · {c.ticketCount} kérdésjegy · {c.claimCount}/
                                         {c.maxClaims} kiosztva · {c.statusLabel}
                                     </p>
                                 </div>

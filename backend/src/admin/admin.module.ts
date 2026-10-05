@@ -8,9 +8,10 @@ import { ArchiveModule } from "../archive/archive.module";
 import { TicketsModule } from "../tickets/tickets.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { ReferralModule } from "../referrals/referral.module";
+import { AuthGuardModule } from "../auth/auth-guard.module";
 
 @Module({
-    imports: [ShowsModule, ArchiveModule, AdminGuardModule, PrismaModule, TicketsModule, ReferralModule],
+    imports: [ShowsModule, ArchiveModule, AdminGuardModule, AuthGuardModule, PrismaModule, TicketsModule, ReferralModule],
     controllers: [AdminController],
     providers: [AdminService, AdminUsersService],
 })

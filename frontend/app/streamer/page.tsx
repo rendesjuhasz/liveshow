@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import StreamerShell from "@/components/StreamerShell";
+import { formatWatchDuration } from "@/lib/views";
 
 export default function StreamerDashboardPage() {
     const { user, ready } = useAuth();
@@ -31,9 +32,21 @@ export default function StreamerDashboardPage() {
     if (!user) {
         return (
             <div className="min-h-dvh bg-neutral-950 p-4 text-white sm:p-8">
-                <h1 className="text-3xl font-bold mb-4">Streamer dashboard</h1>
-                <p>A streamer felülethez be kell jelentkezned.</p>
-                <Link href="/login" className="text-blue-400 mt-4 inline-block">Belépés</Link>
+                <h1 className="text-3xl font-bold mb-4">Tartalomkészítő vezérlőpult</h1>
+                <p>A tartalomkészítő felülethez be kell jelentkezned.</p>
+                <Link href="/streamer-login" className="text-blue-400 mt-4 inline-block">Tartalomkészítő belépés</Link>
+            </div>
+        );
+    }
+
+    if (error && !data) {
+        return (
+            <div className="min-h-dvh bg-neutral-950 p-4 text-white sm:p-8">
+                <h1 className="mb-4 text-3xl font-bold">Tartalomkészítő vezérlőpult</h1>
+                <p className="text-red-400">{error}</p>
+                <Link href="/streamer-login" className="mt-4 inline-block text-blue-400">
+                    Tartalomkészítő belépés
+                </Link>
             </div>
         );
     }
@@ -41,9 +54,9 @@ export default function StreamerDashboardPage() {
     if (!data?.streamer) {
         return (
             <div className="min-h-dvh bg-neutral-950 p-4 text-white sm:p-8">
-                <h1 className="text-3xl font-bold mb-4">Streamer dashboard</h1>
-                <p className="mb-4">Ehhez a fiókhoz még nincs streamer profil.</p>
-                <Link href="/streamer-register" className="text-yellow-400">Streamer regisztráció</Link>
+                <h1 className="text-3xl font-bold mb-4">Tartalomkészítő vezérlőpult</h1>
+                <p className="mb-4">Ehhez a fiókhoz még nincs tartalomkészítő profil.</p>
+                <Link href="/streamer-register" className="text-yellow-400">Tartalomkészítő regisztráció</Link>
             </div>
         );
     }
@@ -51,11 +64,25 @@ export default function StreamerDashboardPage() {
     if (data.streamer.status === "banned" || data.streamer.status !== "approved" || !data.allowed) {
         return (
             <div className="min-h-dvh max-w-lg bg-neutral-950 p-4 text-white sm:p-8">
-                <h1 className="text-3xl font-bold mb-4">Streamer dashboard</h1>
+                <h1 className="text-3xl font-bold mb-4">Tartalomkészítő vezérlőpult</h1>
                 {data.streamer.status === "banned" ? (
-                    <p>A streamer fiókod tiltva van. A dashboard nem elérhető.</p>
+                    <p>A tartalomkészítő fiókod tiltva van. A dashboard nem elérhető.</p>
                 ) : (
-                    <p>A fiókod jóváhagyásra vár. A streamer felület csak admin jóváhagyás után nyílik meg.</p>
+                    <>
+                        <p>A fiókod jóváhagyásra vár. A tartalomkészítő felület csak admin jóváhagyás után nyílik meg.</p>
+                        <p className="mt-3 text-sm text-zinc-400">
+                            Fejlesztésben: jelentkezz be újra a tartalomkészítő fiókkal, vagy az admin gépen
+                            {" "}
+                            <Link href="/admin/streamers" className="text-yellow-400 underline">
+                                /admin/streamers
+                            </Link>
+                            {" "}
+                            oldalon kattints Jóváhagyásra.
+                        </p>
+                        <Link href="/" className="mt-6 inline-block text-accent underline">
+                            Vissza a nézői főoldalra
+                        </Link>
+                    </>
                 )}
             </div>
         );
@@ -67,7 +94,7 @@ export default function StreamerDashboardPage() {
             <div className="flex items-center gap-4 mb-8">
                 {data.streamer.avatarUrl && (
                     <img
-                        src={`${API_URL}${data.streamer.avatarUrl}`}
+                        src={publicAssetUrl(data.streamer.avatarUrl)}
                         alt=""
                         className="w-16 h-16 rounded-full object-cover"
                     />
@@ -107,6 +134,18 @@ export default function StreamerDashboardPage() {
                     </p>
                 </div>
                 <div className="rounded-xl bg-neutral-900 p-4">
+                    <p className="text-sm text-neutral-400">Peak nézők</p>
+                    <p className="text-2xl font-bold">
+                        {(data.viewStats?.peakLiveViewers ?? data.stats?.peakLiveViewers ?? 0).toLocaleString("hu-HU")}
+                    </p>
+                </div>
+                <div className="rounded-xl bg-neutral-900 p-4">
+                    <p className="text-sm text-neutral-400">Átlagos nézési idő</p>
+                    <p className="text-2xl font-bold">
+                        {formatWatchDuration(data.viewStats?.averageWatchSeconds ?? data.stats?.averageWatchSeconds)}
+                    </p>
+                </div>
+                <div className="rounded-xl bg-neutral-900 p-4">
                     <p className="text-sm text-neutral-400">Nettó bevétel</p>
                     <p className="text-2xl font-bold">{data.stats?.revenue ?? 0} Ft</p>
                 </div>
@@ -134,6 +173,8 @@ export default function StreamerDashboardPage() {
                             <tr>
                                 <th className="pb-2 font-medium">Videó</th>
                                 <th className="pb-2 font-medium">Megtekintés</th>
+                                <th className="pb-2 font-medium">Peak</th>
+                                <th className="pb-2 font-medium">Átlagos nézés</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -141,10 +182,28 @@ export default function StreamerDashboardPage() {
                                 <tr key={row.showId} className="border-t border-white/10">
                                     <td className="py-2 pr-3">{row.title}</td>
                                     <td className="py-2">{Number(row.views || 0).toLocaleString("hu-HU")}</td>
+                                    <td className="py-2">{Number(row.peakViewers || 0).toLocaleString("hu-HU")}</td>
+                                    <td className="py-2">{formatWatchDuration(row.avgWatchSeconds)}</td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
+                </div>
+            )}
+            {(data.viewStats?.streamErrors || []).length > 0 && (
+                <div className="mb-10 rounded-xl bg-neutral-900 p-4">
+                    <p className="mb-3 font-semibold">Stream indulási hibák</p>
+                    <ul className="space-y-2 text-sm">
+                        {data.viewStats.streamErrors.map((row: any) => (
+                            <li key={row.id} className="border-t border-white/10 pt-2 first:border-0 first:pt-0">
+                                <p className="font-medium">{row.showTitle || row.streamId || "Stream"}</p>
+                                <p className="text-red-300">{row.message}</p>
+                                <p className="text-xs text-neutral-500">
+                                    {row.createdAt ? new Date(row.createdAt).toLocaleString("hu-HU") : ""}
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
                 </div>
             )}
             {(data.follow?.recentFollowers || []).length > 0 && (
@@ -188,8 +247,9 @@ export default function StreamerDashboardPage() {
             <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {[
                     { href: "/streamer/shows", label: "Saját műsorok" },
-                    { href: "/streamer/live", label: "Élő adás + aktuális kérdés" },
-                    { href: "/streamer/questions", label: "Aktuális kérdés" },
+                    { href: "/streamer/live", label: "Élő adás" },
+                    { href: "/streamer/preflight", label: "Ellenőrzés" },
+                    { href: "/streamer/moderation", label: "Moderálás" },
                     { href: "/streamer/revenue", label: "Bevételek" },
                     { href: "/streamer/payouts", label: "Kifizetések" },
                     { href: "/streamer/leaderboard", label: "Ranglista" },

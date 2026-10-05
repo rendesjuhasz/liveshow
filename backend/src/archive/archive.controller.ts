@@ -8,10 +8,11 @@ import {
 } from "@nestjs/common";
 import { ArchiveService } from "./archive.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { AdminGuard } from "../admin/admin.guard";
 
 @Controller("archive")
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
 export class ArchiveController {
     constructor(private readonly archiveService: ArchiveService) {}
 

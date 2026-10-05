@@ -11,8 +11,10 @@ import {
     UseGuards,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { ModeratorGuard } from "./moderator.guard";
 import { QuestionsService } from "./questions.service";
+import { BannedWordDto, QuestionCreateDto, StatusNoteDto, SupportDto } from "../dto/bodies";
 
 @Controller()
 export class QuestionsController {
@@ -30,20 +32,20 @@ export class QuestionsController {
     }
 
     @Post("questions")
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
     add(
         @Req() req: { user: { id: string } },
-        @Body() body: { showId?: string; text?: string },
+        @Body() body: QuestionCreateDto,
     ) {
         return this.questionsService.addQuestion(req.user.id, body.showId, body.text);
     }
 
     @Post("shows/:showId/support")
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
     support(
         @Req() req: { user: { id: string } },
         @Param("showId") showId: string,
-        @Body() body: { kind?: string; text?: string },
+        @Body() body: SupportDto,
     ) {
         return this.questionsService.addSupport(req.user.id, showId, body.kind, body.text);
     }
@@ -80,7 +82,7 @@ export class QuestionsController {
     review(
         @Req() req: { user: { id: string; role?: string; email?: string } },
         @Param("id") id: string,
-        @Body() body: { status?: string; note?: string },
+        @Body() body: StatusNoteDto,
     ) {
         return this.questionsService.review(req.user, id, body.status, body.note);
     }
@@ -93,7 +95,7 @@ export class QuestionsController {
 
     @Post("questions/banned-words")
     @UseGuards(JwtAuthGuard, ModeratorGuard)
-    addBanned(@Body() body: { word?: string }) {
+    addBanned(@Body() body: BannedWordDto) {
         return this.questionsService.addBannedWord(body.word);
     }
 

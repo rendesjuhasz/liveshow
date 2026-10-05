@@ -17,7 +17,7 @@ type CountdownItem = {
     endAtUtc?: string | null;
     live?: boolean;
     ended?: boolean;
-    scheduleStatus?: string;
+    scheduleStatus?: string | null;
 };
 
 export function getEventCountdown(

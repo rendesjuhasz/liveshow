@@ -85,6 +85,11 @@ export class GiftCampaignsService implements OnModuleInit {
             ON "GiftClaim" ("userId")
             WHERE source = 'first_users'
         `);
+        await this.prisma.$executeRawUnsafe(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "GiftClaim_first_buyers_user"
+            ON "GiftClaim" ("userId")
+            WHERE source = 'first_buyers'
+        `);
     }
 
     async list() {
@@ -270,6 +275,7 @@ export class GiftCampaignsService implements OnModuleInit {
 
     async tryClaimFirstBuyers(userId: string) {
         try {
+            if (await this.hasFirstBuyersClaim(this.prisma, userId)) return [];
             const now = new Date();
             const rows = await this.prisma.$queryRaw<any[]>`
                 SELECT c.*
@@ -280,12 +286,11 @@ export class GiftCampaignsService implements OnModuleInit {
                   AND (c."endsAt" IS NULL OR c."endsAt" >= ${now})
                 ORDER BY c."createdAt" ASC
             `;
-            const granted: any[] = [];
             for (const row of rows) {
                 const result = await this.claimIfAvailable(row, userId, CAMPAIGN_TYPES.FIRST_BUYERS);
-                if (result) granted.push(result);
+                if (result) return [result];
             }
-            return granted;
+            return [];
         } catch (err: any) {
             this.logger.warn(`Első vásárlós kampány: ${err?.message || err}`);
             return [];
@@ -331,6 +336,21 @@ export class GiftCampaignsService implements OnModuleInit {
         return Boolean(rows[0]?.id);
     }
 
+    private async hasFirstBuyersClaim(
+        db: { $queryRaw: PrismaService["$queryRaw"] },
+        userId: string,
+    ) {
+        const rows = await db.$queryRaw<any[]>`
+            SELECT g.id
+            FROM "GiftClaim" g
+            LEFT JOIN "GiftCampaign" c ON c.id = g."campaignId"
+            WHERE g."userId" = ${userId}
+              AND (g.source = ${CAMPAIGN_TYPES.FIRST_BUYERS} OR c.type = ${CAMPAIGN_TYPES.FIRST_BUYERS})
+            LIMIT 1
+        `;
+        return Boolean(rows[0]?.id);
+    }
+
     private async claimIfAvailable(campaign: any, userId: string, source: string) {
         const result = await this.prisma.$transaction(async (tx) => {
             const locked = await tx.$queryRaw<any[]>`
@@ -347,6 +367,9 @@ export class GiftCampaignsService implements OnModuleInit {
             if (existingClaim[0]) return null;
 
             if (source === CAMPAIGN_TYPES.FIRST_USERS && (await this.hasFirstUsersClaim(tx, userId))) {
+                return null;
+            }
+            if (source === CAMPAIGN_TYPES.FIRST_BUYERS && (await this.hasFirstBuyersClaim(tx, userId))) {
                 return null;
             }
 

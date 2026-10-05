@@ -1,0 +1,3 @@
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "lastPreflightAt" TIMESTAMP(3);
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "lastPreflightGrade" TEXT;
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "lastPreflightJson" JSONB;

@@ -26,7 +26,6 @@ export class ReferralService implements OnModuleInit {
     }
 
     async getSettings(): Promise<ReferralSettingsRow> {
-        await this.ensureSchema();
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT * FROM "ReferralSettings" WHERE id = ${SETTINGS_ID} LIMIT 1
         `;
@@ -46,7 +45,6 @@ export class ReferralService implements OnModuleInit {
         rewardTicketAmount?: number;
         allowMultipleFromReferrer?: boolean;
     }) {
-        await this.ensureSchema();
         const current = await this.getSettings();
         const enabled = body.enabled === undefined ? current.enabled : Boolean(body.enabled);
         const minimum = body.minimumPurchasedTickets === undefined
@@ -74,7 +72,6 @@ export class ReferralService implements OnModuleInit {
     }
 
     async assignCode(userId: string) {
-        await this.ensureSchema();
         const existing = await this.prisma.$queryRaw<any[]>`
             SELECT "referralCode" FROM "User" WHERE id = ${userId} LIMIT 1
         `;
@@ -99,7 +96,6 @@ export class ReferralService implements OnModuleInit {
     async attachFromCode(newUserId: string, rawCode?: string | null) {
         const code = String(rawCode || "").trim().toUpperCase();
         if (!code) return null;
-        await this.ensureSchema();
         const settings = await this.getSettings();
         if (!settings.enabled) return null;
 
@@ -190,7 +186,6 @@ export class ReferralService implements OnModuleInit {
     }
 
     async adminList() {
-        await this.ensureSchema();
         return this.prisma.$queryRaw<any[]>`
             SELECT r.id, r.status, r."qualifyingPurchaseTickets", r."rewardTicketsGranted",
                    r."rewardedAt", r."createdAt",
@@ -205,7 +200,6 @@ export class ReferralService implements OnModuleInit {
     }
 
     async adminStats() {
-        await this.ensureSchema();
         const counts = (
             await this.prisma.$queryRaw<any[]>`
                 SELECT
@@ -226,7 +220,6 @@ export class ReferralService implements OnModuleInit {
     }
 
     async giftTicketStats() {
-        await this.ensureSchema();
         const claims = await this.prisma.$queryRaw<any[]>`
             SELECT source, COUNT(*)::int AS tickets
             FROM "GiftClaim"
@@ -270,7 +263,6 @@ export class ReferralService implements OnModuleInit {
     }
 
     private async tryComplete(referredUserId: string) {
-        await this.ensureSchema();
         const settings = await this.getSettings();
         if (!settings.enabled) return;
 

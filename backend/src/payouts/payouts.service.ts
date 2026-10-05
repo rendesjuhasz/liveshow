@@ -9,10 +9,10 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
 import { isPayoutStatus } from "./commission";
-import { computeStreamerRevenue } from "./revenue";
+import { canReservePayout, computeStreamerRevenue } from "./revenue";
 import { ensurePayoutSchema, getPayoutSettings, setPayoutSettings } from "./platform-config";
 import { payoutReceiptHtml, type PayoutSnapshot } from "./payout-receipt";
-import { USER_ROLES, bootstrapAdminEmail } from "../auth/roles";
+import { USER_ROLES } from "../auth/roles";
 
 @Injectable()
 export class PayoutsService implements OnModuleInit {
@@ -43,54 +43,60 @@ export class PayoutsService implements OnModuleInit {
         actorUserId?: string;
         requestedBy?: "streamer" | "admin";
     }) {
-        await ensurePayoutSchema(this.prisma);
-        const money = await computeStreamerRevenue(this.prisma, opts.streamerId);
-        const value = Math.round(Number(opts.amount ?? money.available));
-        if (!Number.isFinite(value) || value <= 0) {
-            throw new BadRequestException("Pozitív összeg kell.");
-        }
-        if (value > money.available) {
-            throw new BadRequestException(
-                `Maximum ${money.available} Ft kérhető ki a nettó egyenlegből.`,
-            );
-        }
         const streamer = await this.prisma.streamer.findUnique({ where: { id: opts.streamerId } });
-        if (!streamer) throw new NotFoundException("A streamer nem található.");
-        const snapshot: PayoutSnapshot = {
-            streamerName: streamer.name,
-            amount: value,
-            gross: money.gross,
-            commission: money.commission,
-            net: money.net,
-            platformPercent: money.commissionPercent,
-            streamerPercent: money.streamerPercent,
-            tickets: money.ticketsSold,
-            createdAt: new Date().toISOString(),
-            shows: money.shows.map((s) => ({
-                title: s.title,
-                tickets: s.tickets,
-                gross: s.gross,
-                commission: s.commission,
-                net: s.net,
-                platformPercent: s.platformPercent,
-            })),
-        };
+        if (!streamer) throw new NotFoundException("A tartalomkészítő nem található.");
         const legal = await this.legalForStreamer(opts.streamerId);
         const id = randomUUID();
-        await this.prisma.$executeRaw`
-            INSERT INTO "Payout"
-                (id, "streamerId", amount, status, "createdAt", "requestedBy", snapshot, method)
-            VALUES (
-                ${id},
-                ${opts.streamerId},
-                ${value},
-                'pending',
-                NOW(),
-                ${opts.requestedBy || "streamer"},
-                ${JSON.stringify(snapshot)},
-                ${legal.preferredPayoutMethod || "bank_transfer"}
-            )
-        `;
+
+        await this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`
+                SELECT pg_advisory_xact_lock(hashtext(${`payout:${opts.streamerId}`}))
+            `;
+            const money = await computeStreamerRevenue(tx as PrismaService, opts.streamerId);
+            const value = Math.round(Number(opts.amount ?? money.available));
+            if (!canReservePayout(money.available, value)) {
+                if (!Number.isFinite(value) || value <= 0) {
+                    throw new BadRequestException("Pozitív összeg kell.");
+                }
+                throw new BadRequestException(
+                    `Maximum ${money.available} Ft kérhető ki a nettó egyenlegből.`,
+                );
+            }
+            const snapshot: PayoutSnapshot = {
+                streamerName: streamer.name,
+                amount: value,
+                gross: money.gross,
+                commission: money.commission,
+                net: money.net,
+                platformPercent: money.commissionPercent,
+                streamerPercent: money.streamerPercent,
+                tickets: money.ticketsSold,
+                createdAt: new Date().toISOString(),
+                shows: money.shows.map((s) => ({
+                    title: s.title,
+                    tickets: s.tickets,
+                    gross: s.gross,
+                    commission: s.commission,
+                    net: s.net,
+                    platformPercent: s.platformPercent,
+                })),
+            };
+            await tx.$executeRaw`
+                INSERT INTO "Payout"
+                    (id, "streamerId", amount, status, "createdAt", "requestedBy", snapshot, method)
+                VALUES (
+                    ${id},
+                    ${opts.streamerId},
+                    ${value},
+                    'pending',
+                    NOW(),
+                    ${opts.requestedBy || "streamer"},
+                    ${JSON.stringify(snapshot)},
+                    ${legal.preferredPayoutMethod || "bank_transfer"}
+                )
+            `;
+        });
+
         await this.logEvent(id, opts.actorUserId, "requested", null, "pending");
         await this.notifyAdmins(id);
         const row = await this.getPayout(id);
@@ -99,7 +105,6 @@ export class PayoutsService implements OnModuleInit {
     }
 
     async listAdmin() {
-        await ensurePayoutSchema(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT p.*, s.name AS "streamerName", s.email AS "streamerEmail"
             FROM "Payout" p
@@ -185,14 +190,14 @@ export class PayoutsService implements OnModuleInit {
     }
 
     async leaderboard(limit = 20) {
-        await ensurePayoutSchema(this.prisma);
         const settings = await getPayoutSettings(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT st.id, st.name, st."avatarUrl", st.status,
-                   COALESCE(SUM(sp."ticketsSpent"), 0)::int AS tickets,
-                   COALESCE(SUM(sp."calculatedAmount"), 0)::int AS gross
+                   COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."ticketsSpent" END), 0)::int AS tickets,
+                   COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."calculatedAmount" END), 0)::int AS gross
             FROM "Streamer" st
             LEFT JOIN "TicketSpend" sp ON sp."streamerId" = st.id
+              AND COALESCE(sp.reason, '') NOT IN ('refunded', 'question_hold')
             WHERE st.status = 'approved'
             GROUP BY st.id, st.name, st."avatarUrl", st.status
             ORDER BY gross DESC, tickets DESC
@@ -226,7 +231,6 @@ export class PayoutsService implements OnModuleInit {
     }
 
     async legalForStreamer(streamerId: string) {
-        await ensurePayoutSchema(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT "invoiceCapable", "taxDeclarationAcceptedAt", "contractShareAcceptedAt",
                    "preferredPayoutMethod"
@@ -250,7 +254,6 @@ export class PayoutsService implements OnModuleInit {
             preferredPayoutMethod?: string;
         },
     ) {
-        await ensurePayoutSchema(this.prisma);
         const current = await this.legalForStreamer(streamerId);
         const invoice = body.invoiceCapable === undefined ? current.invoiceCapable : Boolean(body.invoiceCapable);
         const method = String(body.preferredPayoutMethod || current.preferredPayoutMethod || "bank_transfer").slice(0, 40);
@@ -332,12 +335,7 @@ export class PayoutsService implements OnModuleInit {
             where: { role: USER_ROLES.ADMIN },
             select: { id: true },
         }).catch(() => []);
-        const extra = await this.prisma.user.findUnique({
-            where: { email: bootstrapAdminEmail() },
-            select: { id: true },
-        }).catch(() => null);
         const ids = new Set(admins.map((a) => a.id));
-        if (extra?.id) ids.add(extra.id);
         for (const userId of ids) {
             await this.prisma.$executeRaw`
                 INSERT INTO "UserNotification" (id, "userId", type, title, body, read, "relatedId", "createdAt")
@@ -346,7 +344,7 @@ export class PayoutsService implements OnModuleInit {
                     ${userId},
                     'payout',
                     'Kifizetési igény',
-                    'Új streamer kifizetési igény érkezett.',
+                    'Új tartalomkészítő kifizetési igény érkezett.',
                     false,
                     ${payoutId},
                     NOW()

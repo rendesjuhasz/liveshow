@@ -8,13 +8,14 @@
 
 | Terület | Ma |
 |---------|-----|
-| User JWT | titok **`"secret123"`** a forráskódban; lejárat 7 nap; `Authorization: Bearer` |
-| JWT env | `JWT_SECRET` **nincs bekötve** |
-| Stream HMAC | `STREAM_SECRET` vagy default **`dev-secret`**; összehasonlítás nem timing-safe |
-| CORS | csak `http://localhost:3000` és `http://127.0.0.1:3000` |
-| HTTPS | nincs a appban; fejlesztés HTTP |
-| Rate limit | nincs |
-| Helmet / CSP | nincs Nest szinten |
+| User JWT | `JWT_SECRET` env; productionban hiány → nincs boot. Dev: `.jwt-dev-secret`. Access ~1h + refresh cookie |
+| JWT env | **be van kötve** (`auth/secrets.ts`) |
+| Stream HMAC | `STREAM_SECRET`; hiány + nem prod → `dev-secret`; prod + hiány → üres HMAC (token érvénytelen) |
+| CORS | production: `FRONTEND_URL` lista **plusz** localhost:3000 / 127.0.0.1:3000 |
+| HTTPS | app HTTP; éles: Nginx + Certbot |
+| Rate limit | globális IP (180/perc); HLS: `userId` 900/perc + IP abuse 12 000/perc; login külön |
+| Helmet / CSP | Nest helmet (CSP ki); Next `headers()` CSP + HSTS productionban |
+| Admin | DB `role` **vagy** email = `BOOTSTRAP_ADMIN_EMAIL` (default `admin@admin.com`); Next UI hardcode ugyanerre |
 | Jelszó | bcrypt |
 | Ban | JWT validate ellenőrzi `User.status` |
 | Admin | DB role vagy email `admin@admin.com` |
@@ -31,7 +32,7 @@
 
 ## 15.2 Ismert hiányosságok
 
-1. **Bárki, aki olvassa a kódot, ki tudja adni a JWT-t** (`secret123`) — teljes admin, ha ismeri a user id-t / beregisztrál bootstrap emaillel.
+1. **Üres / gyenge JWT vagy STREAM_SECRET** — productionban a JWT hiány crash; `STREAM_SECRET=dev-secret` vagy bootstrap `admin@admin.com` ismert. Lista: [production-env-checklist.md](./production-env-checklist.md).
 2. **CORS localhost** — más domainről a böngészős fetch elhasal; éles domain **nincs** engedve. Fordítva: ha valaki kinyitja `0.0.0.0:3200`-at, más kliensek (nem böngésző) CORS nélkül hívhatják az API-t.
 3. **`confirm-dev`** — élesben ingyen aktiválható a jegy, ha a végpont elérhető.
 4. **Nyílt webhook** — hamis Barion IPN (állapotfüggő, de védtelen).

@@ -2,12 +2,15 @@ import {
     BadRequestException,
     Injectable,
     NotFoundException,
+    OnModuleInit,
 } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { TicketGroupsService } from "../tickets/ticket-groups.service";
 import { endedShowIdSet } from "../shows/show-ended";
 import { assertNoOffPlatformContact } from "../security/contact-leak";
+import { sanitizeUserText } from "../security/sanitize-text";
+import { assertSafeIds } from "../security/sql-ids";
 
 const STATUSES = ["pending", "approved", "rejected"] as const;
 
@@ -16,15 +19,25 @@ function avg(rows: { rating: number }[]) {
     return Math.round((rows.reduce((sum, r) => sum + r.rating, 0) / rows.length) * 10) / 10;
 }
 
+function isUniqueViolation(err: unknown) {
+    const code = String((err as { code?: string })?.code || "");
+    const meta = String((err as { meta?: { code?: string } })?.meta?.code || "");
+    const message = err instanceof Error ? err.message : String(err || "");
+    return code === "P2002" || code === "23505" || meta === "23505" || /unique/i.test(message);
+}
+
 @Injectable()
-export class ReviewsService {
+export class ReviewsService implements OnModuleInit {
     constructor(
         private readonly prisma: PrismaService,
         private readonly groups: TicketGroupsService,
     ) {}
 
-    async listForShow(showId: string, viewerId?: string) {
+    async onModuleInit() {
         await this.ensureStatus();
+    }
+
+    async listForShow(showId: string, viewerId?: string) {
         const reviews = await this.approvedRows({ showId });
         let mine = null;
         let canReview = false;
@@ -40,7 +53,8 @@ export class ReviewsService {
             const ended = await this.showHasEnded(show);
             let balance = 0;
             if (ended && !mine) {
-                balance = (await this.groups.balance(viewerId)).balance;
+                const wallet = await this.groups.balance(viewerId, showId);
+                balance = Number(wallet.usableOnShow ?? wallet.balance) || 0;
             }
             if (mine) {
                 canReview = ended;
@@ -70,13 +84,13 @@ export class ReviewsService {
     }
 
     async listForStreamer(streamerId: string, includeHidden = false) {
-        await this.ensureStatus();
         const shows = await this.prisma.show.findMany({
             where: { streamerId },
             select: { id: true, title: true },
         });
         const ids = shows.map((s) => s.id);
         if (!ids.length) return { average: 0, count: 0, reviews: [] };
+        assertSafeIds(ids);
 
         const placeholders = ids.map((_, i) => `$${i + 1}`).join(", ");
         const statusSql = includeHidden ? "" : `AND COALESCE(r.status, 'approved') = 'approved'`;
@@ -107,14 +121,13 @@ export class ReviewsService {
     }
 
     async create(userId: string, showId?: string, ratingRaw?: number, comment?: string) {
-        await this.ensureStatus();
         const id = String(showId || "").trim();
         const rating = Math.round(Number(ratingRaw));
         if (!id) throw new BadRequestException("A showId kötelező.");
         if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
             throw new BadRequestException("Az értékelés 1 és 5 csillag között legyen.");
         }
-        const text = String(comment || "").trim().slice(0, 1000) || null;
+        const text = sanitizeUserText(comment, 1000) || null;
         if (text) assertNoOffPlatformContact(text);
 
         const show = await this.prisma.show.findUnique({ where: { id } });
@@ -123,41 +136,62 @@ export class ReviewsService {
             throw new BadRequestException("Értékelni a műsor után lehet.");
         }
         if (!show.streamerId) {
-            throw new BadRequestException("Ehhez a műsorhoz nem tartozik streamer.");
+            throw new BadRequestException("Ehhez a műsorhoz nem tartozik tartalomkészítő.");
         }
 
-        const existing = await this.prisma.$queryRaw<any[]>`
-            SELECT id FROM "Review" WHERE "userId" = ${userId} AND "showId" = ${id} LIMIT 1
-        `;
-        if (existing[0]) {
-            await this.prisma.$executeRaw`
-                UPDATE "Review"
-                SET rating = ${rating}, comment = ${text}, status = 'pending'
-                WHERE id = ${existing[0].id}
-            `;
-            return { id: existing[0].id, rating, comment: text, status: "pending" };
-        }
+        try {
+            return await this.prisma.$transaction(async (tx) => {
+                const existing = await tx.$queryRaw<any[]>`
+                    SELECT id FROM "Review" WHERE "userId" = ${userId} AND "showId" = ${id} FOR UPDATE
+                `;
+                if (existing[0]) {
+                    await tx.$executeRaw`
+                        UPDATE "Review"
+                        SET rating = ${rating}, comment = ${text}, status = 'pending'
+                        WHERE id = ${existing[0].id}
+                    `;
+                    return { id: existing[0].id, rating, comment: text, status: "pending" };
+                }
 
-        await this.groups.assertCanAsk(userId);
-        const spent = await this.groups.spendOne({
-            viewerUserId: userId,
-            streamerId: show.streamerId,
-            showId: id,
-        });
-        if (!spent) {
-            throw new BadRequestException("Nincs felhasználható jegyed. Vásárolj jegycsomagot.");
-        }
+                const spent = await this.groups.spendOne(
+                    {
+                        viewerUserId: userId,
+                        streamerId: show.streamerId as string,
+                        showId: id,
+                        reason: "review",
+                    },
+                    tx,
+                );
+                if (!spent) {
+                    throw new BadRequestException("Nincs felhasználható jegyed. Vásárolj jegycsomagot.");
+                }
 
-        const reviewId = randomUUID();
-        await this.prisma.$executeRaw`
-            INSERT INTO "Review" (id, "showId", "userId", rating, comment, status, "createdAt")
-            VALUES (${reviewId}, ${id}, ${userId}, ${rating}, ${text}, 'pending', NOW())
-        `;
-        return { id: reviewId, rating, comment: text, status: "pending" };
+                const reviewId = randomUUID();
+                await tx.$executeRaw`
+                    INSERT INTO "Review" (id, "showId", "userId", rating, comment, status, "createdAt")
+                    VALUES (${reviewId}, ${id}, ${userId}, ${rating}, ${text}, 'pending', NOW())
+                `;
+                return { id: reviewId, rating, comment: text, status: "pending" };
+            });
+        } catch (err: unknown) {
+            if (isUniqueViolation(err)) {
+                const mine = await this.prisma.$queryRaw<any[]>`
+                    SELECT id FROM "Review" WHERE "userId" = ${userId} AND "showId" = ${id} LIMIT 1
+                `;
+                if (mine[0]) {
+                    await this.prisma.$executeRaw`
+                        UPDATE "Review"
+                        SET rating = ${rating}, comment = ${text}, status = 'pending'
+                        WHERE id = ${mine[0].id}
+                    `;
+                    return { id: mine[0].id, rating, comment: text, status: "pending" };
+                }
+            }
+            throw err;
+        }
     }
 
     async listForModeration() {
-        await this.ensureStatus();
         return this.prisma.$queryRaw<any[]>`
             SELECT r.id, r.rating, r.comment, COALESCE(r.status, 'approved') AS status, r."createdAt",
                    s.id AS "showId", s.title AS "showTitle",
@@ -172,7 +206,6 @@ export class ReviewsService {
     }
 
     async setStatus(id: string, status?: string) {
-        await this.ensureStatus();
         const next = String(status || "").trim().toLowerCase();
         if (!STATUSES.includes(next as any)) {
             throw new BadRequestException("A státusz pending, approved vagy rejected lehet.");
@@ -185,7 +218,6 @@ export class ReviewsService {
 
     async ratingsForStreamerIds(ids: string[]) {
         if (!ids.length) return new Map<string, { average: number; count: number }>();
-        await this.ensureStatus();
         const placeholders = ids.map((_, i) => `$${i + 1}`).join(", ");
         const rows = await this.prisma.$queryRawUnsafe<any[]>(
             `SELECT s."streamerId" AS id,

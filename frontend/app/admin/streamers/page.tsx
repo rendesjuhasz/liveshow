@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { streamerCategoryLabel } from "@/lib/streamer-categories";
 import { streamerStatusLabel } from "@/lib/streamer-status";
@@ -37,7 +37,7 @@ export default function AdminStreamersPage() {
                 });
                 setRows(list);
             })
-            .catch((err: any) => setError(err.message || "A streamerek nem tölthetők be."));
+            .catch((err: any) => setError(err.message || "A tartalomkészítők nem tölthetők be."));
     }
 
     useEffect(() => {
@@ -48,10 +48,10 @@ export default function AdminStreamersPage() {
     if (!gate.ok) return <p className="p-8 text-white">Nincs jogosultság.</p>;
 
     return (
-        <Shell title="Streamerek">
+        <Shell title="Tartalomkészítők">
             {error && <p className="text-red-400 mb-4">{error}</p>}
             <p className="text-sm text-gray-400 mb-4">
-                Az új streamer-regisztrációk pending státusszal itt jelennek meg, felül a várakozók.
+                Az új tartalomkészítő-regisztrációk pending státusszal itt jelennek meg, felül a várakozók.
             </p>
             <form
                 className="bg-gray-800 p-4 rounded-xl mb-6 grid gap-2"
@@ -70,10 +70,10 @@ export default function AdminStreamersPage() {
                 <input className="p-2 text-black rounded" placeholder="Név" value={name} onChange={(e) => setName(e.target.value)} required />
                 <input className="p-2 text-black rounded" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 <input className="p-2 text-black rounded" placeholder="Bio" value={bio} onChange={(e) => setBio(e.target.value)} />
-                <button className="bg-blue-600 p-2 rounded font-semibold">Streamer hozzáadása</button>
+                <button className="bg-blue-600 p-2 rounded font-semibold">Tartalomkészítő hozzáadása</button>
             </form>
             {rows.length === 0 && !error && (
-                <p className="text-gray-400 mb-4">Még nincs streamer a rendszerben.</p>
+                <p className="text-gray-400 mb-4">Még nincs tartalomkészítő a rendszerben.</p>
             )}
             <ul className="space-y-3">
                 {rows.map((s) => (
@@ -81,7 +81,7 @@ export default function AdminStreamersPage() {
                         <div className="flex gap-3">
                             {s.avatarUrl && (
                                 <img
-                                    src={`${API_URL}${s.avatarUrl}`}
+                                    src={publicAssetUrl(s.avatarUrl)}
                                     alt=""
                                     className="w-12 h-12 rounded-full object-cover"
                                 />

@@ -3,7 +3,7 @@
 **Alap URL:** `http://127.0.0.1:3200`  
 **Nincs globális `/api` prefix.** A path a controller `@Controller()` értéke. Kivételek: `POST /api/contact`, `GET|POST /api/barion/webhook`.
 
-**Auth:** `Authorization: Bearer <JWT>` (login / register válasz `access_token` mezője). JWT titok jelenleg kódba égetve (`secret123`), lejárat 7 nap.
+**Auth:** `Authorization: Bearer <JWT>` (login / register válasz `access_token` mezője). Titok: `JWT_SECRET` (productionban kötelező). Access token lejárat 1 óra; refresh httpOnly cookie.
 
 **JSON hibák (Nest alap):**
 
@@ -27,7 +27,10 @@ A frontend kliens: `frontend/api/http.ts`.
 
 | Metódus | URL | Jog | Input | Output | Hibák |
 |---------|-----|-----|-------|--------|-------|
-| GET | `/` | — | — | Hello string | — |
+| GET | `/` | — | — | liveness JSON | — |
+| GET | `/health` `/health/live` | — | — | `{ status, service, uptimeSec }` | — |
+| GET | `/health/ready` | — | — | db, ffmpeg, disk, smtp, storage | 503 ha nem kész |
+| GET | `/health/uptime` | — | — | `{ status }` uptime monitoroknak | 503 |
 | POST | `/auth/register` | — | `{ email, password }` | user + token | 400 létező email / gyenge adat |
 | POST | `/auth/register-streamer` | — | `multipart/form-data`: `avatar` (kötelező kép), `name`, `email`, `password`, `bio`, `category`, `contactEmail`, `termsAccepted` | user + streamer pending + token | 400 nincs kép / nem elfogadott feltételek / MIME |
 | POST | `/auth/login` | — | `{ email, password }` | `{ access_token, user }` | 401 rossz jelszó |
@@ -87,7 +90,9 @@ Fizetős jegy checkout sorrend: Stripe ha `STRIPE_SECRET_KEY` → Barion ha `BAR
 | Metódus | URL | Jog | Input | Output / hibák |
 |---------|-----|-----|-------|----------------|
 | GET | `/token/generate` | JWT | query: `streamId`, `showId`, `expires` (mp, default 3600), `purpose` (`live` / `archive` / `private`) | `{ token, expiresAt }` stream token (`STREAM_SECRET`); 403 ha nincs érvényes jegy |
-| GET | `/output/:streamId/index.m3u8` | stream token | query `token`, `expiresAt` | HLS playlist; **403** szöveg ha token rossz; **404** ha nincs fájl |
+| GET | `/livekit/config` | — | query `showId` | `{ backend: mesh\|livekit, configured, url }` élő videó flag |
+| POST | `/livekit/token` | opcionális JWT | `{ showId, role: publisher\|viewer, viewerKey? }` | LiveKit AccessToken; publisher = tulajdonos; viewer = `assertCanWatch` |
+| GET | `/output/:streamId/index.m3u8` | stream token | query `token`, `expiresAt`, `userId` | HLS playlist; **403** szöveg ha token rossz; **404** ha nincs fájl; **429** ha a néző 900/perc fölött (NAT IP 12 000/perc) |
 | GET | `/output/:streamId/:segment` | stream token | ugyanaz | `.ts` / `.m4s` |
 | GET | `/stream/:id/index.m3u8` | (streaming controller, hasonló HLS) | token query | alternatív path |
 | GET | `/stream/:id/:segment` | | | |
@@ -162,6 +167,9 @@ Prefix `/admin` (controller szinten Jwt+AdminGuard), **kivéve** a gyökéren l�
 | POST | `/admin/shows/:id/archive/regenerate` | |
 | DELETE | `/admin/shows/:id/archive` | |
 | GET | `/admin/stats` | nézettség, jegy, bevétel összesítő |
+| GET | `/admin/costs` | tárhely/CDN/transzkód/szerver/DB/e-mail vs havi jutalék |
+| PUT | `/admin/costs` | Ft egységárak (`storageGbMonthFt`, `cdnMonthlyFt`, …) |
+| POST | `/admin/backups/:id/offsite` | S3/B2/Wasabi feltöltés + HeadObject |
 | GET | `/admin/commission` | `{ commissionPercent }` |
 | PUT | `/admin/commission` | `{ percent }` vagy `{ commissionPercent }` (0–90) |
 | GET | `/admin/tickets` | minden jegy |
@@ -205,7 +213,26 @@ Prefix `/admin` (controller szinten Jwt+AdminGuard), **kivéve** a gyökéren l�
 
 ---
 
-## 2.8 WebSocket (Socket.IO)
+## 2.8 AI marketing kit
+
+JWT. `streamId` = Show UUID. Részlet: [marketing-kit.md](./marketing-kit.md).
+
+| Metódus | URL | |
+|---------|-----|--|
+| POST | `/ai/marketing-kit/generate` | `{ streamId, language }` |
+| GET | `/ai/marketing-kit/:streamId` | legújabb kit |
+| PATCH | `/ai/marketing-kit/:kitId` | szerkesztés |
+| POST | `/ai/marketing-kit/:kitId/publish` | Facebook / LinkedIn / X |
+
+---
+
+## 2.10 AI Safety Alerts
+
+JWT. Részlet: [ai-safety-alerts.md](./ai-safety-alerts.md). `GET/POST /alerts`, Socket.IO `safety-alert`.
+
+---
+
+## 2.9 WebSocket (Socket.IO)
 
 Gateway: ugyanazon a HTTP porton. CORS `origin: '*'`.
 
@@ -219,6 +246,6 @@ Nem authentikált. Élesben szobázni kell.
 
 ---
 
-## 2.9 Frontend útvonalak (nem API)
+## 2.11 Frontend útvonalak (nem API)
 
 Példák: `/`, `/shows`, `/live`, `/live/:id`, `/archive`, `/faq`, `/kapcsolat`, `/login`, `/register`, `/streamer-register`, `/profile`, `/streamer/*`, `/admin/*`, `/payment/success`, `/payment/failed`.

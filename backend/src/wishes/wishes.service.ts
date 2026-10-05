@@ -4,10 +4,12 @@ import {
     ForbiddenException,
     Injectable,
     NotFoundException,
+    OnModuleInit,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { assertNoOffPlatformContact } from "../security/contact-leak";
+import { sanitizeUserText } from "../security/sanitize-text";
 import {
     OTLETGAZDA_BADGE,
     WISH_STATUSES,
@@ -21,8 +23,12 @@ import {
 const MAX_TEXT = 500;
 
 @Injectable()
-export class WishesService {
+export class WishesService implements OnModuleInit {
     constructor(private readonly prisma: PrismaService) {}
+
+    async onModuleInit() {
+        await this.ensureSchema();
+    }
 
     private async ensureSchema() {
         await this.prisma.$executeRawUnsafe(
@@ -96,12 +102,10 @@ export class WishesService {
     }
 
     async listPublic() {
-        await this.ensureSchema();
         return this.loadByIds(await this.idsByVisibility(WISH_VISIBILITY.PUBLIC));
     }
 
     async listMine(userId: string, visibility?: string) {
-        await this.ensureSchema();
         if (visibility) {
             return this.loadByIds(await this.idsByVisibility(parseWishVisibility(visibility), userId));
         }
@@ -112,7 +116,6 @@ export class WishesService {
     }
 
     async listForStreamer() {
-        await this.ensureSchema();
         const rows = await this.prisma.wish.findMany({
             orderBy: { createdAt: "desc" },
             include: this.include(),
@@ -123,8 +126,7 @@ export class WishesService {
     }
 
     async create(userId: string, text?: string, visibility?: string) {
-        await this.ensureSchema();
-        const value = String(text || "").trim();
+        const value = sanitizeUserText(text, MAX_TEXT);
         if (value.length < 8) {
             throw new BadRequestException("A kívánság legalább 8 karakter legyen.");
         }
@@ -189,7 +191,7 @@ export class WishesService {
             throw new ConflictException("Csak elfogadott kívánságot lehet teljesítetté tenni.");
         }
         if (wish.streamerId !== streamer.id) {
-            throw new ForbiddenException("Csak a vállaló streamer jelölheti teljesítettnek.");
+            throw new ForbiddenException("Csak a vállaló tartalomkészítő jelölheti teljesítettnek.");
         }
 
         const updated = await this.prisma.$transaction(async (tx) => {

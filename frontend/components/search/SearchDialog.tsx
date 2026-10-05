@@ -17,13 +17,25 @@ export default function SearchDialog({ open, onClose }: { open: boolean; onClose
 
     useEffect(() => {
         if (!open) return;
+        const needle = q.trim();
         const params = new URLSearchParams();
-        if (q.trim()) params.set("q", q.trim());
+        if (needle) params.set("q", needle);
         if (category) params.set("category", category);
-        const url = params.toString() ? `/shows/search?${params.toString()}` : "/shows";
-        apiFetch(url)
-            .then((d) => setAll(Array.isArray(d) ? d : []))
-            .catch(() => setAll([]));
+        const url = `/shows/search${params.toString() ? `?${params.toString()}` : ""}`;
+        let cancelled = false;
+        const timer = window.setTimeout(() => {
+            apiFetch(url)
+                .then((d) => {
+                    if (!cancelled) setAll(Array.isArray(d) ? d : []);
+                })
+                .catch(() => {
+                    if (!cancelled) setAll([]);
+                });
+        }, needle ? 200 : 0);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, [open, q, category, locale]);
 
     useEffect(() => {
@@ -46,7 +58,7 @@ export default function SearchDialog({ open, onClose }: { open: boolean; onClose
                 className="mx-auto mt-16 w-full max-w-2xl sm:mt-20"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3">
+                <div className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-[0_10px_28px_rgba(0,0,0,0.4)]">
                     <Search className="size-5 shrink-0 text-zinc-400" />
                     <input
                         autoFocus
@@ -66,8 +78,8 @@ export default function SearchDialog({ open, onClose }: { open: boolean; onClose
                         className={cn(
                             "rounded-full px-3 py-1.5 text-sm",
                             !category
-                                ? "bg-accent font-semibold text-black"
-                                : "bg-white/10 text-zinc-200 hover:bg-white/15",
+                                ? "bg-primary font-semibold text-[#0b1220] shadow-[0_6px_16px_rgba(0,194,255,0.22)]"
+                                : "bg-card text-muted shadow-md hover:shadow-[0_8px_24px_rgba(77,203,255,0.15)]",
                         )}
                     >
                         {t("search.allCategories")}
@@ -80,15 +92,15 @@ export default function SearchDialog({ open, onClose }: { open: boolean; onClose
                             className={cn(
                                 "rounded-full px-3 py-1.5 text-sm",
                                 category === item.value
-                                    ? "bg-accent font-semibold text-black"
-                                    : "bg-white/10 text-zinc-200 hover:bg-white/15",
+                                    ? "bg-primary font-semibold text-[#0b1220] shadow-[0_6px_16px_rgba(0,194,255,0.22)]"
+                                    : "bg-card text-muted shadow-md hover:shadow-[0_8px_24px_rgba(77,203,255,0.15)]",
                             )}
                         >
                             {item.label}
                         </button>
                     ))}
                 </div>
-                <div className="mt-3 max-h-[min(60dvh,24rem)] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-2">
+                <div className="mt-3 max-h-[min(60dvh,24rem)] overflow-y-auto rounded-2xl bg-card p-2 shadow-[0_10px_28px_rgba(0,0,0,0.4)]">
                     {hits.length === 0 && (
                         <p className="p-6 text-center text-sm text-zinc-500">{t("search.noHits")}</p>
                     )}

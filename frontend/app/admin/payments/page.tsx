@@ -89,7 +89,7 @@ export default function AdminPaymentsPage() {
                         />
                     </label>
                     <label className="grid gap-1">
-                        Streamer részesedés (%)
+                        Tartalomkészítő részesedés (%)
                         <input
                             className="p-2 text-black rounded w-28"
                             type="number"
@@ -118,17 +118,17 @@ export default function AdminPaymentsPage() {
                     </p>
                 </form>
 
-                <h2 className="text-xl font-semibold mb-2">Jegycsoport bevétel streamerenként</h2>
+                <h2 className="text-xl font-semibold mb-2">Jegycsoport bevétel tartalomkészítőnként</h2>
                 <ul className="mb-8 space-y-4">
                     {groupReport.length === 0 && (
                         <li className="text-gray-400 text-sm">Még nincs jegyköltés.</li>
                     )}
                     {groupReport.map((row) => (
                         <li key={row.streamerId} className="bg-gray-800 p-4 rounded-xl text-sm">
-                            <p className="font-semibold mb-2">Streamer: {row.streamerName}</p>
+                            <p className="font-semibold mb-2">Tartalomkészítő: {row.streamerName}</p>
                             <p className="text-gray-400 mb-2">
-                                Összes elköltött jegy: {row.totalTicketsSpent} · összes jóváírás:{" "}
-                                {row.totalCredited} Ft
+                                Fizetett jegy: {row.paidTicketsSpent ?? row.totalTicketsSpent} · ajándékjegy:{" "}
+                                {row.giftTicketsSpent ?? 0} · jóváírás: {row.totalCredited} Ft
                             </p>
                             <ul className="grid sm:grid-cols-2 gap-2">
                                 {(row.groups || []).map((g: any) => (
@@ -147,11 +147,28 @@ export default function AdminPaymentsPage() {
                     {payments.map((p) => (
                         <li key={p.id} className="bg-gray-800 p-3 rounded">
                             {p.user?.email} · {p.ticket?.show?.title} · {p.amount} Ft · {p.status} · {p.provider}
+                            {p.status === "paid" && (
+                                <button
+                                    type="button"
+                                    className="ml-3 text-red-300 underline"
+                                    onClick={async () => {
+                                        if (!confirm("Visszatéríted ezt a fizetést?")) return;
+                                        try {
+                                            await apiFetch(`/payments/${p.id}/refund`, { method: "POST" });
+                                            await load();
+                                        } catch (err: any) {
+                                            setError(err.message || "A visszatérítés nem sikerült.");
+                                        }
+                                    }}
+                                >
+                                    Visszatérítés
+                                </button>
+                            )}
                         </li>
                     ))}
                 </ul>
 
-                <h2 className="text-xl font-semibold mb-2">Streamer kifizetések</h2>
+                <h2 className="text-xl font-semibold mb-2">Tartalomkészítő kifizetések</h2>
                 <p className="text-gray-400 text-sm mb-3">
                     Státusz: függőben → folyamatban (jóváhagyás) → kifizetve. Minden lépés naplózott.
                 </p>
@@ -178,7 +195,7 @@ export default function AdminPaymentsPage() {
                         onChange={(e) => setStreamerId(e.target.value)}
                         required
                     >
-                        <option value="">Streamer</option>
+                        <option value="">Tartalomkészítő</option>
                         {streamers.map((s) => (
                             <option key={s.id} value={s.id}>
                                 {s.name}

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleIni
 import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { DEFAULT_FAQS } from "./faq.seed";
+import { CACHE_TTL, PublicTtlCache } from "../cache/public-cache.module";
 
 export type FaqRow = {
     id: string;
@@ -18,7 +19,10 @@ export type FaqRow = {
 export class FaqService implements OnModuleInit {
     private readonly logger = new Logger(FaqService.name);
 
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly publicCache: PublicTtlCache,
+    ) {}
 
     async onModuleInit() {
         try {
@@ -43,10 +47,16 @@ export class FaqService implements OnModuleInit {
                 "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         `);
+        await this.prisma.$executeRawUnsafe(
+            `CREATE INDEX IF NOT EXISTS faqs_published_order ON faqs ("isPublished", "order")`,
+        );
     }
 
     async listPublic(): Promise<FaqRow[]> {
-        await this.ensureTable();
+        return this.publicCache.getOrSet("faq:public", CACHE_TTL.faq, () => this.loadPublic());
+    }
+
+    private async loadPublic(): Promise<FaqRow[]> {
         return this.prisma.$queryRaw<FaqRow[]>`
             SELECT id, category, question, answer, "order", "isPublished", "createdAt", "updatedAt"
             FROM faqs
@@ -56,7 +66,6 @@ export class FaqService implements OnModuleInit {
     }
 
     async listAll(): Promise<FaqRow[]> {
-        await this.ensureTable();
         return this.prisma.$queryRaw<FaqRow[]>`
             SELECT id, category, question, answer, "order", "isPublished", "createdAt", "updatedAt"
             FROM faqs
@@ -71,13 +80,13 @@ export class FaqService implements OnModuleInit {
         order?: number;
         isPublished?: boolean;
     }) {
-        await this.ensureTable();
         const data = this.parseBody(body);
         const id = randomUUID();
         await this.prisma.$executeRaw`
             INSERT INTO faqs (id, category, question, answer, "order", "isPublished", "createdAt", "updatedAt")
             VALUES (${id}, ${data.category}, ${data.question}, ${data.answer}, ${data.order}, ${data.isPublished}, NOW(), NOW())
         `;
+        this.bustPublic();
         return this.getById(id);
     }
 
@@ -91,7 +100,6 @@ export class FaqService implements OnModuleInit {
             isPublished?: boolean;
         },
     ) {
-        await this.ensureTable();
         const current = await this.getById(id);
         const category = body.category !== undefined ? this.requireText(body.category, "kategória") : current.category;
         const question = body.question !== undefined ? this.requireText(body.question, "kérdés") : current.question;
@@ -109,14 +117,20 @@ export class FaqService implements OnModuleInit {
                 "updatedAt" = NOW()
             WHERE id = ${id}
         `;
+        this.bustPublic();
         return this.getById(id);
     }
 
     async remove(id: string) {
-        await this.ensureTable();
         await this.getById(id);
         await this.prisma.$executeRaw`DELETE FROM faqs WHERE id = ${id}`;
+        this.bustPublic();
         return { ok: true };
+    }
+
+    private bustPublic() {
+        this.publicCache.deletePrefix("faq:");
+        this.publicCache.deletePrefix("home:");
     }
 
     private async getById(id: string) {

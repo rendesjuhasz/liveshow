@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { isAdmin, useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/I18nProvider";
+import PasswordField from "@/components/PasswordField";
+import SocialAuthButtons from "@/components/SocialAuthButtons";
 
 const REF_STORAGE_KEY = "liveshow_ref";
 
 export default function RegisterPage() {
     const { register } = useAuth();
+    const router = useRouter();
     const { t } = useT();
     const [email, setEmail] = useState("");
     const [name, setName] = useState("");
@@ -17,30 +21,38 @@ export default function RegisterPage() {
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
     const [refCode, setRefCode] = useState("");
+    const submitting = useRef(false);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        const fromUrl = String(params.get("ref") || "").trim().toUpperCase();
+        const fromUrl = String(params.get("ref") || "")
+            .trim()
+            .toUpperCase();
         if (fromUrl) {
             window.localStorage.setItem(REF_STORAGE_KEY, fromUrl);
             setRefCode(fromUrl);
             return;
         }
-        const stored = String(window.localStorage.getItem(REF_STORAGE_KEY) || "").trim().toUpperCase();
+        const stored = String(window.localStorage.getItem(REF_STORAGE_KEY) || "")
+            .trim()
+            .toUpperCase();
         if (stored) setRefCode(stored);
     }, []);
 
-    async function handleRegister(e: React.FormEvent) {
+    async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
+        if (submitting.current || busy) return;
+        submitting.current = true;
         setError("");
         setBusy(true);
         try {
-            const nextUser = await register(email, password, name, refCode || undefined);
+            await register(email, password, name, refCode || undefined);
             window.localStorage.removeItem(REF_STORAGE_KEY);
-            window.location.assign(isAdmin(nextUser) ? "/admin" : "/");
+            router.replace("/");
         } catch (err: any) {
-            setError(err?.message || "Hiba történt a regisztráció során.");
+            setError(err?.message || t("auth.registerError"));
             setBusy(false);
+            submitting.current = false;
         }
     }
 
@@ -48,45 +60,56 @@ export default function RegisterPage() {
         <div className="flex min-h-[80dvh] items-center justify-center px-4 py-10 sm:py-16">
             <form
                 onSubmit={handleRegister}
-                className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-5 sm:p-8"
+                className="w-full max-w-md rounded-2xl bg-card p-5 shadow-[0_12px_40px_rgba(0,0,0,0.4)] sm:p-8"
             >
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-accent">{t("auth.viewerAccount")}</p>
                 <h1 className="mb-6 text-3xl font-extrabold">{t("auth.registerTitle")}</h1>
-                {refCode && (
+                {refCode ? (
                     <p className="mb-4 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
-                        Ajánlói kód: {refCode}
+                        {t("auth.referralCode")}: {refCode}
                     </p>
-                )}
-                <p className="mb-6 text-sm text-zinc-400">
-                    Admin fiókhoz is ezt az űrlapot használd, email:{" "}
-                    <span className="font-semibold text-white">admin@admin.com</span>
-                    . A rendszer ettől a címtől admin szerepet ad, nem kell külön admin-regisztráció.
-                </p>
+                ) : null}
+                <p className="mb-6 text-sm text-zinc-400">{t("auth.registerLead")}</p>
+                <SocialAuthButtons
+                    googleLabel={t("auth.continueGoogle")}
+                    microsoftLabel={t("auth.continueMicrosoft")}
+                    appleLabel={t("auth.continueApple")}
+                />
+                <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-widest text-zinc-500">
+                    <span className="h-px flex-1 bg-white/10" />
+                    {t("auth.or")}
+                    <span className="h-px flex-1 bg-white/10" />
+                </div>
                 <label className="mb-4 grid gap-2 text-sm">
                     {t("auth.name")}
                     <input
-                        className="h-11 rounded-xl border border-white/10 bg-black px-3"
+                        className="h-11 rounded-xl bg-[#323232] px-3 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                         type="text"
+                        name="name"
+                        autoComplete="name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required
                     />
                 </label>
                 <label className="mb-4 grid gap-2 text-sm">
-                    Email
+                    {t("auth.email")}
                     <input
-                        className="h-11 rounded-xl border border-white/10 bg-black px-3"
+                        className="h-11 rounded-xl bg-[#323232] px-3 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                         type="email"
+                        name="email"
+                        autoComplete="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
                     />
                 </label>
                 <label className="mb-6 grid gap-2 text-sm">
-                    Jelszó
-                    <input
-                        className="h-11 rounded-xl border border-white/10 bg-black px-3"
-                        type="password"
+                    {t("auth.password")}
+                    <PasswordField
+                        name="password"
+                        autoComplete="new-password"
+                        className="h-11 rounded-xl bg-[#323232] px-3 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         minLength={8}
@@ -100,24 +123,24 @@ export default function RegisterPage() {
                 <p className="mt-6 text-sm text-zinc-400">
                     {t("auth.haveAccount")}{" "}
                     <Link href="/login" className="text-white underline">
-                        Belépés
+                        {t("auth.submitLogin")}
                     </Link>
                 </p>
                 <p className="mt-3 text-sm">
                     <Link href="/streamer-register" className="text-accent hover:underline">
-                        Streamerként szeretnék regisztrálni
+                        {t("nav.streamerRegister")}
                     </Link>
                 </p>
                 <p className="mt-4 text-xs text-zinc-500">
-                    A regisztrációval elfogadod az{" "}
+                    {t("auth.acceptPrefix")}{" "}
                     <Link href="/aszf" className="text-accent">
-                        ÁSZF
+                        {t("legal.aszf")}
                     </Link>{" "}
-                    és az{" "}
+                    {t("auth.acceptAnd")}{" "}
                     <Link href="/adatkezeles" className="text-accent">
-                        Adatkezelési tájékoztató
+                        {t("legal.privacy")}
                     </Link>{" "}
-                    feltételeit.
+                    {t("auth.acceptSuffix")}
                 </p>
             </form>
         </div>

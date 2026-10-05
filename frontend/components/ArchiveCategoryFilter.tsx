@@ -1,20 +1,24 @@
+"use client";
+
 import Link from "next/link";
 import { VIDEO_CATEGORIES, videoCategoryHref } from "@/lib/video-categories";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function ArchiveCategoryFilter({ active }: { active?: string | null }) {
+    const { t } = useT();
     return (
         <div className="mb-8">
-            <p className="mb-3 text-sm font-semibold text-zinc-300">Kategória</p>
+            <p className="mb-3 text-sm font-semibold text-zinc-300">{t("cat.heading")}</p>
             <div className="flex flex-wrap gap-2">
                 <Link
                     href="/archive"
                     className={`rounded-full px-3 py-1.5 text-sm ${
                         !active
-                            ? "bg-accent text-black font-semibold"
-                            : "bg-white/10 text-zinc-200 hover:bg-white/15"
+                            ? "bg-primary text-[#0b1220] font-semibold shadow-[0_6px_16px_rgba(0,194,255,0.22)]"
+                            : "bg-card text-muted shadow-md hover:shadow-[0_8px_24px_rgba(77,203,255,0.15)]"
                     }`}
                 >
-                    Összes
+                    {t("cat.all")}
                 </Link>
                 {VIDEO_CATEGORIES.map((item) => (
                     <Link
@@ -22,11 +26,11 @@ export default function ArchiveCategoryFilter({ active }: { active?: string | nu
                         href={videoCategoryHref(item.value)}
                         className={`rounded-full px-3 py-1.5 text-sm ${
                             active === item.value
-                                ? "bg-accent text-black font-semibold"
-                                : "bg-white/10 text-zinc-200 hover:bg-white/15"
+                                ? "bg-primary text-[#0b1220] font-semibold shadow-[0_6px_16px_rgba(0,194,255,0.22)]"
+                                : "bg-card text-muted shadow-md hover:shadow-[0_8px_24px_rgba(77,203,255,0.15)]"
                         }`}
                     >
-                        {item.label}
+                        {t(`cat.${item.value}`)}
                     </Link>
                 ))}
             </div>

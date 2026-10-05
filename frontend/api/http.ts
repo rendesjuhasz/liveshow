@@ -57,7 +57,7 @@ const SKIP_CSRF_BOOTSTRAP = [
     "/auth/csrf",
 ];
 
-function csrfHeader(method: string) {
+function csrfHeader(method: string): Record<string, string> {
     const m = method.toUpperCase();
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(m)) return {};
     const csrf = getCsrfToken();
@@ -159,7 +159,7 @@ export async function apiFetch(path: string, options: RequestInit & Extra = {}) 
     let url = path.startsWith("http") ? path : `${apiBase()}${path}`;
     const locale =
         typeof window !== "undefined"
-            ? window.localStorage.getItem("liveshow_locale") || "hu"
+            ? document.documentElement.lang || window.localStorage.getItem("liveshow_locale") || "hu"
             : "hu";
     if (!url.startsWith("http") || url.includes("/api")) {
         const hasLang = url.includes("lang=");

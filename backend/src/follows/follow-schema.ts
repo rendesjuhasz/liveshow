@@ -4,6 +4,8 @@ export const FOLLOW_NOTIFY = {
     newShow: "follow_new_show",
     reminder24h: "follow_reminder_24h",
     reminder1h: "follow_reminder_1h",
+    reminder2h: "follow_reminder_2h",
+    reminder30m: "follow_reminder_30m",
     goingLive: "follow_going_live",
 } as const;
 

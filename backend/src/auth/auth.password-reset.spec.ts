@@ -20,7 +20,10 @@ describe("AuthService password reset", () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        service = new AuthService(jwt as any, prisma as any, mail as any, campaigns as any);
+        service = new AuthService(jwt as any, prisma as any, mail as any, campaigns as any, {
+            assignCode: jest.fn(),
+            attachFromCode: jest.fn(),
+        } as any);
     });
 
     it("does not reveal missing emails", async () => {
@@ -39,7 +42,7 @@ describe("AuthService password reset", () => {
         prisma.$executeRaw.mockResolvedValue(1);
         const res = await service.forgotPassword("van@example.com");
         expect(res.message).toBe(FORGOT_PASSWORD_MESSAGE);
-        expect(mail.passwordReset).toHaveBeenCalledWith("van@example.com", expect.any(String));
+        expect(mail.passwordReset).toHaveBeenCalledWith("van@example.com", expect.any(String), "hu");
     });
 
     it("rejects an invalid token", async () => {

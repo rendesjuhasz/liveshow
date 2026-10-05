@@ -1,4 +1,4 @@
-export const UI_VERSION = "v1" as const;
+export const UI_VERSION = "v2" as const;
 
 export type UiVersion = typeof UI_VERSION;
 

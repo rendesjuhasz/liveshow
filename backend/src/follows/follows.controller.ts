@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
-import { FollowsService, type NotifyPrefs } from "./follows.service";
+import { FollowsService } from "./follows.service";
+import { NotifyPrefsDto } from "../dto/bodies";
 
 @Controller()
 export class FollowsController {
@@ -26,7 +27,7 @@ export class FollowsController {
 
     @Patch("notifications/prefs")
     @UseGuards(JwtAuthGuard)
-    setPrefs(@Req() req: { user: { id: string } }, @Body() body: Partial<NotifyPrefs>) {
+    setPrefs(@Req() req: { user: { id: string } }, @Body() body: NotifyPrefsDto) {
         return this.follows.setPrefs(req.user.id, body);
     }
 

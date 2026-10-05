@@ -80,9 +80,15 @@ export async function ensurePrivateSchema(prisma: PrismaService) {
             "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     `);
-    await prisma.$executeRawUnsafe(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "PrivateOffer_request_streamer" ON "PrivateOffer"("requestId", "streamerId")`,
-    ).catch(() => undefined);
+            await prisma.$executeRawUnsafe(
+                `CREATE UNIQUE INDEX IF NOT EXISTS "PrivateOffer_request_streamer" ON "PrivateOffer"("requestId", "streamerId")`,
+            ).catch(() => undefined);
+            await prisma.$executeRawUnsafe(
+                `CREATE UNIQUE INDEX IF NOT EXISTS "PrivateRequest_ticketId_key" ON "PrivateRequest" ("ticketId") WHERE "ticketId" IS NOT NULL`,
+            ).catch(() => undefined);
+            await prisma.$executeRawUnsafe(
+                `CREATE UNIQUE INDEX IF NOT EXISTS "PrivateRequest_showId_key" ON "PrivateRequest" ("showId") WHERE "showId" IS NOT NULL`,
+            ).catch(() => undefined);
 
     const count = await prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(*)::int AS n FROM "PrivatePriceBand"`;
     if (!count[0]?.n) {
@@ -101,11 +107,8 @@ export function newId() {
 }
 
 export async function privateShowIds(prisma: PrismaService) {
-    await prisma.$executeRawUnsafe(
-        `ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "isPrivate" BOOLEAN NOT NULL DEFAULT false`,
-    ).catch(() => undefined);
     const flagged = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "Show" WHERE COALESCE("isPrivate", false) = true
+        SELECT id FROM "Show" WHERE "isPrivate" = true
     `.catch(() => [] as { id: string }[]);
     const linked = await prisma.$queryRaw<{ showId: string }[]>`
         SELECT DISTINCT "showId" FROM "PrivateRequest" WHERE "showId" IS NOT NULL

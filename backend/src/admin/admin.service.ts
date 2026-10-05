@@ -256,6 +256,7 @@ export class AdminService {
                 SELECT COALESCE(SUM("ticketsSpent"), 0)::int AS tickets,
                        COALESCE(SUM(CASE WHEN COALESCE("isGift", false) THEN 0 ELSE "calculatedAmount" END), 0)::int AS amount
                 FROM "TicketSpend"
+                WHERE COALESCE(reason, '') NOT IN ('refunded', 'question_hold')
             `.catch(() => [{ tickets: 0, amount: 0 }])
         )[0] || { tickets: 0, amount: 0 };
 
@@ -270,6 +271,7 @@ export class AdminService {
             FROM "TicketSpend" sp
             JOIN "Show" s ON s.id = sp."showId"
             LEFT JOIN "Streamer" st ON st.id = s."streamerId"
+            WHERE COALESCE(sp.reason, '') NOT IN ('refunded', 'question_hold')
             GROUP BY s.id, s.title, st.name
             ORDER BY tickets DESC, gross DESC
             LIMIT 10
@@ -282,6 +284,7 @@ export class AdminService {
                    COUNT(DISTINCT s.id)::int AS shows
             FROM "Streamer" st
             LEFT JOIN "TicketSpend" sp ON sp."streamerId" = st.id
+              AND COALESCE(sp.reason, '') NOT IN ('refunded', 'question_hold')
             LEFT JOIN "Show" s ON s."streamerId" = st.id
             GROUP BY st.id, st.name, st.status
             ORDER BY gross DESC, tickets DESC

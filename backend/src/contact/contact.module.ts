@@ -8,5 +8,6 @@ import { ContactService } from "./contact.service";
     imports: [PrismaModule, AdminGuardModule],
     controllers: [ContactController],
     providers: [ContactService],
+    exports: [ContactService],
 })
 export class ContactModule {}

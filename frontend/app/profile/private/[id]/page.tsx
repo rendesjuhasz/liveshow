@@ -33,7 +33,7 @@ export default function PrivateRequestDetailPage() {
             window.location.href = pay.checkoutUrl;
             return true;
         }
-        if (pay?.ticketId) {
+        if (process.env.NODE_ENV !== "production" && pay?.ticketId) {
             try {
                 await apiFetch("/payments/confirm-dev", {
                     method: "POST",
@@ -144,7 +144,7 @@ export default function PrivateRequestDetailPage() {
             )}
 
             <h2 className="mt-8 mb-4 text-xl font-bold">Ajánlatok</h2>
-            {!row.offers?.length && <p className="text-zinc-500">Még nincs jelentkező streamer.</p>}
+            {!row.offers?.length && <p className="text-zinc-500">Még nincs jelentkező tartalomkészítő.</p>}
             <div className="space-y-4">
                 {(row.offers || []).map((offer: any) => (
                     <article key={offer.id} className="rounded-2xl border border-white/10 bg-zinc-950 p-4">

@@ -8,6 +8,8 @@ export function ticketStatusLabelHu(status?: string | null) {
             return "Sikertelen fizetés";
         case "cancelled":
             return "Megszakítva";
+        case "refunded":
+            return "Visszatérítve";
         case "active":
             return "Aktív jegy";
         case "used":

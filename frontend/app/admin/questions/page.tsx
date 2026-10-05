@@ -41,7 +41,7 @@ export default function AdminQuestionsPage() {
     useEffect(() => {
         if (!gate.ok || !showId) return;
         loadQueue(showId).catch((err: any) => setError(err.message || "Betöltési hiba."));
-        const t = setInterval(() => loadQueue(showId).catch(() => undefined), 5000);
+        const t = setInterval(() => loadQueue(showId).catch(() => undefined), 12_000);
         return () => clearInterval(t);
     }, [gate.ok, showId]);
 
@@ -71,7 +71,7 @@ export default function AdminQuestionsPage() {
                 <h1 className="text-3xl font-bold mb-2">Kérdésmoderálás</h1>
                 <p className="text-gray-400 mb-6">
                     A rangsort a rendszer számolja. Moderátor csak tiltott tartalmat utasíthat el.
-                    A teljesítést a streamer gombja végzi. Kérdezők: {queue?.askerCount ?? 0} /{" "}
+                    A teljesítést a tartalomkészítő gombja végzi. Kérdezők: {queue?.askerCount ?? 0} /{" "}
                     {queue?.maxAskers ?? 10}
                 </p>
                 {error && <p className="text-red-400 mb-4">{error}</p>}

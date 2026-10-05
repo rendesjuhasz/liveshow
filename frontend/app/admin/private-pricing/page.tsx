@@ -29,7 +29,7 @@ export default function AdminPrivatePricingPage() {
                 </a>
                 <h1 className="mt-4 mb-2 text-3xl font-bold">Privát stream ársávok</h1>
                 <p className="mb-6 text-gray-400">
-                    A streamer értékelése (1–5 csillag) alapján csak ebben a sávban adhat ajánlatot.
+                    A tartalomkészítő értékelése (1–5 csillag) alapján csak ebben a sávban adhat ajánlatot.
                     Az új ajánlatokra azonnal érvényes.
                 </p>
                 <form

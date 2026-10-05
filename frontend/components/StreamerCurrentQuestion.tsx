@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/api/http";
+import ReportButton from "@/components/ReportButton";
 
 export default function StreamerCurrentQuestion({
     shows,
@@ -32,7 +33,7 @@ export default function StreamerCurrentQuestion({
     useEffect(() => {
         if (!showId) return;
         load().catch((err: any) => setError(err.message || "Nem sikerült betölteni a kérdést."));
-        const t = setInterval(() => load().catch(() => undefined), 3000);
+        const t = setInterval(() => load().catch(() => undefined), 8000);
         return () => clearInterval(t);
     }, [showId]);
 
@@ -123,7 +124,7 @@ export default function StreamerCurrentQuestion({
                                 onClick={() => act("/streamer/questions/next")}
                                 className="rounded-xl bg-emerald-600 px-5 py-3 font-bold disabled:opacity-50"
                             >
-                                Következő kérdés
+                                Megválaszoltam, következő
                             </button>
                             <button
                                 type="button"
@@ -135,8 +136,13 @@ export default function StreamerCurrentQuestion({
                             </button>
                         </div>
                         <p className="mt-3 text-xs text-neutral-500">
-                            Következő kérdés: teljesült + jegylevonás. Elutasítás: nincs jegylevonás.
+                            A zöld gomb: a kérdés teljesült, jegy levonódik, jön a következő. Elutasítás: nincs jegylevonás.
                         </p>
+                        {current.ids?.[0] && (
+                            <div className="mt-3">
+                                <ReportButton targetType="question" targetId={current.ids[0]} />
+                            </div>
+                        )}
                     </>
                 ) : (
                     <p className="text-neutral-400">Jelenleg nincs függőben lévő kérdés.</p>
@@ -150,7 +156,17 @@ export default function StreamerCurrentQuestion({
                     {support.length === 0 && <li className="text-neutral-500">Nincs visszajelzés.</li>}
                     {support.map((row) => (
                         <li key={row.id} className="rounded-lg bg-neutral-900/80 p-3">
-                            <span className="text-xs uppercase text-neutral-500">{row.kind}</span>
+                            <span className="text-xs uppercase text-neutral-500">
+                                {row.kind === "support"
+                                    ? "Támogatás (1 jegy)"
+                                    : row.kind === "thanks"
+                                      ? "Köszönet"
+                                      : row.kind === "feedback"
+                                        ? "Visszajelzés"
+                                        : row.kind === "opinion"
+                                          ? "Vélemény"
+                                          : row.kind}
+                            </span>
                             <p className="mt-1">{row.text || "—"}</p>
                             <p className="mt-1 text-xs text-neutral-500">{row.author}</p>
                         </li>

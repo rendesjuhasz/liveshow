@@ -1,0 +1,1 @@
+ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "publicLinks" JSONB;

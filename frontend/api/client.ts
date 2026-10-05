@@ -1,1 +1,1 @@
-export { API_URL, api, apiFetch } from "./http";
+export { API_URL, api, apiFetch, publicAssetUrl } from "./http";

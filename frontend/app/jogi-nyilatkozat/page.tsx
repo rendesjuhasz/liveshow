@@ -12,7 +12,7 @@ export default function JogiNyilatkozatPage() {
 
             <h2>1. Tartalom és harmadik felek</h2>
             <p>
-                A streamerek, nézők és külső oldalak által közzétett szöveg, kép, hang és
+                A tartalomkészítők, nézők és külső oldalak által közzétett szöveg, kép, hang és
                 videó nem feltétlenül a Platform álláspontját tükrözi. Külső hivatkozásokért
                 és fizetési szolgáltatók oldalaiért nem vállalunk felelősséget.
             </p>
@@ -33,7 +33,7 @@ export default function JogiNyilatkozatPage() {
 
             <h2>4. Elérhetőség</h2>
             <p>
-                Karbantartás, túlterhelés, hálózati hiba vagy a streamer oldali kimaradás
+                Karbantartás, túlterhelés, hálózati hiba vagy a tartalomkészítő oldali kimaradás
                 miatt az élő adás vagy az archívum ideiglenesen nem érhető el. Ez önmagában
                 nem jelent díj-visszatérítési kötelezettséget, kivéve ha azt az ÁSZF vagy
                 kötelező jogszabály előírja.

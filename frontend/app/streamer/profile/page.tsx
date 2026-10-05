@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, apiUpload, API_URL } from "@/api/http";
+import { apiFetch, apiUpload, publicAssetUrl } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import { STREAMER_CATEGORIES } from "@/lib/streamer-categories";
@@ -94,6 +94,7 @@ export default function StreamerProfilePage() {
     const [contactEmail, setContactEmail] = useState("");
     const [avatarUrl, setAvatarUrl] = useState("");
     const [file, setFile] = useState<File | null>(null);
+    const [publicLinks, setPublicLinks] = useState<{ label: string; url: string }[]>([]);
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
 
@@ -108,6 +109,16 @@ export default function StreamerProfilePage() {
                 setCategory(s.category || "egyeb");
                 setContactEmail(s.contactEmail || "");
                 setAvatarUrl(s.avatarUrl || "");
+                const rows = Array.isArray(s.publicLinks) ? s.publicLinks : [];
+                setPublicLinks(
+                    rows
+                        .map((row: any) => ({
+                            label: String(row?.label || ""),
+                            url: String(row?.url || ""),
+                        }))
+                        .filter((row: { label: string; url: string }) => row.label || row.url)
+                        .slice(0, 5),
+                );
             })
             .catch((err: any) => setError(err.message || "Nem sikerült betölteni a profilt."));
     }, [gate.ok]);
@@ -126,10 +137,14 @@ export default function StreamerProfilePage() {
         form.append("bio", bio);
         form.append("category", category);
         form.append("contactEmail", contactEmail);
+        form.append("publicLinks", JSON.stringify(publicLinks.filter((row) => row.label.trim() || row.url.trim())));
         if (file) form.append("avatar", file);
         try {
             const updated = await apiUpload("/streamer/profile", form, "PATCH");
             setAvatarUrl(updated.avatarUrl || avatarUrl);
+            if (Array.isArray(updated.publicLinks)) {
+                setPublicLinks(updated.publicLinks);
+            }
             await refreshUser().catch(() => undefined);
             setMessage("A profil mentve.");
         } catch (err: any) {
@@ -138,13 +153,13 @@ export default function StreamerProfilePage() {
     }
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">A streamer felülethez jóváhagyott fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">A tartalomkészítő felülethez jóváhagyott fiók kell.</p>;
 
     return (
         <StreamerShell title="Profil szerkesztés">
             <form onSubmit={submit} className="max-w-xl grid gap-4 bg-neutral-900 p-6 rounded-2xl">
                 {avatarUrl && (
-                    <img src={`${API_URL}${avatarUrl}`} alt="" className="w-20 h-20 rounded-full object-cover" />
+                    <img src={publicAssetUrl(avatarUrl)} alt="" className="w-20 h-20 rounded-full object-cover" />
                 )}
                 <label className="grid gap-1">
                     Teljes név
@@ -155,6 +170,55 @@ export default function StreamerProfilePage() {
                     <textarea className="p-3 rounded text-black min-h-24" value={bio} onChange={(e) => setBio(e.target.value)} />
                 </label>
                 <ContactLeakHint warning={contactLeakWarning(bio)} />
+                <div className="grid gap-2">
+                    <p className="font-semibold">Nyilvános linkek</p>
+                    <p className="text-xs text-neutral-500">
+                        Legfeljebb 5 https-link. A nézők csak az archív videó alatt látják. Élő adásban, chatben
+                        és kérdésnél nem jelennek meg. Discord-meghívó (discord.gg / discord.com/invite) engedélyezett.
+                    </p>
+                    {publicLinks.map((row, index) => (
+                        <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+                            <input
+                                className="p-3 rounded text-black"
+                                placeholder="Címke (pl. Instagram)"
+                                value={row.label}
+                                maxLength={40}
+                                onChange={(e) => {
+                                    const next = [...publicLinks];
+                                    next[index] = { ...next[index], label: e.target.value };
+                                    setPublicLinks(next);
+                                }}
+                            />
+                            <input
+                                className="p-3 rounded text-black"
+                                placeholder="https://"
+                                value={row.url}
+                                maxLength={500}
+                                onChange={(e) => {
+                                    const next = [...publicLinks];
+                                    next[index] = { ...next[index], url: e.target.value };
+                                    setPublicLinks(next);
+                                }}
+                            />
+                            <button
+                                type="button"
+                                className="rounded-xl bg-neutral-800 px-3 py-2 text-sm"
+                                onClick={() => setPublicLinks(publicLinks.filter((_, i) => i !== index))}
+                            >
+                                Törlés
+                            </button>
+                        </div>
+                    ))}
+                    {publicLinks.length < 5 && (
+                        <button
+                            type="button"
+                            className="justify-self-start rounded-xl bg-neutral-800 px-3 py-2 text-sm"
+                            onClick={() => setPublicLinks([...publicLinks, { label: "", url: "" }])}
+                        >
+                            Link hozzáadása
+                        </button>
+                    )}
+                </div>
                 <label className="grid gap-1">
                     Kategória
                     <select className="p-3 rounded text-black" value={category} onChange={(e) => setCategory(e.target.value)}>

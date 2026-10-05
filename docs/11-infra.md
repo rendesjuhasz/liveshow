@@ -1,10 +1,12 @@
 # 11. Infrastrukturális dokumentáció
 
-**Jelenlegi állapot:** a repóban **nincs** éles VPS inventory, Nginx fájl, SSL tanúsítvány vagy backup script. A fejlesztés helyi gépen fut (`localhost:3000` + `127.0.0.1:3200`). Ez a dokumentum (1) a mai tényt rögzíti, (2) kitöltendő éles sablont ad, (3) ajánlott Nginx / backup / log elrendezést.
+**Jelenlegi állapot:** nincs kitöltött éles inventory, nincs Let's Encrypt tanúsítvány a gitben. Nginx sablon: [deploy/nginx/](../deploy/nginx/). Fejlesztés: `localhost:3000` + `127.0.0.1:3200`. Élesítés után töltsd ki [ops-inventory.md](./ops-inventory.md) (IP, domain, SSH).
 
 Élesítés után **ezt a fájlt kell aktualizálni** (IP, domain, SSH, PM2 nevek).
 
 ---
+
+Éles inventory sablon (DNS, SSL, `BACKUP_DIR`, uptime URL-ek, `ADMIN_EMAIL`): [ops-inventory.md](./ops-inventory.md). Töltsd ki azt a fájlt, vagy az alábbit — üres mező = nem launch-ready.
 
 ## 11.1 VPS / szerver adatok (kitöltendő)
 
@@ -15,7 +17,7 @@
 | Nyilvános IPv4 | | UDP ingest (RTP) ide megy, nem az Nginx HTTP-n |
 | IPv6 | | |
 | OS | ajánlott Ubuntu 22.04/24.04 LTS | FFmpeg + Node 20 |
-| vCPU / RAM / disk | élő HLS-hez min. 2 vCPU, 4 GB RAM, SSD | szegmensek + archív MP4 |
+| vCPU / RAM / disk | élő HLS-hez min. 2 vCPU, 4 GB RAM, SSD | P0 után ~45–60 néző / 2 vCPU; lásd [scalability-p0.md](./scalability-p0.md) |
 | SSH user | | kulcsos belépés, ne root jelszó |
 | App könyvtár | `_/var/www/liveshow_` | `git pull` ide |
 | Node process | PM2: `liveshow-api`, `liveshow-web` | lásd [14-deploy.md](./14-deploy.md) |
@@ -60,118 +62,41 @@ DNS: A rekord a VPS IP-re. Barion / Stripe return URL-ek HTTPS-re.
 
 ## 11.3 Reverse proxy és SSL
 
-Ajánlott: **Nginx** + **Let's Encrypt** (`certbot --nginx`).
+Éles fájlok (egy VPS):
 
-- HTTP 80 → redirect 443
-- TLS 1.2+
-- `client_max_body_size` avatarhoz legalább `8m`
-- WebSocket: Socket.IO a Nest porton (`Upgrade` headerek) — ha a UI az API hostot hívja WS-re
-- HLS: **ne** cache-eld agresszívan a `index.m3u8`-at (`Cache-Control` a backend már `no-store`)
+- Nginx: [deploy/nginx/liveshow.conf](../deploy/nginx/liveshow.conf) + bootstrap [liveshow-http-bootstrap.conf](../deploy/nginx/liveshow-http-bootstrap.conf)
+- Lépések, Certbot, megújítás: [ssl-setup.md](./ssl-setup.md)
 
-UDP RTP **nem** megy HTTP reverse proxyn. Az encoder a VPS `:rtpPort` UDP-jére küld.
+Röviden:
+
+- HTTP 80 → ACME + redirect 443
+- TLS 1.2 / 1.3; egy cert: apex + `www` + `api`
+- `client_max_body_size 2048m` (VOD `vod-multer` 2 GB; a feltöltés a **www** host `/api` rewrite-ján megy)
+- HLS `/output/`: `proxy_buffering off`; `index.m3u8` no-store
+- WebSocket: `Upgrade` / `$connection_upgrade` az API hoston
+- UDP RTP **nem** megy Nginxen
 
 ---
 
-## 11.4 Nginx példa
+## 11.4 Nginx + Certbot
 
-```nginx
-# /etc/nginx/sites-available/liveshow
-# Cseréld: pelda.hu, api.pelda.hu
-
-upstream liveshow_web {
-    server 127.0.0.1:3000;
-    keepalive 8;
-}
-
-upstream liveshow_api {
-    server 127.0.0.1:3200;
-    keepalive 8;
-}
-
-server {
-    listen 80;
-    server_name pelda.hu www.pelda.hu;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name pelda.hu www.pelda.hu;
-
-    ssl_certificate     /etc/letsencrypt/live/pelda.hu/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/pelda.hu/privkey.pem;
-
-    client_max_body_size 8m;
-
-    location / {
-        proxy_pass http://liveshow_web;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-
-server {
-    listen 80;
-    server_name api.pelda.hu;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name api.pelda.hu;
-
-    ssl_certificate     /etc/letsencrypt/live/api.pelda.hu/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.pelda.hu/privkey.pem;
-
-    client_max_body_size 8m;
-
-    # HLS playlist: ne cache
-    location ~* /output/.+/index\.m3u8$ {
-        proxy_pass http://liveshow_api;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_buffering off;
-        add_header Cache-Control "no-cache, no-store, must-revalidate";
-    }
-
-    location / {
-        proxy_pass http://liveshow_api;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 60s;
-    }
-}
-```
-
-Certbot a `ssl_certificate` sorokat felülírhatja. `nginx -t && systemctl reload nginx`.
+Ne másold ide a konfigot. Használd a `deploy/nginx/` fájlokat és a [ssl-setup.md](./ssl-setup.md) parancsokat (`sed YOUR_DOMAIN`, `certbot certonly --webroot`, deploy hook `reload nginx`).
 
 ---
 
 ## 11.5 Backup stratégia
 
-Nincs automatikus backup a kódban. Minimum élesben:
+A backend indulás után automatikusan ment (alapból 15 mp, majd 24 óránként) a `backend/backups/` mappába (gitignore). Admin felület: `/admin/backups`.
 
-| Mit | Gyakoriság | Hol |
-|-----|------------|-----|
-| PostgreSQL `pg_dump -Fc` | naponta + a kifizetés/jegy hétvégén extra | offsite (S3 / másik gép) |
-| `backend/output/` (HLS + `archive.mp4`) | archív után azonnal; élő szegmens opcionális | object storage — **nagy** |
-| `backend/uploads/` (avatar) | naponta | ugyanaz |
-| `backend/.env` | titkosított másolat, **nem** git | password manager |
-| Prisma migrációk | git | a kód a forrás |
+| Mit | Hol a snapshotban |
+|-----|-------------------|
+| PostgreSQL | `database/postgres.dump` (`pg_dump`), vagy táblánkénti `database/*.json` ha nincs `pg_dump` |
+| Média | `media/uploads`, `media/output` (archív / felvétel; élő `.ts` nélkül) |
+| Konfig | `config/backend.env`, `schema.prisma`, `platform-config.json`, `runtime-env.json` |
 
-Visszaállítás sorrend: Postgres dump → `prisma migrate deploy` (ha a dump régi séma) → fájlok (`output`, `uploads`) → PM2 restart. Teszteld a restore-t évente egyszer.
+Env: `BACKUP_ENABLED` (default true), `BACKUP_INTERVAL_HOURS` (24), `BACKUP_KEEP_DAYS` (7), `BACKUP_DIR`, `BACKUP_STARTUP_DELAY_MS`.
+
+Élesben a `BACKUP_DIR` legyen külön lemez **és** S3-kompatibilis offsite ([backup-offsite.md](./backup-offsite.md): AWS / Backblaze B2 / Wasabi). Fájlellenőrzés: `verify.json`; feltöltés után HeadObject méret. Admin: `/admin/backups`.
 
 `hls_flags delete_segments`: az élő ablak **rövid**; az archívum **csak** ha lefutott a generate (recording vagy playlist → `archive.mp4`). Ne hidd, hogy a HLS mappa = teljes adás.
 

@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { AdminGuard } from "../admin/admin.guard";
 import { ReferralService } from "./referral.service";
+import { ReferralSettingsDto } from "../dto/bodies";
 
 @Controller("admin/referrals")
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
 export class ReferralAdminController {
     constructor(private readonly referrals: ReferralService) {}
 
@@ -30,13 +32,7 @@ export class ReferralAdminController {
 
     @Patch("settings")
     updateSettings(
-        @Body()
-        body: {
-            enabled?: boolean;
-            minimumPurchasedTickets?: number;
-            rewardTicketAmount?: number;
-            allowMultipleFromReferrer?: boolean;
-        },
+        @Body() body: ReferralSettingsDto,
     ) {
         return this.referrals.updateSettings(body);
     }

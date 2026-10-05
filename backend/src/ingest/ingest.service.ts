@@ -1,25 +1,27 @@
 import { ConflictException, Injectable, OnModuleDestroy } from "@nestjs/common";
 import { ChildProcess, execFile, spawn } from "child_process";
 import { PrismaService } from "../prisma/prisma.service";
-import { LiveViewTracker } from "../stats/live-view-tracker";
+import { ViewLogService } from "../stats/view-log.service";
 import { FollowNotifyService } from "../follows/follow-notify.service";
 import {
     ensureStreamOutputDir,
     getFfmpegPidFile,
-    getHlsPlaylistFile,
     getHlsPublicPath,
     getRecordingFile,
     sanitizeStreamId,
 } from "../streaming/hls-paths";
+import { applyIngestProcessPriority, buildIngestFfmpegArgs, rtmpListenPort } from "./ingest-ffmpeg";
+import { parseFfmpegProgress, type EncoderHealth } from "../alerts/ffmpeg-progress";
 import * as fs from "fs";
 
 @Injectable()
 export class IngestService implements OnModuleDestroy {
     private ffmpegByStream = new Map<string, ChildProcess>();
+    private encoderHealth = new Map<string, EncoderHealth>();
 
     constructor(
         private readonly prisma: PrismaService,
-        private readonly liveViews: LiveViewTracker,
+        private readonly views: ViewLogService,
         private readonly followNotify: FollowNotifyService,
     ) {}
 
@@ -29,7 +31,17 @@ export class IngestService implements OnModuleDestroy {
         }
     }
 
-    async startIngest(streamId: string, rtpPort: number) {
+    listActiveStreamIds() {
+        return [...this.ffmpegByStream.entries()]
+            .filter(([, child]) => this.processAlive(child))
+            .map(([id]) => id);
+    }
+
+    getEncoderHealth(streamId: string): EncoderHealth | null {
+        return this.encoderHealth.get(sanitizeStreamId(streamId)) || null;
+    }
+
+    async startIngest(streamId: string, _rtpPort?: number) {
         const safeStreamId = sanitizeStreamId(streamId);
 
         if (this.ffmpegByStream.has(safeStreamId) && this.processAlive(this.ffmpegByStream.get(safeStreamId))) {
@@ -38,73 +50,65 @@ export class IngestService implements OnModuleDestroy {
         this.ffmpegByStream.delete(safeStreamId);
         await this.killPidFile(safeStreamId);
 
-        ensureStreamOutputDir(safeStreamId);
-        const hlsFile = getHlsPlaylistFile(safeStreamId);
+        const outDir = ensureStreamOutputDir(safeStreamId);
         const recordingFile = getRecordingFile(safeStreamId);
+        const rtmpPort = rtmpListenPort();
 
-        const ffmpeg = spawn("ffmpeg", [
-            "-hide_banner",
-            "-loglevel",
-            "warning",
-            "-i",
-            `udp://0.0.0.0:${rtpPort}`,
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-tune",
-            "zerolatency",
-            "-c:a",
-            "aac",
-            "-f",
-            "hls",
-            "-hls_time",
-            "2",
-            "-hls_list_size",
-            "6",
-            "-hls_flags",
-            "delete_segments",
-            hlsFile,
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-c:a",
-            "aac",
-            "-f",
-            "mp4",
-            "-movflags",
-            "+frag_keyframe+empty_moov+default_base_moof",
-            recordingFile,
-        ]);
+        const ffmpeg = spawn(
+            "ffmpeg",
+            buildIngestFfmpegArgs({
+                streamId: safeStreamId,
+                playlistFile: "index.m3u8",
+                recordingFile: "recording.mp4",
+            }),
+            { cwd: outDir, windowsHide: true },
+        );
+        applyIngestProcessPriority(ffmpeg);
 
         this.ffmpegByStream.set(safeStreamId, ffmpeg);
         this.writePidFile(safeStreamId, ffmpeg.pid);
 
         ffmpeg.stderr.on("data", (data) => {
-            console.log(`FFmpeg ingest: ${data}`);
+            const text = String(data);
+            console.log(`FFmpeg ingest: ${text}`);
+            const parsed = parseFfmpegProgress(text);
+            const prev = this.encoderHealth.get(safeStreamId) || { updatedAt: Date.now() };
+            this.encoderHealth.set(safeStreamId, {
+                ...prev,
+                ...parsed,
+                dropped: parsed.dropped ?? prev.dropped,
+                fps: parsed.fps ?? prev.fps,
+                bitrateKbps: parsed.bitrateKbps ?? prev.bitrateKbps,
+                speed: parsed.speed ?? prev.speed,
+                stall: parsed.stall || prev.stall,
+                updatedAt: Date.now(),
+            });
         });
 
         ffmpeg.on("close", () => {
             if (this.ffmpegByStream.get(safeStreamId) !== ffmpeg) return;
             this.ffmpegByStream.delete(safeStreamId);
+            this.encoderHealth.delete(safeStreamId);
             this.clearPidFile(safeStreamId);
             void this.markNotLive(safeStreamId);
         });
 
         ffmpeg.on("error", (err) => {
             console.error("FFmpeg ingest error:", err.message);
+            void this.logStartError(safeStreamId, err.message || "FFmpeg ingest error");
             if (this.ffmpegByStream.get(safeStreamId) !== ffmpeg) return;
             this.ffmpegByStream.delete(safeStreamId);
+            this.encoderHealth.delete(safeStreamId);
             this.clearPidFile(safeStreamId);
             void this.markNotLive(safeStreamId);
         });
 
         if (this.ffmpegByStream.get(safeStreamId) !== ffmpeg) {
+            void this.logStartError(safeStreamId, "Az ingest a folyamat indítása közben megszakadt.");
             return {
                 status: "ingest_aborted",
                 streamId: safeStreamId,
-                rtpPort,
+                rtpPort: rtmpPort,
                 hls: getHlsPublicPath(safeStreamId),
                 recording: recordingFile,
                 streamDbId: null,
@@ -124,15 +128,18 @@ export class IngestService implements OnModuleDestroy {
                 showId: show?.id,
                 isLive: true,
                 hlsPath: getHlsPublicPath(safeStreamId),
-                rtpPort,
+                rtpPort: rtmpPort,
             },
             update: {
                 isLive: true,
                 hlsPath: getHlsPublicPath(safeStreamId),
-                rtpPort,
+                rtpPort: rtmpPort,
                 showId: show?.id || undefined,
             },
         });
+        await this.prisma.$executeRaw`
+            UPDATE "Stream" SET "liveStartedAt" = NOW() WHERE "streamKey" = ${safeStreamId}
+        `.catch(() => undefined);
 
         if (show && this.ffmpegByStream.get(safeStreamId) === ffmpeg) {
             await this.prisma.show.update({
@@ -145,7 +152,7 @@ export class IngestService implements OnModuleDestroy {
         return {
             status: "ingest_started",
             streamId: safeStreamId,
-            rtpPort,
+            rtpPort: rtmpPort,
             hls: getHlsPublicPath(safeStreamId),
             recording: recordingFile,
             streamDbId: streamRow.id,
@@ -157,6 +164,7 @@ export class IngestService implements OnModuleDestroy {
         const safeStreamId = sanitizeStreamId(streamId);
         const child = this.ffmpegByStream.get(safeStreamId);
         this.ffmpegByStream.delete(safeStreamId);
+        this.encoderHealth.delete(safeStreamId);
         await this.markNotLive(safeStreamId);
 
         if (child) {
@@ -192,10 +200,24 @@ export class IngestService implements OnModuleDestroy {
             where: { streamKey: safeStreamId },
             data: { isLive: false },
         });
-        for (const show of shows) {
-            this.liveViews.clearStream(safeStreamId, show.id);
-        }
-        this.liveViews.clearStream(safeStreamId);
+        this.views.releaseLive(safeStreamId);
+    }
+
+    private logStartError(streamId: string, message: string) {
+        void this.prisma.show
+            .findFirst({
+                where: { streamId },
+                select: { id: true },
+            })
+            .then((show) =>
+                this.views.logStreamError({
+                    streamId,
+                    showId: show?.id,
+                    message,
+                    source: "ingest",
+                }),
+            )
+            .catch(() => undefined);
     }
 
     private processAlive(child?: ChildProcess) {

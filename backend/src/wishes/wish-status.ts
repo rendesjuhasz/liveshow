@@ -23,7 +23,7 @@ export const WISH_XP_REWARD = 50;
 export const OTLETGAZDA_BADGE = {
     key: "otletgazda",
     title: "Ötletgazda",
-    description: "A streamer megvalósította az általad beküldött kívánságot.",
+    description: "A tartalomkészítő megvalósította az általad beküldött kívánságot.",
 };
 
 export function publicAuthorName(user?: { name?: string | null } | string | null) {

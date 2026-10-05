@@ -1,8 +1,11 @@
-import { Controller, Get, Headers, Param, Query, Req, UseGuards } from "@nestjs/common";
+import { Controller, Get, Headers, Param, Query, Req, Res, UseGuards } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { ArchiveService } from "./archive.service";
 import { OptionalJwtAuthGuard } from "../auth/jwt-auth.guard";
 import { TokenService } from "../security/token/token.service";
 import type { ArchiveSort } from "../stats/view-log.service";
+import { HLS_COOKIE, isHttpsRequest } from "../security/http-guard";
+import { clientKey } from "../security/rate-limit";
 
 function parseArchiveSort(raw?: string): ArchiveSort {
     const value = String(raw || "newest").toLowerCase();
@@ -47,25 +50,31 @@ export class PublicArchivesController {
     @UseGuards(OptionalJwtAuthGuard)
     async preview(
         @Param("showId") showId: string,
-        @Req() req: { user?: { id?: string } },
+        @Req() req: Request & { user?: { id?: string } },
+        @Res({ passthrough: true }) res: Response,
     ) {
         const source = await this.archiveService.previewSource(showId);
         const signed = this.tokens.generateStreamToken(
             source.streamId,
             90,
             req.user?.id || "archive-preview",
+            clientKey(req),
         );
-        const params = new URLSearchParams({
-            token: signed.token,
-            expiresAt: String(signed.expiresAt),
-            userId: signed.userId,
+        res.cookie(HLS_COOKIE, this.tokens.encodeCookie(signed), {
+            httpOnly: true,
+            secure: isHttpsRequest(req),
+            sameSite: "lax",
+            path: "/",
+            maxAge: 90_000,
         });
         return {
             showId: source.showId,
             streamId: source.streamId,
             hasTeaser: source.hasTeaser,
             clipSeconds: 12,
-            url: `${source.publicPath}?${params.toString()}`,
+            url: source.publicPath,
+            expiresAt: signed.expiresAt,
+            cookie: true,
         };
     }
 

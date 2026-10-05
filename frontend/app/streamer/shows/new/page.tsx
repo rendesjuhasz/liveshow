@@ -6,13 +6,22 @@ import { apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import VideoCategorySelect from "@/components/VideoCategorySelect";
+import EventScheduleFields from "@/components/EventScheduleFields";
+import { detectBrowserTimeZone } from "@/lib/timezone";
+import {
+    defaultUpcomingStartLocal,
+    normalizeDatetimeLocal,
+    showScheduleClientError,
+} from "@/lib/datetime-local";
 
 export default function StreamerNewShowPage() {
     const gate = useStreamerGate();
     const router = useRouter();
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [startTime, setStartTime] = useState("");
+    const [timezone, setTimezone] = useState(detectBrowserTimeZone);
+    const [startTime, setStartTime] = useState(() => defaultUpcomingStartLocal(detectBrowserTimeZone()));
+    const [endTime, setEndTime] = useState("");
     const [streamId, setStreamId] = useState("");
     const [videoCategory, setVideoCategory] = useState("");
     const [error, setError] = useState("");
@@ -20,15 +29,30 @@ export default function StreamerNewShowPage() {
 
     async function submit(e: React.FormEvent) {
         e.preventDefault();
+        const startLocal = normalizeDatetimeLocal(startTime);
+        const endLocal = normalizeDatetimeLocal(endTime) || undefined;
+        const clientError = showScheduleClientError({
+            title,
+            videoCategory,
+            startLocal,
+            endLocal,
+            timezone,
+        });
+        if (clientError) {
+            setError(clientError);
+            return;
+        }
         setError("");
         setBusy(true);
         try {
             await apiFetch("/streamer/shows", {
                 method: "POST",
                 body: JSON.stringify({
-                    title,
+                    title: title.trim(),
                     description,
-                    startTime: startTime ? new Date(startTime).toISOString() : "",
+                    startLocal,
+                    endLocal,
+                    timezone,
                     streamId,
                     videoCategory,
                 }),
@@ -42,62 +66,72 @@ export default function StreamerNewShowPage() {
     }
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">A streamer felülethez jóváhagyott fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">A tartalomkészítő felülethez jóváhagyott fiók kell.</p>;
 
     return (
         <StreamerShell title="Új műsor létrehozása">
-            <form onSubmit={submit} className="max-w-xl grid gap-4 bg-neutral-900 p-6 rounded-2xl">
+            <form
+                noValidate
+                onSubmit={submit}
+                className="relative max-w-xl grid gap-4 rounded-2xl bg-neutral-900 p-6"
+            >
                 <p className="text-sm text-neutral-400">
                     A műsor a létrehozás után megjelenik a nézői oldalon a Hamarosan
-                    eseményeknél. Ehhez jövőbeli kezdési időpont kell.
+                    eseményeknél. Ehhez jövőbeli kezdési időpont kell — az űrlap 2 órával
+                    későbbre van előre kitöltve, ezt átírhatod.
                 </p>
                 <label className="grid gap-1">
                     Cím
                     <input
-                        className="p-3 rounded text-black"
+                        className="min-h-12 rounded-xl p-3 text-base text-black"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
-                        required
                     />
                 </label>
                 <label className="grid gap-1">
                     Kategória
-                    <VideoCategorySelect value={videoCategory} onChange={setVideoCategory} />
+                    <VideoCategorySelect value={videoCategory} onChange={setVideoCategory} required={false} />
                 </label>
                 <label className="grid gap-1">
                     Leírás
                     <textarea
-                        className="p-3 rounded text-black min-h-24"
+                        className="min-h-24 rounded-xl p-3 text-base text-black"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                     />
                 </label>
-                <label className="grid gap-1">
-                    Kezdés
-                    <input
-                        className="p-3 rounded text-black"
-                        type="datetime-local"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        required
-                    />
-                </label>
+                <EventScheduleFields
+                    startLocal={startTime}
+                    endLocal={endTime}
+                    timezone={timezone}
+                    onStartLocal={setStartTime}
+                    onEndLocal={setEndTime}
+                    onTimezone={setTimezone}
+                    requiredStart={false}
+                />
                 <label className="grid gap-1">
                     Stream ID (opcionális)
                     <input
-                        className="p-3 rounded text-black"
+                        className="min-h-12 rounded-xl p-3 text-base text-black"
                         value={streamId}
                         onChange={(e) => setStreamId(e.target.value)}
                         placeholder="üresen automatikus"
                     />
                 </label>
-                {error && <p className="text-red-400">{error}</p>}
-                <button
-                    disabled={busy}
-                    className="bg-yellow-500 text-black font-bold p-3 rounded-xl disabled:opacity-50"
-                >
-                {busy ? "Mentés..." : "Műsor közzététele"}
-                </button>
+                {error && (
+                    <p className="rounded-xl bg-red-950/70 p-3 text-sm text-red-300" role="alert">
+                        {error}
+                    </p>
+                )}
+                <div className="sticky bottom-0 -mx-6 mt-2 border-t border-neutral-800 bg-neutral-900 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                    <button
+                        type="submit"
+                        disabled={busy}
+                        className="min-h-14 w-full rounded-xl bg-yellow-500 p-3 text-base font-bold text-black disabled:opacity-50"
+                    >
+                        {busy ? "Mentés..." : "Műsor közzététele"}
+                    </button>
+                </div>
             </form>
         </StreamerShell>
     );

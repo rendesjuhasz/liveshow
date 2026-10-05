@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { StreamerApprovedGuard } from "../streamers/streamer-approved.guard";
 import { assertRateLimit, clientKey } from "../security/rate-limit";
 import { WishesService } from "./wishes.service";
+import { WishCreateDto } from "../dto/bodies";
 
 type StreamerReq = {
     user: { id: string };
@@ -28,13 +30,13 @@ export class WishesController {
     }
 
     @Post("wishes")
-    @UseGuards(JwtAuthGuard)
-    create(
+    @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
+    async create(
         @Req() req: { user: { id: string }; ip?: string; headers?: Record<string, unknown>; socket?: { remoteAddress?: string } },
-        @Body() body: { text?: string; visibility?: string },
+        @Body() body: WishCreateDto,
     ) {
-        assertRateLimit(`wish:${req.user.id}`, 8, 15 * 60_000);
-        assertRateLimit(`wish-ip:${clientKey(req)}`, 12, 15 * 60_000);
+        await assertRateLimit(`wish:${req.user.id}`, 8, 15 * 60_000);
+        await assertRateLimit(`wish-ip:${clientKey(req)}`, 12, 15 * 60_000);
         return this.wishes.create(req.user.id, body?.text, body?.visibility);
     }
 

@@ -208,7 +208,7 @@ function LiveViewer({ showId }: LiveViewerProps) {
                         showId={showId}
                         ownShow={ownShow}
                         live={showLive}
-                        canAsk={Boolean(access?.questions) && !ownShow && showLive}
+                        canAsk={!ownShow && showLive}
                     />
                     <LiveChat showId={showId} live={showLive} />
                     {!showLive && !ownShow && (

@@ -15,7 +15,7 @@ export default function AdatkezelesPage() {
             <ul>
                 <li>Regisztrációs adatok: e-mail, jelszó (titkosítva), szerepkör</li>
                 <li>
-                    Streamer profil: név, bemutatkozás, kategória, kapcsolattartási e-mail,
+                    Tartalomkészítő profil: név, bemutatkozás, kategória, kapcsolattartási e-mail,
                     profilkép, ÁSZF-elfogadás időpontja, jóváhagyási státusz
                 </li>
                 <li>Jegy- és fizetési adatok: műsor, jegykategória, státusz, fizetési azonosítók</li>
@@ -40,7 +40,7 @@ export default function AdatkezelesPage() {
             <h2>3. Címzettek</h2>
             <p>
                 Az adatokat a Platform üzemeltetője, a megbízott tárhely- és fizetési
-                szolgáltatók, valamint — a saját műsorukhoz szükséges körben — a streamerek
+                szolgáltatók, valamint — a saját műsorukhoz szükséges körben — a tartalomkészítők
                 (például jóváhagyott kérdések) kezelhetik. Hatóságnak csak jogszabály alapján
                 adunk át adatot.
             </p>

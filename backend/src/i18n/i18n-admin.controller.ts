@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EmailVerifiedGuard } from "../auth/email-verified.guard";
 import { AdminGuard } from "../admin/admin.guard";
 import { I18nService } from "./i18n.service";
+import { I18nContentDto, LanguageCreateDto, LanguageDto, MediaTrackDto, TranslationDto, TranslationKeyDto } from "../dto/bodies";
 
 @Controller("admin/i18n")
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminGuard)
 export class I18nAdminController {
     constructor(private readonly i18n: I18nService) {}
 
@@ -41,31 +43,30 @@ export class I18nAdminController {
     @Post("translations")
     save(
         @Req() req: { user: { id: string } },
-        @Body() body: { key: string; locale: string; value: string; status?: string },
+        @Body() body: TranslationDto,
     ) {
         return this.i18n.setUiTranslation({ ...body, userId: req.user.id });
     }
 
     @Post("translations/approve")
-    approve(@Req() req: { user: { id: string } }, @Body() body: { key: string; locale: string }) {
+    approve(@Req() req: { user: { id: string } }, @Body() body: TranslationKeyDto) {
         return this.i18n.approve(body.key, body.locale, req.user.id);
     }
 
     @Post("content")
     content(
-        @Body()
-        body: { entityType: string; entityId: string; field: string; locale: string; value: string },
+        @Body() body: I18nContentDto,
     ) {
         return this.i18n.setContent(body);
     }
 
     @Post("languages")
-    addLanguage(@Body() body: { code: string; name: string; nativeName?: string; enabled?: boolean }) {
+    addLanguage(@Body() body: LanguageCreateDto) {
         return this.i18n.upsertLanguage(body);
     }
 
     @Patch("languages/:code")
-    toggle(@Param("code") code: string, @Body() body: { enabled?: boolean; name?: string; nativeName?: string }) {
+    toggle(@Param("code") code: string, @Body() body: LanguageDto) {
         if (body.name) return this.i18n.upsertLanguage({ code, name: body.name, nativeName: body.nativeName, enabled: body.enabled });
         return this.i18n.setLanguageEnabled(code, body.enabled !== false);
     }
@@ -73,7 +74,7 @@ export class I18nAdminController {
     @Post("tracks/:showId")
     track(
         @Param("showId") showId: string,
-        @Body() body: { kind: string; locale: string; label: string; url: string; isDefault?: boolean },
+        @Body() body: MediaTrackDto,
     ) {
         return this.i18n.saveTrack(showId, body);
     }

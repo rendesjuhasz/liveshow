@@ -32,10 +32,11 @@ export type MediaItem = {
     ended?: boolean;
     featured?: boolean;
     price?: number;
-    streamer?: { id?: string; name?: string } | null;
+    streamer?: { id?: string; name?: string | null } | null;
     streamId?: string | null;
     streamUrl?: string | null;
     live?: boolean;
+    status?: string | null;
     videoCategory?: string | null;
     videoCategoryLabel?: string | null;
     exists?: boolean;

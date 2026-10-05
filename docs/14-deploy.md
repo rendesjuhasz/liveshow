@@ -1,6 +1,6 @@
 # 14. Deployment dokumentáció
 
-A repóban **nincs** GitHub Actions, Dockerfile vagy PM2 ecosystem fájl. Az alábbi a **ajánlott** Linux VPS menet, PM2-vel. Első élesítés: [11-infra.md](./11-infra.md) + [12-env.md](./12-env.md) + CORS/`API_URL` kódmódosítás.
+A repóban **nincs** GitHub Actions vagy Dockerfile. A PM2 fájl a gyökérben van: [`ecosystem.config.js`](../ecosystem.config.js). Monitoring: [MONITORING.md](../MONITORING.md).
 
 Fejlesztői gép: [05-telepites.md](./05-telepites.md), ne PM2.
 
@@ -14,7 +14,18 @@ Fejlesztői gép: [05-telepites.md](./05-telepites.md), ne PM2.
 
 PM2 `cwd` **kötelezően** a `backend` illetve `frontend` mappa (`output/` a backend cwd-től függ).
 
-Példa `ecosystem.config.cjs` (még nincs a gitben — hozd létre a szerveren):
+Repo gyökérből:
+
+```bash
+mkdir -p logs
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup
+```
+
+A config: egy API instance (`fork`, ingest nem cluster-safe), API `max_memory_restart: 1024M`, web `512M`, logok `logs/api-*.log` és `logs/web-*.log`. P0 ingest/HLS: [scalability-p0.md](./scalability-p0.md).
+
+Régebbi abszolút `cwd` példa (ha a deploy path más):
 
 ```js
 module.exports = {
@@ -43,12 +54,15 @@ module.exports = {
 
 ## 14.2 Első telepítés
 
+Egy VPS. Sorrend: DNS → app localhoston → HTTP Nginx → Certbot → HTTPS Nginx → HTTPS env + frontend rebuild.
+
 ```bash
 sudo mkdir -p /var/www/liveshow
 sudo chown "$USER":"$USER" /var/www/liveshow
 cd /var/www/liveshow
 git clone <REPO_URL> .
-# backend/.env létrehozása (12-env.md)
+# backend/.env: DATABASE_URL, JWT_SECRET, NODE_ENV=production, SMTP, FRONTEND_URL/BACKEND_URL
+#   (HTTPS URL-eket a cert után véglegesítsd — lásd ssl-setup.md §7)
 
 cd backend
 npm ci
@@ -57,15 +71,45 @@ npx prisma migrate deploy
 npm run build
 cd ../frontend
 npm ci
+# első build lehet localhost API-val; HTTPS után kötelező újra:
+# NEXT_PUBLIC_API_URL=https://api.YOUR_DOMAIN npm run build
 npm run build
 
 cd /var/www/liveshow
-pm2 start ecosystem.config.cjs
+mkdir -p logs
+pm2 start ecosystem.config.js
 pm2 save
 pm2 startup
 ```
 
-Nginx + certbot: [11-infra.md](./11-infra.md).
+Ezután **pontosan** [ssl-setup.md](./ssl-setup.md):
+
+1. DNS A rekordok: apex, `www`, `api`, `live` → VPS IP  
+2. `sudo bash deploy/livekit/ufw-livekit.sh` (80/443 TCP; UDP 50000–50050 + TURN; 3000/3200/7880 zárva)  
+3. Bootstrap: `deploy/nginx/liveshow-http-bootstrap.conf`  
+4. `certbot … -d YOUR_DOMAIN -d www.YOUR_DOMAIN -d api.YOUR_DOMAIN -d live.YOUR_DOMAIN`  
+5. Production: `deploy/nginx/liveshow.conf`  
+6. LiveKit: [19-livekit.md](./19-livekit.md) (`install.sh` + Nest `LIVE_VIDEO_BACKEND=livekit`)  
+7. Renew hook: `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`  
+8. `FRONTEND_URL` / `BACKEND_URL` + `NEXT_PUBLIC_API_URL=https://api.YOUR_DOMAIN` és frontend `npm run build` + `pm2 restart`
+
+Ellenőrzés: `curl -sS https://api.YOUR_DOMAIN/health/uptime` és a nyilvános site 200.
+
+Nginx + Let's Encrypt: [ssl-setup.md](./ssl-setup.md) (fájlok: `deploy/nginx/`).
+
+Éles env a TLS után (kötelező):
+
+```bash
+# backend/.env
+FRONTEND_URL=https://YOUR_DOMAIN
+BACKEND_URL=https://api.YOUR_DOMAIN
+
+# frontend build (HLS URL beégetés)
+cd /var/www/liveshow/frontend
+NEXT_PUBLIC_API_URL=https://api.YOUR_DOMAIN npm run build
+```
+
+PM2 parancs a repóban: `pm2 start ecosystem.config.js` (nem `.cjs`).
 
 ---
 
@@ -86,7 +130,7 @@ npm run build
 
 cd ../frontend
 npm ci
-npm run build
+NEXT_PUBLIC_API_URL=https://api.YOUR_DOMAIN npm run build
 
 pm2 restart liveshow-api liveshow-web
 pm2 status

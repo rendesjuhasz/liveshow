@@ -1,4 +1,5 @@
-import { Controller, Get, Headers, Param, Query } from "@nestjs/common";
+import { Controller, Get, Headers, Param, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { ShowsService } from "./shows.service";
 
 @Controller("shows")
@@ -55,6 +56,14 @@ export class ShowsController {
     @Get(":id/tracks")
     tracks(@Param("id") id: string) {
         return this.showsService.listTracks(id);
+    }
+
+    @Get(":id/calendar.ics")
+    async calendar(@Param("id") id: string, @Res() res: Response) {
+        const { ics, filename } = await this.showsService.calendarIcs(id);
+        res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.send(ics);
     }
 
     @Get(":id")

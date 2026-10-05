@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { streamerCategoryLabel } from "@/lib/streamer-categories";
 import { streamerStatusLabel, userAccountStatusLabel } from "@/lib/streamer-status";
@@ -18,7 +18,7 @@ export default function AdminStreamerProfilePage() {
     function load() {
         apiFetch(`/admin/streamers/${id}`)
             .then(setData)
-            .catch((err: any) => setError(err.message || "A streamer profil nem tölthető be."));
+            .catch((err: any) => setError(err.message || "A tartalomkészítő profil nem tölthető be."));
     }
 
     useEffect(() => {
@@ -42,11 +42,11 @@ export default function AdminStreamerProfilePage() {
     return (
         <div className="min-h-dvh bg-gray-900 text-white p-4 md:p-8">
             <div className="max-w-4xl mx-auto">
-                <h1 className="text-3xl font-bold mb-2">Streamer profil</h1>
+                <h1 className="text-3xl font-bold mb-2">Tartalomkészítő profil</h1>
                 {error && <p className="text-red-400 mb-4">{error}</p>}
                 <div className="bg-gray-800 p-6 rounded-xl mb-6 flex gap-4">
                     {data.avatarUrl && (
-                        <img src={`${API_URL}${data.avatarUrl}`} alt="" className="w-20 h-20 rounded-full object-cover" />
+                        <img src={publicAssetUrl(data.avatarUrl)} alt="" className="w-20 h-20 rounded-full object-cover" />
                     )}
                     <div>
                         <p className="text-xl font-semibold">{data.name}</p>
@@ -108,7 +108,8 @@ export default function AdminStreamerProfilePage() {
                     {data.ticketGroups ? (
                         <>
                             <p className="text-sm text-gray-400 mb-3">
-                                Összes elköltött jegy: {data.ticketGroups.totalTicketsSpent} · jóváírás:{" "}
+                                Fizetett jegy: {data.ticketGroups.paidTicketsSpent ?? data.ticketGroups.totalTicketsSpent} ·
+                                ajándékjegy: {data.ticketGroups.giftTicketsSpent ?? 0} · jóváírás:{" "}
                                 {data.ticketGroups.totalCredited} Ft
                             </p>
                             <ul className="space-y-2 text-sm">
@@ -137,7 +138,7 @@ export default function AdminStreamerProfilePage() {
                 </section>
 
                 <Link href="/admin/streamers" className="text-blue-400">
-                    ← Vissza a streamerekhez
+                    ← Vissza a tartalomkészítőkhöz
                 </Link>
             </div>
         </div>

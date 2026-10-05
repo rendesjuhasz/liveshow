@@ -15,7 +15,7 @@ Forrás: `backend/src/auth/roles.ts`, guardok: `JwtAuthGuard`, `AdminGuard`, `Mo
 | `moderator` | kérdések, értékelések, banned words |
 | `admin` | minden admin API |
 
-**Bootstrap:** ha az email `admin@admin.com`, a user **admin**, a role mezőtől függetlenül (`isAdminRole`).
+**Bootstrap:** az email egyezik a `BOOTSTRAP_ADMIN_EMAIL` értékkel → **admin** (`isAdminRole`), a role mezőtől függetlenül. Fejlesztésben a default `admin@admin.com`. Élesen a változó kötelező, és `admin@admin.com` tiltott.
 
 **Moderator:** `isModeratorRole` = admin **vagy** `role === moderator`. Tehát az admin mindent moderálhat.
 
@@ -58,7 +58,7 @@ Admin: approve / reject / ban / activate (`activate` = approved).
 | Moderátor | `ModeratorGuard` — admin vagy moderator |
 | Streamer dashboard | JWT + approved Streamer rekord (userId vagy email egyezés) |
 | Opcionális JWT | `OptionalJwtAuthGuard` (értékelés lista) |
-| HLS | nem user JWT, hanem `TokenService` query token |
+| HLS | nem user JWT, hanem `TokenService` + HttpOnly `ls_hls` (rövid TTL, IP-kötött); query fallback másodlagos |
 | Ingest start | admin |
 | Barion webhook | nincs JWT |
 | Kapcsolat POST | nincs JWT |

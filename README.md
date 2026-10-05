@@ -6,4 +6,6 @@ A rendszer **monolit**, nincsenek külön mikroszolgáltatások. Részletes, át
 
 **[docs/README.md](./docs/README.md)** — 16 dokumentum: architektúra, API, adatbázis, modulok, telepítés, kódstílus, jogosultságok, értesítések, kifizetés, belépő, infra, env, **streaming**, deploy, biztonság, roadmap.
 
-Gyors start: [docs/05-telepites.md](./docs/05-telepites.md) és [docs/10-fejlesztoi-utmutato.md](./docs/10-fejlesztoi-utmutato.md). Élő adás átvétele: [docs/13-streaming.md](./docs/13-streaming.md).
+**Fejlesztés és tesztelés (teljes útmutató):** [docs/17-fejlesztes-es-teszteles.md](./docs/17-fejlesztes-es-teszteles.md)
+
+Telepítés: [docs/05-telepites.md](./docs/05-telepites.md). Élő adás: [docs/13-streaming.md](./docs/13-streaming.md).

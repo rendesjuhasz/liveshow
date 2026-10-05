@@ -3,12 +3,27 @@ import { findOffPlatformContact, OFF_PLATFORM_CONTACT_MESSAGE } from "../securit
 const DEFAULT_BANNED = [
     "kurva",
     "fasz",
+    "faszfej",
     "buzi",
     "geci",
+    "picsa",
+    "köcsög",
+    "kocsog",
+    "anyad",
+    "anyád",
     "piszka",
+    "nigger",
+    "retard",
+    "hülye",
+    "hulye",
+    "idiot",
     "viagra",
+    "onlyfans",
     "crypto giveaway",
     "ingyen bitcoin",
+    "free nitro",
+    "airdrop",
+    "csaladbarat cam",
 ];
 
 const URL_RE = /(https?:\/\/|www\.|bit\.ly\/|t\.me\/|discord\.gg\/)/i;
@@ -16,10 +31,13 @@ const REPEAT_RE = /(.)\1{6,}/;
 const REPEAT_WORD_RE = /(\b\w{2,}\b)(?:\s+\1){4,}/i;
 
 export const MAX_ASKERS = 10;
-export const FLOOD_MS = 20_000;
+export const FLOOD_MS = 5_000;
 export const MAX_PENDING_PER_USER = 2;
 export const MIN_QUESTION_LEN = 8;
 export const MAX_QUESTION_LEN = 400;
+export const MIN_CHAT_LEN = 1;
+export const MAX_CHAT_LEN = 280;
+export const CHAT_FLOOD_MS = 3_000;
 
 export function normalizeQuestionText(text: string) {
     return text
@@ -84,6 +102,29 @@ export function spamReason(text: string): string | null {
     const unique = new Set(normalizeQuestionText(trimmed).split(" "));
     if (unique.size <= 2 && trimmed.split(/\s+/).length >= 8) {
         return "Spamszerű, ismételt szavak.";
+    }
+    return null;
+}
+
+export function chatSpamReason(text: string): string | null {
+    const trimmed = text.trim();
+    if (trimmed.length < MIN_CHAT_LEN) {
+        return "Üres üzenet.";
+    }
+    if (trimmed.length > MAX_CHAT_LEN) {
+        return "Az üzenet túl hosszú.";
+    }
+    if (findOffPlatformContact(trimmed) || URL_RE.test(trimmed)) {
+        return findOffPlatformContact(trimmed)
+            ? OFF_PLATFORM_CONTACT_MESSAGE
+            : "Linket nem lehet chatbe írni.";
+    }
+    if (REPEAT_RE.test(trimmed) || REPEAT_WORD_RE.test(trimmed)) {
+        return "Ismétlődő, spamszerű szöveg.";
+    }
+    const letters = trimmed.replace(/[^A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű]/g, "");
+    if (letters.length >= 16 && letters === letters.toUpperCase()) {
+        return "Csak nagybetűs szöveg nem engedélyezett.";
     }
     return null;
 }

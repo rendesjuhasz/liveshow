@@ -7,12 +7,17 @@ coverage/
 uploads/
 generated/
 mail-outbox/
+logs/
+backups/
 *.log
 .env
 .env.*
 !.env.example
+.jwt-dev-secret
 .DS_Store
 *.pem
 *.tsbuildinfo
 .temp/
 .tmp/
+backend/output/
+frontend/certificates/

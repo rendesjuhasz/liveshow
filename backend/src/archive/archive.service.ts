@@ -1,6 +1,9 @@
 import {
     Injectable,
+    Logger,
     NotFoundException,
+    OnModuleDestroy,
+    OnModuleInit,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
@@ -16,7 +19,7 @@ import { idsByShowStatus, setShowStatus, withShowStatus, withShowStatuses } from
 import { PUBLIC_DETAIL_STATUSES, normalizeShowStatus } from "../shows/show-status";
 import { endedShowIdSet } from "../shows/show-ended";
 import { I18nService } from "../i18n/i18n.service";
-import * as fs from "fs";
+import { promises as fsp } from "fs";
 import {
     BACKUP_DAYS,
     backupRoot,
@@ -27,25 +30,67 @@ import {
 import * as path from "path";
 import { VIDEO_CATEGORIES, videoCategoryFields } from "../shows/video-categories";
 import {
-    ensureVideoCategoryColumn,
     parseOptionalVideoCategory,
     videoCategoryByShowIds,
 } from "../shows/video-category-db";
 import { ViewLogService, type ArchiveSort } from "../stats/view-log.service";
+import { fileSize, pathExists } from "../streaming/fs-async";
+import { CACHE_TTL, PublicTtlCache } from "../cache/public-cache.module";
+import { readStoredPublicLinks } from "../streamers/public-links";
+import { isApprovedStreamer } from "../streamers/status";
 
 @Injectable()
-export class ArchiveService {
+export class ArchiveService implements OnModuleInit, OnModuleDestroy {
+    private readonly logger = new Logger(ArchiveService.name);
+    private timer: ReturnType<typeof setInterval> | null = null;
+    private startup: ReturnType<typeof setTimeout> | null = null;
+    private backfillRunning = false;
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly ffmpeg: FfmpegPipeline,
         private readonly mail: MailService,
         private readonly i18n: I18nService,
         private readonly views: ViewLogService,
+        private readonly publicCache: PublicTtlCache,
     ) {}
+
+    onModuleInit() {
+        void this.prisma.$executeRawUnsafe(
+            `ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "archiveExists" BOOLEAN NOT NULL DEFAULT false`,
+        ).catch(() => undefined);
+        void this.prisma.$executeRawUnsafe(
+            `ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "archiveSize" INTEGER NOT NULL DEFAULT 0`,
+        ).catch(() => undefined);
+        void this.prisma.$executeRawUnsafe(
+            `ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "archiveDuration" INTEGER NOT NULL DEFAULT 0`,
+        ).catch(() => undefined);
+        void this.prisma.$executeRawUnsafe(
+            `ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "archiveCreatedAt" TIMESTAMP(3)`,
+        ).catch(() => undefined);
+        void this.prisma.$executeRawUnsafe(
+            `ALTER TABLE "Archive" ADD COLUMN IF NOT EXISTS duration INTEGER NOT NULL DEFAULT 0`,
+        ).catch(() => undefined);
+        void this.prisma
+            .$executeRawUnsafe(`ALTER TABLE "Streamer" ADD COLUMN IF NOT EXISTS "publicLinks" JSONB`)
+            .catch(() => undefined);
+        this.startup = setTimeout(() => {
+            void this.backfillStoppedArchives();
+        }, 15_000);
+        this.timer = setInterval(() => {
+            void this.backfillStoppedArchives();
+        }, 60_000);
+    }
+
+    onModuleDestroy() {
+        if (this.timer) clearInterval(this.timer);
+        if (this.startup) clearTimeout(this.startup);
+    }
 
     private async resolveStreamId(showId: string) {
         const show = await this.prisma.show.findUnique({
             where: { id: showId },
+            include: { archives: true },
         });
 
         if (!show) {
@@ -62,30 +107,120 @@ export class ArchiveService {
         return { show, streamId };
     }
 
-    private async syncPrismaArchive(showId: string, streamId: string) {
-        const info = this.ffmpeg.getArchiveInfo(streamId);
-        if (!info.exists) {
+    private bustCatalogCache() {
+        this.publicCache.deletePrefix("archives:");
+        this.publicCache.deletePrefix("home:");
+        this.publicCache.deletePrefix("shows:");
+    }
+
+    private metaFromShow(
+        show: {
+            archiveExists?: boolean | null;
+            archiveSize?: number | null;
+            archiveDuration?: number | null;
+            archiveCreatedAt?: Date | string | null;
+            archives?: { filePath?: string | null; publicPath?: string | null; size?: number | null; duration?: number | null; createdAt?: Date | string | null } | null;
+        },
+        streamId: string,
+    ) {
+        const exists = Boolean(show.archiveExists);
+        const created = show.archiveCreatedAt || show.archives?.createdAt || null;
+        return {
+            exists,
+            streamId,
+            filePath: exists ? show.archives?.filePath || getArchiveFile(streamId) : null,
+            publicPath: exists
+                ? show.archives?.publicPath || getArchivePublicPath(streamId)
+                : getArchivePublicPath(streamId),
+            size: Number(show.archiveSize || show.archives?.size || 0),
+            duration: Number(show.archiveDuration || show.archives?.duration || 0),
+            createdAt: created ? new Date(created).toISOString() : null,
+        };
+    }
+
+    private async persistArchiveMeta(
+        showId: string,
+        streamId: string,
+        info: {
+            exists: boolean;
+            filePath?: string | null;
+            publicPath?: string | null;
+            size?: number;
+            createdAt?: string | null;
+        },
+        duration = 0,
+    ) {
+        const exists = Boolean(info.exists);
+        const size = exists ? Math.min(Math.max(0, Number(info.size) || 0), 2_147_483_647) : 0;
+        const seconds = exists ? Math.max(0, Number(duration) || 0) : 0;
+        const createdAt = exists
+            ? info.createdAt
+                ? new Date(info.createdAt)
+                : new Date()
+            : null;
+        await this.prisma.$executeRaw`
+            UPDATE "Show"
+            SET "archiveExists" = ${exists},
+                "archiveSize" = ${size},
+                "archiveDuration" = ${seconds},
+                "archiveCreatedAt" = ${createdAt}
+            WHERE id = ${showId}
+        `.catch(() => undefined);
+
+        if (!exists) {
             await this.prisma.archive.deleteMany({ where: { showId } });
-            return info;
+            this.bustCatalogCache();
+            return {
+                exists: false,
+                streamId,
+                filePath: null,
+                publicPath: getArchivePublicPath(streamId),
+                size: 0,
+                duration: 0,
+                createdAt: null,
+            };
         }
 
+        const filePath = info.filePath || getArchiveFile(streamId);
+        const publicPath = info.publicPath || getArchivePublicPath(streamId);
         await this.prisma.archive.upsert({
             where: { showId },
             create: {
                 showId,
-                filePath: info.filePath || getArchiveFile(streamId),
-                publicPath: info.publicPath || getArchivePublicPath(streamId),
-                size: info.size || 0,
+                filePath,
+                publicPath,
+                size,
             },
             update: {
-                filePath: info.filePath || getArchiveFile(streamId),
-                publicPath: info.publicPath || getArchivePublicPath(streamId),
-                size: info.size || 0,
+                filePath,
+                publicPath,
+                size,
             },
         });
+        await this.prisma.$executeRaw`
+            UPDATE "Archive" SET duration = ${seconds} WHERE "showId" = ${showId}
+        `.catch(() => undefined);
+        this.bustCatalogCache();
+        return {
+            exists: true,
+            streamId,
+            filePath,
+            publicPath,
+            size,
+            duration: seconds,
+            createdAt: createdAt?.toISOString() || null,
+        };
+    }
+
+    private async syncPrismaArchive(showId: string, streamId: string) {
+        const info = await this.ffmpeg.getArchiveInfo(streamId);
+        const duration =
+            info.exists && info.filePath ? await this.ffmpeg.probeDurationSeconds(info.filePath) : 0;
+        const meta = await this.persistArchiveMeta(showId, streamId, info, duration);
+        if (!info.exists) return meta;
 
         const recording = getRecordingFile(streamId);
-        if (fs.existsSync(recording)) {
+        if (await pathExists(recording)) {
             const stream = await this.prisma.stream.findFirst({
                 where: { OR: [{ showId }, { streamKey: streamId }] },
             });
@@ -100,7 +235,7 @@ export class ArchiveService {
             }
         }
 
-        return info;
+        return meta;
     }
 
     async ingestUploaded(showId: string, sourcePath: string) {
@@ -118,14 +253,21 @@ export class ArchiveService {
     }
 
     async listPublicArchives(lang = "hu", category?: string, sort: ArchiveSort = "newest") {
-        await this.backfillStoppedArchives();
-        await ensureVideoCategoryColumn(this.prisma);
+        const cat = String(category || "");
+        return this.publicCache.getOrSet(
+            `archives:${lang}:${cat}:${sort}`,
+            CACHE_TTL.archives,
+            () => this.loadPublicArchives(lang, category, sort),
+        );
+    }
+
+    private async loadPublicArchives(lang = "hu", category?: string, sort: ArchiveSort = "newest") {
         const wanted = parseOptionalVideoCategory(category);
         const publicIds = await idsByShowStatus(this.prisma, PUBLIC_DETAIL_STATUSES);
         if (!publicIds.length) return [];
         const dateOrder = sort === "oldest" ? "asc" : "desc";
         const shows = await this.prisma.show.findMany({
-            where: { id: { in: publicIds } },
+            where: { id: { in: publicIds }, archiveExists: true } as any,
             orderBy: { startTime: dateOrder },
             include: { archives: true, streamer: true },
         });
@@ -137,10 +279,8 @@ export class ArchiveService {
         let rows = tagged
             .filter((show) => endedIds.has(show.id) && !hidden.has(show.id))
             .map((show) => {
-                const streamId = show.streamId?.trim();
-                const disk = streamId ? this.ffmpeg.getArchiveInfo(streamId) : null;
-                const row = show.archives;
-                const exists = Boolean(disk?.exists || row);
+                const streamId = show.streamId?.trim() || "";
+                const meta = this.metaFromShow(show, streamId);
                 const topic = videoCategoryFields(catMap.get(show.id));
                 return {
                     showId: show.id,
@@ -150,16 +290,18 @@ export class ArchiveService {
                     image: show.image,
                     startTime: show.startTime,
                     streamId: streamId || null,
-                    publicPath: disk?.publicPath || row?.publicPath || null,
-                    size: disk?.size || row?.size || 0,
-                    createdAt: disk?.createdAt || row?.createdAt,
+                    publicPath: meta.publicPath,
+                    size: meta.size,
+                    duration: meta.duration,
+                    createdAt: meta.createdAt,
                     streamer: show.streamer?.name || null,
-                    exists,
+                    exists: meta.exists,
                     ended: true,
                     viewCount: 0,
                     ...topic,
                 };
             })
+            .filter((row) => row.exists)
             .filter((row) => !wanted || row.videoCategory === wanted);
         const ids = rows.map((r) => r.id);
         const counts = await this.views.countsByShowIds(ids);
@@ -184,12 +326,8 @@ export class ArchiveService {
             throw new NotFoundException("A műsor nem található.");
         }
         const teaserPath = getPreviewFile(streamId);
-        const hasTeaser = fs.existsSync(teaserPath) && fs.statSync(teaserPath).size >= 1024;
-        const archivePath = getArchiveFile(streamId);
-        const recording = getRecordingFile(streamId);
-        const hasFull =
-            (fs.existsSync(archivePath) && fs.statSync(archivePath).size >= 1024) ||
-            (fs.existsSync(recording) && fs.statSync(recording).size >= 1024);
+        const hasTeaser = (await fileSize(teaserPath)) >= 1024;
+        const hasFull = Boolean((show as { archiveExists?: boolean }).archiveExists);
         if (!hasTeaser && !hasFull) {
             throw new NotFoundException("Ehhez a műsorhoz még nincs visszanézhető felvétel.");
         }
@@ -218,13 +356,27 @@ export class ArchiveService {
         ) {
             throw new NotFoundException("A műsor nem található.");
         }
-        const info = await this.syncPrismaArchive(show.id, streamId);
+        const info = this.metaFromShow(show, streamId);
         const [localized] = await this.i18n.localizeShows(
             [{ id: show.id, title: show.title, description: show.description }],
             opts?.lang || "hu",
         );
         const catMap = await videoCategoryByShowIds(this.prisma, [show.id]);
         const viewCount = await this.views.viewCount(show.id);
+        let creatorLinks: { name: string; links: { label: string; url: string }[] } | null = null;
+        if (show.streamerId) {
+            const owner = await this.prisma.streamer.findUnique({
+                where: { id: show.streamerId },
+            });
+            if (owner && isApprovedStreamer(owner.status)) {
+                const links = readStoredPublicLinks(
+                    (owner as { publicLinks?: unknown }).publicLinks,
+                );
+                if (links.length) {
+                    creatorLinks = { name: owner.name, links };
+                }
+            }
+        }
         return {
             showId: show.id,
             title: localized.title,
@@ -232,6 +384,7 @@ export class ArchiveService {
             image: show.image,
             startTime: show.startTime,
             streamer: undefined,
+            creatorLinks,
             viewCount,
             ...videoCategoryFields(catMap.get(show.id)),
             ...info,
@@ -239,6 +392,24 @@ export class ArchiveService {
     }
 
     async generateArchive(showId: string) {
+        try {
+            return await this.generateArchiveUnsafe(showId);
+        } catch (err: any) {
+            const message = String(err?.message || "Az archívum nem készült el.");
+            if (!message.includes("Nincs rögzített videó")) {
+                const show = await this.prisma.show.findUnique({ where: { id: showId } }).catch(() => null);
+                void this.views.logStreamError({
+                    showId,
+                    streamId: show?.streamId,
+                    message,
+                    source: "archive",
+                });
+            }
+            throw err;
+        }
+    }
+
+    private async generateArchiveUnsafe(showId: string) {
         const { show, streamId } = await this.resolveStreamId(showId);
         const filePath = await this.ffmpeg.generateArchive(streamId);
         const info = await this.syncPrismaArchive(show.id, streamId);
@@ -247,10 +418,10 @@ export class ArchiveService {
             const reqs = await this.prisma.$queryRaw<any[]>`
                 SELECT id FROM "PrivateRequest" WHERE "showId" = ${show.id} LIMIT 1
             `.catch(() => []);
-            if (reqs[0] && fs.existsSync(filePath)) {
+            if (reqs[0] && (await pathExists(filePath))) {
                 ensureBackupDir();
                 const dest = path.join(backupRoot(), `${reqs[0].id}.mp4`);
-                fs.copyFileSync(filePath, dest);
+                await fsp.copyFile(filePath, dest);
                 const expiresAt = new Date(Date.now() + BACKUP_DAYS * 24 * 3600_000);
                 const existing = await this.prisma.$queryRaw<any[]>`
                     SELECT id FROM "PrivateBackup" WHERE "requestId" = ${reqs[0].id} LIMIT 1
@@ -294,6 +465,9 @@ export class ArchiveService {
     }
 
     private async backfillStoppedArchives() {
+        if (this.backfillRunning) return;
+        this.backfillRunning = true;
+        try {
         const shows = await this.prisma.show.findMany({
             where: { live: false },
             select: { id: true, streamId: true },
@@ -302,26 +476,36 @@ export class ArchiveService {
         for (const show of shows) {
             const streamId = show.streamId?.trim();
             if (!streamId) continue;
-            const disk = this.ffmpeg.getArchiveInfo(streamId);
+            const disk = await this.ffmpeg.getArchiveInfo(streamId);
             if (disk.exists) {
                 await this.syncPrismaArchive(show.id, streamId);
                 await setShowStatus(this.prisma, show.id, "archived").catch(() => undefined);
                 continue;
             }
             const recording = getRecordingFile(streamId);
-            if (!fs.existsSync(recording) || fs.statSync(recording).size < 1024) continue;
+            if ((await fileSize(recording)) < 1024) continue;
             try {
                 await this.generateArchive(show.id);
             } catch {
                 /* recording may still be unreadable */
             }
         }
+        } catch (err: any) {
+            this.logger.warn(`Archívum backfill: ${err?.message || err}`);
+        } finally {
+            this.backfillRunning = false;
+        }
     }
 
     async deleteArchive(showId: string) {
         const { show, streamId } = await this.resolveStreamId(showId);
-        const info = this.ffmpeg.deleteArchive(streamId);
-        await this.prisma.archive.deleteMany({ where: { showId: show.id } });
+        await this.ffmpeg.deleteArchive(streamId);
+        const info = await this.persistArchiveMeta(
+            show.id,
+            streamId,
+            { exists: false, size: 0, filePath: null, publicPath: null, createdAt: null },
+            0,
+        );
         return {
             showId: show.id,
             title: show.title,

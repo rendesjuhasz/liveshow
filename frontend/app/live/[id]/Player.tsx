@@ -1,16 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { Socket } from "socket.io-client";
 import Hls from "hls.js";
 import {
     buildHlsPlaylistUrl,
     buildSignedHlsUrl,
+    getStreamToken,
     interpolateStreamId,
     isPlaceholderStreamId,
-    withStreamToken,
 } from "@/lib/getStreamToken";
 import { apiFetch } from "@/api/http";
 import { useT } from "@/lib/i18n/I18nProvider";
+import { getViewerKey } from "@/lib/viewer-key";
+import LiveWebRtcWatch from "@/components/LiveWebRtcWatch";
+import LiveKitWatch from "@/components/LiveKitWatch";
+import ViewerReactionBar from "@/components/ViewerReactionBar";
+import { fetchLiveVideoConfig, lockLiveVideoBackend, type LiveVideoBackend } from "@/lib/livekit-session";
 
 type MediaTrack = {
     id: string;
@@ -37,7 +43,54 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
     const [tracks, setTracks] = useState<MediaTrack[]>([]);
     const [subLocale, setSubLocale] = useState("off");
     const [audioIndex, setAudioIndex] = useState(0);
-    const [hlsAudio, setHlsAudio] = useState<{ name: string; lang?: string }[]>([]);
+    const [hlsAudio, setHlsAudio] = useState<{ name?: string; lang?: string }[]>([]);
+    const [webrtcLive, setWebrtcLive] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState("");
+    const [liveBackend, setLiveBackend] = useState<LiveVideoBackend | null>(null);
+    const webrtcLiveRef = useRef(false);
+    const liveSocketRef = useRef<Socket | null>(null);
+    const committedBackendRef = useRef<LiveVideoBackend | null>(null);
+
+    useEffect(() => {
+        committedBackendRef.current = null;
+        setLiveBackend(null);
+
+        if (purpose !== "live" || !showId) {
+            committedBackendRef.current = "mesh";
+            setLiveBackend("mesh");
+            return;
+        }
+
+        const id = showId;
+        let cancelled = false;
+        let timer = 0;
+        setLoading(true);
+        async function pull() {
+            try {
+                const cfg = await fetchLiveVideoConfig(id);
+                if (cancelled) return;
+                if (committedBackendRef.current) return;
+                const next = lockLiveVideoBackend(committedBackendRef.current, cfg.backend);
+                if (!next) {
+                    timer = window.setTimeout(pull, 1500);
+                    return;
+                }
+                if (committedBackendRef.current) return;
+                committedBackendRef.current = next;
+                setLiveBackend(next);
+            } catch {
+                if (cancelled || committedBackendRef.current) return;
+                timer = window.setTimeout(pull, 2000);
+            }
+        }
+        void pull();
+        return () => {
+            cancelled = true;
+            if (timer) window.clearTimeout(timer);
+            committedBackendRef.current = null;
+            setLiveBackend(null);
+        };
+    }, [purpose, showId]);
 
     useEffect(() => {
         if (!showId) return;
@@ -62,6 +115,7 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
+        const media = video;
 
         if (isPlaceholderStreamId(streamId)) {
             setError("Ehhez a műsorhoz nincs stream ID. Add meg adminban.");
@@ -72,39 +126,57 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
         let hls: Hls | null = null;
         let cancelled = false;
 
+        let refreshTimer: number | undefined;
         async function start() {
+            setHlsAudio([]);
+            setAudioIndex(0);
+            if (purpose === "live" && showId) {
+                media.removeAttribute("src");
+                return;
+            }
             const playlistUrl =
                 streamUrl && !isPlaceholderStreamId(streamUrl)
                     ? interpolateStreamId(streamUrl, streamId)
                     : buildHlsPlaylistUrl(streamId);
 
-            let signed;
-            try {
-                signed = await buildSignedHlsUrl(streamId, playlistUrl, showId, purpose);
-            } catch (err: any) {
-                setError(err.message || "Nem sikerült a HLS URL-t összeállítani.");
-                setLoading(false);
+            let signed: Awaited<ReturnType<typeof buildSignedHlsUrl>> | null = null;
+            for (let attempt = 0; attempt < 45 && !cancelled && !webrtcLiveRef.current; attempt += 1) {
+                try {
+                    signed = await buildSignedHlsUrl(streamId, playlistUrl, showId, purpose);
+                    const probe = await fetch(signed.url, { credentials: "include", method: "GET" });
+                    if (probe.ok) break;
+                    signed = null;
+                    if (probe.status === 403) {
+                        setLoading(false);
+                        return;
+                    }
+                } catch {
+                    signed = null;
+                }
+                await new Promise((r) => window.setTimeout(r, 2000));
+            }
+
+            if (cancelled || !media || webrtcLiveRef.current || !signed) {
+                if (!webrtcLiveRef.current) setLoading(false);
                 return;
             }
 
-            if (cancelled || !video) return;
+            refreshTimer = window.setInterval(() => {
+                getStreamToken(streamId, showId, purpose).catch(() => undefined);
+            }, 60_000);
 
-            if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                video.src = signed.url;
+            if (media.canPlayType("application/vnd.apple.mpegurl")) {
+                media.src = signed.url;
                 setLoading(false);
             } else if (Hls.isSupported()) {
                 hls = new Hls({
-                    xhrSetup(xhr, url) {
-                        xhr.open(
-                            "GET",
-                            withStreamToken(url, signed.token, signed.expiresAt, signed.userId),
-                            true,
-                        );
+                    xhrSetup(xhr) {
+                        xhr.withCredentials = true;
                     },
                 });
                 hlsRef.current = hls;
                 hls.loadSource(signed.url);
-                hls.attachMedia(video);
+                hls.attachMedia(media);
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     setLoading(false);
                     const list = hls?.audioTracks || [];
@@ -131,10 +203,13 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
 
         return () => {
             cancelled = true;
+            if (refreshTimer) window.clearInterval(refreshTimer);
             if (hls) hls.destroy();
             hlsRef.current = null;
-            video.removeAttribute("src");
-            video.load();
+            if (!webrtcLiveRef.current) {
+                media.removeAttribute("src");
+                media.load();
+            }
         };
     }, [streamId, streamUrl, showId, purpose, locale]);
 
@@ -149,7 +224,11 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
             try {
                 await apiFetch("/views/live", {
                     method: "POST",
-                    body: JSON.stringify({ showId, streamId }),
+                    body: JSON.stringify({
+                        showId,
+                        streamId,
+                        viewerKey: getViewerKey(),
+                    }),
                 });
             } catch {
                 /* a HLS playlist heartbeat a fő forrás */
@@ -169,26 +248,102 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
 
     return (
         <div>
-            {loading && <p>{t("common.loading")}</p>}
-            {error && <p style={{ color: "red" }}>{error}</p>}
-            <video
-                ref={videoRef}
-                controls
-                autoPlay
-                className="w-full aspect-video bg-black rounded-xl"
-                crossOrigin="anonymous"
-            >
-                {subs.map((tr) => (
-                    <track
-                        key={tr.id}
-                        kind="subtitles"
-                        srcLang={tr.locale}
-                        label={tr.label}
-                        src={tr.url}
-                        default={Boolean(tr.isDefault)}
+            {loading && !previewUrl && <p>{t("common.loading")}</p>}
+            {error && <p className="text-danger">{error}</p>}
+            {purpose === "live" && showId && liveBackend === "livekit" ? (
+                <LiveKitWatch
+                    showId={showId}
+                    videoRef={videoRef}
+                    onSocket={(sock) => {
+                        liveSocketRef.current = sock;
+                    }}
+                    onStalled={() => {
+                        webrtcLiveRef.current = false;
+                        setWebrtcLive(false);
+                    }}
+                    onReady={() => {
+                        webrtcLiveRef.current = true;
+                        setWebrtcLive(true);
+                        setLoading(false);
+                        setError("");
+                        hlsRef.current?.destroy();
+                        hlsRef.current = null;
+                    }}
+                    onError={(message) => {
+                        setError(message);
+                        setLoading(false);
+                    }}
+                />
+            ) : null}
+            {purpose === "live" && showId && liveBackend === "mesh" ? (
+                <LiveWebRtcWatch
+                    showId={showId}
+                    videoRef={videoRef}
+                    onSocket={(sock) => {
+                        liveSocketRef.current = sock;
+                    }}
+                    onPreview={(url) => {
+                        if (!url) return;
+                        setPreviewUrl(url);
+                        setLoading(false);
+                        setError("");
+                    }}
+                    onStalled={() => {
+                        webrtcLiveRef.current = false;
+                        setWebrtcLive(false);
+                    }}
+                    onReady={() => {
+                        webrtcLiveRef.current = true;
+                        setWebrtcLive(true);
+                        setLoading(false);
+                        setError("");
+                        hlsRef.current?.destroy();
+                        hlsRef.current = null;
+                    }}
+                />
+            ) : null}
+            <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+                <video
+                    ref={videoRef}
+                    controls={webrtcLive}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="absolute inset-0 h-full w-full bg-black"
+                >
+                    {subs.map((tr) => (
+                        <track
+                            key={tr.id}
+                            kind="subtitles"
+                            srcLang={tr.locale}
+                            label={tr.label}
+                            src={tr.url}
+                            default={Boolean(tr.isDefault)}
+                        />
+                    ))}
+                </video>
+                {previewUrl && !webrtcLive ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                        src={previewUrl}
+                        alt=""
+                        className="pointer-events-none absolute inset-0 z-10 h-full w-full object-contain"
                     />
-                ))}
-            </video>
+                ) : null}
+            </div>
+            {purpose === "live" && showId ? (
+                <ViewerReactionBar
+                    onReact={(emoji) => {
+                        liveSocketRef.current?.emit("live:reaction", {
+                            type: "reaction",
+                            reactionType: "emoji",
+                            value: emoji,
+                            streamId,
+                            showId,
+                        });
+                    }}
+                />
+            ) : null}
             {(subs.length > 0 || hlsAudio.length > 1 || extras.length > 0) && (
                 <div className="mt-3 flex flex-wrap gap-3 text-sm">
                     {subs.length > 0 && (

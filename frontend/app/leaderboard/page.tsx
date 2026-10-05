@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, API_URL } from "@/api/http";
+import { apiFetch, publicAssetUrl } from "@/api/http";
 import LocaleLink from "@/components/LocaleLink";
 import { useT } from "@/lib/i18n/I18nProvider";
 
@@ -47,7 +47,7 @@ export default function PublicLeaderboardPage() {
                             </span>
                             {row.avatarUrl ? (
                                 <img
-                                    src={`${API_URL}${row.avatarUrl}`}
+                                    src={publicAssetUrl(row.avatarUrl)}
                                     alt=""
                                     className="size-11 rounded-full object-cover"
                                 />

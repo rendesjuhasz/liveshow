@@ -6,11 +6,13 @@ Cél: az első napon fusson a stack, és tudd, hova nyúlj. Részletek: a többi
 
 ## 10.1 Gyors start
 
-1. PostgreSQL + `DATABASE_URL`
+Teljes napló (env, port, szerepek, smoke, Jest): **[17-fejlesztes-es-teszteles.md](./17-fejlesztes-es-teszteles.md)**.
+
+1. PostgreSQL + `DATABASE_URL` + **`JWT_SECRET`** + **`STREAM_SECRET`** a `backend/.env`-ben
 2. `cd backend` → `npm install` → `npx prisma migrate deploy` → `npx prisma generate` → `npm run start:dev`
 3. `cd frontend` → `npm install` → `npm run dev`
 4. Böngésző: http://localhost:3000  
-5. Admin: user `admin@admin.com` (bootstrap), vagy szerep `admin` az adatbázisban
+5. Admin (dev): regisztráld a `BOOTSTRAP_ADMIN_EMAIL` címet (default `admin@admin.com`), vagy `User.role = admin`
 
 Részletes env: [12-env.md](./12-env.md), telepítés: [05-telepites.md](./05-telepites.md). Streaming: [13-streaming.md](./13-streaming.md).
 
@@ -21,11 +23,11 @@ Részletes env: [12-env.md](./12-env.md), telepítés: [05-telepites.md](./05-te
 | Fájl | Miért |
 |------|--------|
 | `backend/src/app.module.ts` | modul lista |
-| `backend/src/main.ts` | port 3200, CORS, `/uploads` |
+| `backend/src/main.ts` | port 3200, CORS, ValidationPipe, dotenv |
 | `backend/prisma/schema.prisma` | adatmodell |
-| `backend/src/auth/auth.module.ts` | JWT secret |
-| `backend/src/auth/roles.ts` | szerepek |
-| `frontend/api/http.ts` | API_URL, Bearer |
+| `backend/src/auth/secrets.ts` | JWT_SECRET / STREAM_SECRET |
+| `backend/src/auth/roles.ts` | szerepek, bootstrap admin |
+| `frontend/api/http.ts` | `/api` rewrite, credentials, CSRF |
 | `frontend/context/AuthContext.tsx` | session |
 | `backend/src/tickets/tickets.service.ts` | vásárlás + hozzáférés |
 | `backend/src/payouts/revenue.ts` | pénz |

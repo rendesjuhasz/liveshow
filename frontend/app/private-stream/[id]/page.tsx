@@ -37,7 +37,7 @@ export default function PrivateStreamPage() {
         <div className="mx-auto min-h-dvh max-w-4xl px-4 py-10">
             <h1 className="mb-2 text-2xl font-extrabold">{data.title}</h1>
             <p className="mb-4 text-sm text-zinc-400">
-                {data.role === "streamer" ? "Streamer nézet" : "Csak a jegyet megvásárló nézőnek."}
+                {data.role === "streamer" ? "Tartalomkészítő nézet" : "Csak a jegyet megvásárló nézőnek."}
             </p>
             <p className="mb-6 rounded-xl border border-white/10 bg-zinc-950 p-4 text-sm text-zinc-400">
                 {data.notice}

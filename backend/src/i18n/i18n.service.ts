@@ -11,10 +11,14 @@ import {
     translate,
     type Locale,
 } from "./messages";
+import { CACHE_TTL, PublicTtlCache } from "../cache/public-cache.module";
 
 @Injectable()
 export class I18nService implements OnModuleInit {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly publicCache: PublicTtlCache,
+    ) {}
 
     async onModuleInit() {
         await this.ensureSchema();
@@ -31,7 +35,10 @@ export class I18nService implements OnModuleInit {
     }
 
     async publicLanguages() {
-        await this.ensureSchema();
+        return this.publicCache.getOrSet("i18n:languages", CACHE_TTL.i18n, () => this.loadPublicLanguages());
+    }
+
+    private async loadPublicLanguages() {
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT code, name, "nativeName", enabled, "isDefault", "sortOrder"
             FROM "AppLanguage"
@@ -51,7 +58,10 @@ export class I18nService implements OnModuleInit {
 
     async catalog(locale?: string | null) {
         const lang = this.resolveLocale(locale);
-        await this.ensureSchema();
+        return this.publicCache.getOrSet(`i18n:catalog:${lang}`, CACHE_TTL.i18n, () => this.loadCatalog(lang));
+    }
+
+    private async loadCatalog(lang: string) {
         const rows = await this.prisma.$queryRaw<any[]>`
             SELECT key, value FROM "UiTranslation"
             WHERE locale = ${lang} AND status = 'approved'
@@ -83,7 +93,6 @@ export class I18nService implements OnModuleInit {
         const value = String(body.value || "");
         const status = body.status === "draft" ? "draft" : "approved";
         if (!key) throw new BadRequestException("A fordítási kulcs kötelező.");
-        await this.ensureSchema();
         const existing = await this.prisma.$queryRaw<any[]>`
             SELECT id FROM "UiTranslation" WHERE key = ${key} AND locale = ${locale} LIMIT 1
         `;
@@ -103,6 +112,8 @@ export class I18nService implements OnModuleInit {
             INSERT INTO "TranslationVersion" (id, key, locale, value, status, "createdAt", "createdBy")
             VALUES (${randomUUID()}, ${key}, ${locale}, ${value}, ${status}, NOW(), ${body.userId || null})
         `;
+        this.publicCache.deletePrefix("i18n:");
+        this.publicCache.deletePrefix("home:");
         return { key, locale, value, status };
     }
 
@@ -135,7 +146,6 @@ export class I18nService implements OnModuleInit {
         value: string;
     }) {
         const locale = this.resolveLocale(body.locale);
-        await this.ensureSchema();
         await this.prisma.$executeRaw`
             INSERT INTO "ContentTranslation" (id, "entityType", "entityId", field, locale, value)
             VALUES (${randomUUID()}, ${body.entityType}, ${body.entityId}, ${body.field}, ${locale}, ${body.value})
@@ -199,7 +209,6 @@ export class I18nService implements OnModuleInit {
         const loc = this.resolveLocale(locale);
         const k = String(key || "").trim();
         if (!k) return;
-        await this.ensureSchema();
         await this.prisma.$executeRaw`
             INSERT INTO "MissingTranslation" (id, key, locale, hits, "updatedAt")
             VALUES (${randomUUID()}, ${k}, ${loc}, 1, NOW())
@@ -209,7 +218,6 @@ export class I18nService implements OnModuleInit {
     }
 
     async stats() {
-        await this.ensureSchema();
         const keys = Object.keys(MESSAGES);
         const missing = await this.prisma.$queryRaw<any[]>`
             SELECT key, locale, hits FROM "MissingTranslation" ORDER BY hits DESC LIMIT 100
@@ -233,7 +241,6 @@ export class I18nService implements OnModuleInit {
     }
 
     async allLanguages() {
-        await this.ensureSchema();
         return this.prisma.$queryRaw<any[]>`
             SELECT code, name, "nativeName", enabled, "isDefault", "sortOrder"
             FROM "AppLanguage"
@@ -259,7 +266,6 @@ export class I18nService implements OnModuleInit {
     async upsertLanguage(body: { code: string; name: string; nativeName?: string; enabled?: boolean }) {
         const code = String(body.code || "").trim().toLowerCase();
         if (!/^[a-z]{2,5}$/.test(code)) throw new BadRequestException("Érvénytelen nyelvkód.");
-        await this.ensureSchema();
         await this.prisma.$executeRaw`
             INSERT INTO "AppLanguage" (code, name, "nativeName", enabled, "isDefault", "sortOrder")
             VALUES (${code}, ${body.name}, ${body.nativeName || body.name}, ${body.enabled !== false}, FALSE, 50)
@@ -291,7 +297,6 @@ export class I18nService implements OnModuleInit {
 
     async saveTrack(showId: string, body: { kind: string; locale: string; label: string; url: string; isDefault?: boolean }) {
         const kind = body.kind === "audio" ? "audio" : "subtitle";
-        await this.ensureSchema();
         const id = randomUUID();
         await this.prisma.$executeRaw`
             INSERT INTO "ShowMediaTrack" (id, "showId", kind, locale, label, url, "isDefault")

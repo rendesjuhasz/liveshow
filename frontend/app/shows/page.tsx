@@ -15,16 +15,16 @@ export default function ShowsPage() {
     useEffect(() => {
         apiFetch("/shows")
             .then((data) => setShows(Array.isArray(data) ? data : []))
-            .catch((err: any) => setError(err.message || "Nem sikerült betölteni a műsorokat."))
+            .catch((err: any) => setError(err.message || t("shows.loadError")))
             .finally(() => setLoading(false));
-    }, [locale]);
+    }, [locale, t]);
 
     return (
         <div className="min-h-dvh px-4 py-8 md:px-10">
             <h1 className="mb-6 text-3xl font-extrabold tracking-tight">{t("shows.title")}</h1>
             {loading && <p className="text-zinc-400">{t("common.loading")}</p>}
             {error && <p className="text-red-400">{error}</p>}
-            {!loading && shows.length === 0 && <p className="text-zinc-400">Nincs elérhető esemény.</p>}
+            {!loading && shows.length === 0 && <p className="text-zinc-400">{t("shows.empty")}</p>}
             <div className="flex flex-wrap justify-center gap-3 sm:justify-start sm:gap-4">
                 {shows.map((show) => (
                     <EventCard key={show.id} item={show} />

@@ -58,7 +58,7 @@ th,td{border-bottom:1px solid #333;padding:8px;text-align:left}
 <body>
 <div class="card">
 <h1>LiveShow · Kifizetési bizonylat</h1>
-<p>Streamer: <strong>${escapeHtml(snapshot.streamerName || "")}</strong></p>
+<p>Tartalomkészítő: <strong>${escapeHtml(snapshot.streamerName || "")}</strong></p>
 <p>Dátum: ${escapeHtml(snapshot.paidAt || snapshot.createdAt || "")}</p>
 <p>Kifizetés módja: ${escapeHtml(snapshot.method || "banki átutalás")}</p>
 <table>
@@ -68,9 +68,9 @@ th,td{border-bottom:1px solid #333;padding:8px;text-align:left}
 <p>Összes jegy: <strong>${snapshot.tickets}</strong></p>
 <p>Bruttó bevétel: <strong>${snapshot.gross} Ft</strong></p>
 <p>Platform levonás (${snapshot.platformPercent}%): <strong>${snapshot.commission} Ft</strong></p>
-<p>Streamer részesedés (${snapshot.streamerPercent}%): <strong>${snapshot.net} Ft</strong></p>
+<p>Tartalomkészítő részesedés (${snapshot.streamerPercent}%): <strong>${snapshot.net} Ft</strong></p>
 <p>Kifizetett / igényelt összeg: <strong>${snapshot.amount} Ft</strong></p>
-<p class="muted">Ez letölthető bizonylat a könyveléshez. A számlaadást és az adózást a streamer intézi; a platform csak a részesedést és a kifizetés naplóját kezeli.</p>
+<p class="muted">Ez letölthető bizonylat a könyveléshez. A számlaadást és az adózást a tartalomkészítő intézi; a platform csak a részesedést és a kifizetés naplóját kezeli.</p>
 </div>
 </body>
 </html>`;

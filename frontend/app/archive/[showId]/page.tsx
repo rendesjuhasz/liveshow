@@ -2,19 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { apiFetch } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import { buildSignedArchiveUrl } from "@/lib/getStreamToken";
 import { recordWatched } from "@/lib/library";
 import ReviewForm from "@/components/ReviewForm";
+import CreatorPublicLinks from "@/components/CreatorPublicLinks";
 import ShowTalk from "@/app/live/[id]/ShowTalk";
 import { Eye } from "lucide-react";
-import { viewsLabel } from "@/lib/views";
+import { formatCount } from "@/lib/views";
+import { useT } from "@/lib/i18n/I18nProvider";
+import LocaleLink from "@/components/LocaleLink";
 
 export default function ArchiveWatchPage() {
     const { showId } = useParams<{ showId: string }>();
     const { user, ready } = useAuth();
+    const { t } = useT();
     const [info, setInfo] = useState<any>(null);
     const [src, setSrc] = useState("");
     const [error, setError] = useState("");
@@ -28,7 +31,7 @@ export default function ArchiveWatchPage() {
                 setInfo(data);
                 setViewCount(Number(data?.viewCount) || 0);
             })
-            .catch((err: any) => setError(err.message || "Az archívum nem található."));
+            .catch((err: any) => setError(err.message || t("archive.unknownCat")));
     }, [showId]);
 
     useEffect(() => {
@@ -42,12 +45,6 @@ export default function ArchiveWatchPage() {
             return;
         }
         if (!info.streamId) return;
-        if (!user) {
-            setError(
-                "Az archív felvétel megtekintése ingyenes. A lejátszáshoz jelentkezz be.",
-            );
-            return;
-        }
         setError("");
         buildSignedArchiveUrl(info.streamId, showId, info.publicPath)
             .then((signed) => {
@@ -62,44 +59,26 @@ export default function ArchiveWatchPage() {
 
     return (
         <div className="mx-auto min-h-dvh max-w-4xl bg-background px-4 py-8 text-white md:px-10">
-            <Link href="/archive" className="text-sm text-accent hover:underline">
-                ← Visszanézés
-            </Link>
-            <h1 className="text-3xl font-bold my-4">{info?.title || "Archív felvétel"}</h1>
+            <LocaleLink href="/archive" className="text-sm text-accent hover:underline">
+                ← {t("archive.title")}
+            </LocaleLink>
+            <h1 className="text-3xl font-bold my-4">{info?.title || t("archive.heading")}</h1>
             <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                 <Eye className="size-4 text-accent" aria-hidden />
-                {viewsLabel(viewCount)}
+                {t("media.views").replace("{n}", formatCount(viewCount))}
             </p>
-            {info?.videoCategoryLabel && (
+            {info?.videoCategory && (
                 <p className="mb-2">
-                    <Link
+                    <LocaleLink
                         href={`/archive/category/${info.videoCategory}`}
                         className="text-sm font-semibold uppercase tracking-wide text-accent hover:underline"
                     >
-                        {info.videoCategoryLabel}
-                    </Link>
+                        {t(`cat.${info.videoCategory}`)}
+                    </LocaleLink>
                 </p>
             )}
-            <p className="mb-4 text-sm text-zinc-400">
-                A felvétel szabadon nézhető. Jegy csak a kérdésbeküldéshez és a prémium
-                interakciókhoz kell.
-            </p>
-            {error && (
-                <p className="text-red-400 mb-4">
-                    {error}{" "}
-                    {!user && (
-                        <>
-                            <Link href="/login" className="underline">
-                                Bejelentkezés
-                            </Link>
-                            {" · "}
-                            <Link href="/register" className="underline">
-                                Regisztráció
-                            </Link>
-                        </>
-                    )}
-                </p>
-            )}
+            <p className="mb-4 text-sm text-zinc-400">{t("live.watchFree")}</p>
+            {error && <p className="text-red-400 mb-4">{error}</p>}
             {src ? (
                 <video
                     src={src}
@@ -131,12 +110,16 @@ export default function ArchiveWatchPage() {
                     }}
                 />
             ) : (
-                !error && <p>Betöltés...</p>
+                !error && <p>{t("common.loading")}</p>
             )}
+            <CreatorPublicLinks
+                name={info?.creatorLinks?.name}
+                links={info?.creatorLinks?.links}
+            />
             {showId ? <ReviewForm showId={String(showId)} /> : null}
             {showId ? (
                 <div className="mt-10">
-                    <ShowTalk showId={String(showId)} canAsk={false} />
+                    <ShowTalk showId={String(showId)} canAsk={false} live={false} />
                 </div>
             ) : null}
         </div>

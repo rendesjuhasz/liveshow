@@ -1,7 +1,12 @@
 const TOKEN_KEY = "token";
-const TOKEN_COOKIE = "ls_token";
+const CSRF_KEY = "ls_csrf";
+const CSRF_COOKIE = "ls_csrf";
+const LEGACY_TOKEN_COOKIE = "ls_token";
 
-let memoryToken: string | null = null;
+/** Opaque flag: access JWT lives in HttpOnly cookie, never in JS. */
+export const COOKIE_SESSION = "cookie-session";
+
+let memoryCsrf: string | null = null;
 
 export class ApiError extends Error {
     status: number;
@@ -30,72 +35,90 @@ function readCookie(name: string) {
     return null;
 }
 
-function writeCookie(name: string, value: string) {
-    if (typeof document === "undefined") return;
-    document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`;
-}
-
 function clearCookie(name: string) {
     if (typeof document === "undefined") return;
     document.cookie = `${name}=; Path=/; SameSite=Lax; Max-Age=0`;
 }
 
-function readStore(storage: Storage | undefined) {
-    if (!storage) return null;
-    try {
-        return storage.getItem(TOKEN_KEY);
-    } catch {
-        return null;
-    }
-}
-
-function writeStore(storage: Storage | undefined, value: string | null) {
+function writeStore(storage: Storage | undefined, key: string, value: string | null) {
     if (!storage) return;
     try {
-        if (value) storage.setItem(TOKEN_KEY, value);
-        else storage.removeItem(TOKEN_KEY);
+        if (value) storage.setItem(key, value);
+        else storage.removeItem(key);
     } catch {
         /* privát mód */
     }
 }
 
-export function getAuthToken() {
-    if (memoryToken) return memoryToken;
-    if (typeof window === "undefined") return null;
-    memoryToken =
-        readStore(window.sessionStorage) ||
-        readStore(window.localStorage) ||
-        readCookie(TOKEN_COOKIE);
-    return memoryToken;
-}
-
-export function setAuthToken(token: string) {
-    memoryToken = token;
+function wipeLegacyJwt() {
     if (typeof window === "undefined") return;
-    writeStore(window.sessionStorage, token);
-    writeStore(window.localStorage, token);
     try {
-        writeCookie(TOKEN_COOKIE, token);
+        window.sessionStorage.removeItem(TOKEN_KEY);
+        window.localStorage.removeItem(TOKEN_KEY);
     } catch {
         /* ignore */
     }
+    clearCookie(LEGACY_TOKEN_COOKIE);
+}
+
+export function getAuthToken() {
+    wipeLegacyJwt();
+    return null;
+}
+
+export function setAuthToken(_token: string) {
+    wipeLegacyJwt();
 }
 
 export function clearAuthToken() {
-    memoryToken = null;
+    memoryCsrf = null;
+    wipeLegacyJwt();
     if (typeof window === "undefined") return;
-    writeStore(window.sessionStorage, null);
-    writeStore(window.localStorage, null);
-    try {
-        clearCookie(TOKEN_COOKIE);
-    } catch {
-        /* ignore */
+    writeStore(window.sessionStorage, CSRF_KEY, null);
+}
+
+export function setCsrfToken(token: string) {
+    memoryCsrf = token;
+    if (typeof window === "undefined") return;
+    writeStore(window.sessionStorage, CSRF_KEY, token);
+}
+
+export function getCsrfToken() {
+    if (typeof window === "undefined") return memoryCsrf;
+    const fromCookie = readCookie(CSRF_COOKIE);
+    if (fromCookie) {
+        if (memoryCsrf !== fromCookie) {
+            memoryCsrf = fromCookie;
+            writeStore(window.sessionStorage, CSRF_KEY, fromCookie);
+        }
+        return fromCookie;
     }
+    if (memoryCsrf) return memoryCsrf;
+    try {
+        memoryCsrf = window.sessionStorage.getItem(CSRF_KEY);
+    } catch {
+        memoryCsrf = null;
+    }
+    return memoryCsrf;
+}
+
+export function isCsrfFailure(err: unknown, data?: { message?: unknown }) {
+    const raw = data?.message ?? (err && typeof err === "object" && "message" in err ? (err as Error).message : "");
+    const message = Array.isArray(raw) ? raw.join(" ") : String(raw || "");
+    return message.toLowerCase().includes("csrf");
+}
+
+export function tokenExpiresAt(_token: string | null): number | null {
+    return null;
+}
+
+export function isTokenExpired(_token: string | null, _skewSec = 60) {
+    return false;
 }
 
 export function isUnauthorizedError(err: unknown) {
     if (err instanceof ApiError) {
-        return err.status === 401 || err.status === 403;
+        return err.status === 401;
     }
     return false;
 }

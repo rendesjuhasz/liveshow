@@ -1,10 +1,12 @@
-import { API_URL, apiFetch } from "@/api/http";
+import { apiFetch } from "@/api/http";
+import { getViewerKey } from "@/lib/viewer-key";
 
 export type StreamToken = {
-    token: string;
+    token?: string;
     expiresAt: number;
     streamId: string;
     userId: string;
+    cookie?: boolean;
 };
 
 export type SignedHlsUrl = StreamToken & {
@@ -40,66 +42,65 @@ export async function getStreamToken(
 
     const params = new URLSearchParams({
         streamId,
-        expires: "3600",
         purpose,
     });
     if (showId?.trim()) {
         params.set("showId", showId.trim());
     }
+    const viewerKey = getViewerKey();
+    if (viewerKey) params.set("viewerKey", viewerKey);
 
     const data = await apiFetch(`/token/generate?${params.toString()}`);
-
-    if (!data?.token || !data?.expiresAt || !data?.userId) {
+    if (!data?.expiresAt || !data?.userId) {
         throw new Error("Érvénytelen stream token.");
     }
 
     return {
-        token: String(data.token),
         expiresAt: Number(data.expiresAt),
         streamId: String(data.streamId || streamId),
         userId: String(data.userId || ""),
+        cookie: true,
     };
 }
 
-export function withStreamToken(
-    url: string,
-    token: string,
-    expiresAt: number,
-    userId?: string,
-) {
-    const q = url.indexOf("?");
-    const base = q === -1 ? url : url.slice(0, q);
-    const params = new URLSearchParams(q === -1 ? "" : url.slice(q + 1));
-    params.set("token", token);
-    params.set("expiresAt", String(expiresAt));
-    if (userId) params.set("userId", userId);
-    return `${base}?${params.toString()}`;
+export function sameOriginMediaUrl(url: string) {
+    if (typeof window === "undefined") return url;
+    try {
+        const u = new URL(url, window.location.origin);
+        if (u.origin === window.location.origin) return `${u.pathname}${u.search}`;
+        if (u.pathname.startsWith("/output/") || u.pathname.startsWith("/stream/")) {
+            return `${u.pathname}${u.search}`;
+        }
+    } catch {
+        /* keep */
+    }
+    return url.replace(/^https?:\/\/[^/]+/, "");
 }
 
 export function buildHlsPlaylistUrl(streamId: string) {
     if (isPlaceholderStreamId(streamId)) {
         throw new Error("Hiányzik a stream ID. Add meg a műsor Stream ID mezőjét.");
     }
-
-    return `${API_URL}/output/${encodeURIComponent(streamId)}/index.m3u8`;
+    return `/output/${encodeURIComponent(streamId)}/index.m3u8`;
 }
 
 export function buildArchiveUrl(streamId: string, publicPath?: string | null) {
     if (publicPath?.trim().startsWith("/")) {
-        return `${API_URL}${publicPath.trim()}`;
+        return publicPath.trim();
     }
     if (isPlaceholderStreamId(streamId)) {
         throw new Error("Hiányzik a stream ID. Add meg a műsor Stream ID mezőjét.");
     }
-
-    return `${API_URL}/output/${encodeURIComponent(streamId)}/archive.mp4`;
+    return `/output/${encodeURIComponent(streamId)}/archive.mp4`;
 }
 
 export async function buildSignedArchiveUrl(streamId: string, showId?: string, publicPath?: string | null) {
-    const { token, expiresAt, streamId: signedId, userId } = await getStreamToken(streamId, showId, "archive");
+    const { expiresAt, streamId: signedId, userId } = await getStreamToken(streamId, showId, "archive");
     return {
         streamId: signedId || streamId,
-        url: withStreamToken(buildArchiveUrl(streamId, publicPath), token, expiresAt, userId),
+        expiresAt,
+        userId,
+        url: buildArchiveUrl(streamId, publicPath),
     };
 }
 
@@ -109,7 +110,7 @@ export async function buildSignedHlsUrl(
     showId?: string,
     purpose: "live" | "archive" | "private" = "live",
 ): Promise<SignedHlsUrl> {
-    const { token, expiresAt, userId } = await getStreamToken(streamId, showId, purpose);
+    const { expiresAt, userId } = await getStreamToken(streamId, showId, purpose);
     const raw = playlistUrl?.trim()
         ? interpolateStreamId(playlistUrl.trim(), streamId)
         : buildHlsPlaylistUrl(streamId);
@@ -118,11 +119,12 @@ export async function buildSignedHlsUrl(
         throw new Error("A HLS URL sablon maradt: {streamId} helyett valódi ID kell.");
     }
 
+    const url = raw.startsWith("http") ? sameOriginMediaUrl(raw) : raw;
     return {
         streamId,
-        token,
         expiresAt,
         userId,
-        url: withStreamToken(raw, token, expiresAt, userId),
+        cookie: true,
+        url,
     };
 }

@@ -7,6 +7,9 @@ import { apiFetch } from "@/api/http";
 import { SHOW_STATUSES, showStatusLabel } from "@/lib/show-status";
 import { LOCALES } from "@/lib/i18n/messages";
 import VideoCategorySelect from "@/components/VideoCategorySelect";
+import MarketingKitCard from "@/components/MarketingKitCard";
+import EventScheduleFields from "@/components/EventScheduleFields";
+import { detectBrowserTimeZone, utcToWallClock } from "@/lib/timezone";
 
 export default function EditShowPage() {
     const { user, ready } = useAuth();
@@ -16,6 +19,8 @@ export default function EditShowPage() {
     const [loading, setLoading] = useState(true);
     const [title, setTitle] = useState("");
     const [date, setDate] = useState("");
+    const [endLocal, setEndLocal] = useState("");
+    const [timezone, setTimezone] = useState(() => detectBrowserTimeZone());
     const [streamUrl, setStreamUrl] = useState("");
     const [streamId, setStreamId] = useState("");
     const [rtpPort, setRtpPort] = useState("5004");
@@ -37,11 +42,14 @@ export default function EditShowPage() {
             try {
                 const data = await apiFetch(`/admin/shows/${id}`);
                 setTitle(data.title || "");
+                const tz = data.timezone || detectBrowserTimeZone();
+                setTimezone(tz);
                 setDate(
-                    data.startTime
-                        ? new Date(data.startTime).toISOString().slice(0, 10)
-                        : ""
+                    data.startAtUtc || data.startTime
+                        ? utcToWallClock(data.startAtUtc || data.startTime, tz)
+                        : "",
                 );
+                setEndLocal(data.endAtUtc ? utcToWallClock(data.endAtUtc, tz) : "");
                 setStreamUrl(data.streamUrl || "");
                 setStreamId(data.streamId || "");
                 setStatus(data.status || "draft");
@@ -68,8 +76,9 @@ export default function EditShowPage() {
                 method: "PUT",
                 body: JSON.stringify({
                     title,
-                    date,
-                    startTime: date,
+                    startLocal: date,
+                    endLocal: endLocal || undefined,
+                    timezone,
                     streamUrl,
                     streamId,
                     status,
@@ -152,11 +161,14 @@ export default function EditShowPage() {
                         </div>
                     </label>
 
-                    <input
-                        type="date"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="w-full p-3 rounded bg-gray-700 text-white"
+                    <EventScheduleFields
+                        startLocal={date}
+                        endLocal={endLocal}
+                        timezone={timezone}
+                        onStartLocal={setDate}
+                        onEndLocal={setEndLocal}
+                        onTimezone={setTimezone}
+                        requiredStart={false}
                     />
 
                     <label className="block text-sm text-gray-300">
@@ -225,6 +237,8 @@ export default function EditShowPage() {
                         Műsor frissítése
                     </button>
                 </form>
+
+                {id ? <MarketingKitCard showId={String(id)} /> : null}
 
                 <button
                     type="button"

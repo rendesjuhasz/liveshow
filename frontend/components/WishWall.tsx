@@ -54,7 +54,7 @@ export function WishStatusLine({ wish }: { wish: WishItem }) {
                 <span>
                     Elfogadva
                     <br />
-                    Streamer: {wish.streamer.name}
+                    Tartalomkészítő: {wish.streamer.name}
                 </span>
             )}
             {wish.status === "accepted" && !wish.streamer?.name && <span>Elfogadva</span>}
@@ -75,7 +75,7 @@ export function WishStatusLine({ wish }: { wish: WishItem }) {
 
 export default function WishWall() {
     const { user, ready } = useAuth();
-    const { t } = useT();
+    const { t, formatDateTime } = useT();
     const [items, setItems] = useState<WishItem[]>([]);
     const [privateRows, setPrivateRows] = useState<any[]>([]);
     const [text, setText] = useState("");
@@ -386,7 +386,7 @@ export default function WishWall() {
                                 <p className="mt-2 text-zinc-200">„{wish.text}”</p>
                                 <WishStatusLine wish={wish} />
                                 <p className="mt-1 text-xs text-zinc-500">
-                                    {t("wish.submitted")} {new Date(wish.createdAt).toLocaleDateString("hu-HU")}
+                                    {t("wish.submitted")} {formatDateTime(wish.createdAt)}
                                 </p>
                             </article>
                         ))}

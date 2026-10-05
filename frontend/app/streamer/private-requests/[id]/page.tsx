@@ -64,7 +64,7 @@ export default function StreamerPrivateApplyPage() {
     }
 
     if (gate.wait) return <p className="p-8 text-white">Betöltés...</p>;
-    if (!gate.ok) return <p className="p-8 text-white">Jóváhagyott streamer fiók kell.</p>;
+    if (!gate.ok) return <p className="p-8 text-white">Jóváhagyott tartalomkészítő fiók kell.</p>;
 
     return (
         <StreamerShell title="Privát ajánlat">

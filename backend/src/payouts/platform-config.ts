@@ -49,7 +49,6 @@ export async function ensurePayoutSchema(prisma: PrismaService) {
 }
 
 export async function getPayoutSettings(prisma: PrismaService): Promise<PayoutSettings> {
-    await ensurePayoutSchema(prisma);
     const rows = await prisma.$queryRaw<any[]>`
         SELECT "commissionPercent", "payoutCycle" FROM "PlatformConfig" WHERE id = ${SETTINGS_ID} LIMIT 1
     `.catch(() => []);
@@ -72,7 +71,6 @@ export async function setPayoutSettings(
     prisma: PrismaService,
     body: { commissionPercent?: number; streamerPercent?: number; payoutCycle?: string },
 ) {
-    await ensurePayoutSchema(prisma);
     const current = await getPayoutSettings(prisma);
     let platform = current.commissionPercent;
     if (body.commissionPercent !== undefined) {

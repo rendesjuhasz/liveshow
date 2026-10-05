@@ -13,10 +13,16 @@ import { isFavorite, toggleFavorite } from "@/lib/library";
 import { Button } from "@/components/ui/button";
 import MediaRow from "@/components/media/MediaRow";
 import TicketPackShop from "@/components/TicketPackShop";
+import EventTimeDisplay from "@/components/EventTimeDisplay";
+import CalendarExportButtons from "@/components/CalendarExportButtons";
+import { useT } from "@/lib/i18n/I18nProvider";
+import { useMounted } from "@/lib/use-mounted";
 
 export default function ShowDetailsPage() {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
+    const { t } = useT();
+    const mounted = useMounted();
     const [show, setShow] = useState<any>(null);
     const [similar, setSimilar] = useState<MediaItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -31,7 +37,7 @@ export default function ShowDetailsPage() {
                 const data = await apiFetch(`/shows/${id}`);
                 setShow(data);
             } catch (err: any) {
-                setError(err.message || "Nem sikerült betölteni a műsor részleteit.");
+                setError(err.message || t("show.loadError"));
             } finally {
                 setLoading(false);
             }
@@ -46,7 +52,7 @@ export default function ShowDetailsPage() {
     }, [id, user?.id]);
 
     if (loading) {
-        return <p className="px-6 py-20 text-zinc-400">Betöltés...</p>;
+        return <p className="px-6 py-20 text-zinc-400">{t("common.loading")}</p>;
     }
 
     if (error && !show) {
@@ -54,7 +60,7 @@ export default function ShowDetailsPage() {
     }
 
     if (!show) {
-        return <p className="px-6 py-20">A műsor nem található.</p>;
+        return <p className="px-6 py-20">{t("common.notFound")}</p>;
     }
 
     const ended = Boolean(show.ended) || (!show.live && show.startTime && new Date(show.startTime).getTime() <= Date.now());
@@ -69,11 +75,11 @@ export default function ShowDetailsPage() {
     return (
         <div className="pb-16">
             <section className="relative min-h-[60dvh] overflow-hidden md:min-h-[70vh]">
-                <img src={coverUrl(show)} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                    <img src={coverUrl(show)} alt={String(show.title || "Műsor")} className="absolute inset-0 h-full w-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-black/55 to-black/40" />
                 <div className="relative z-10 mx-auto flex min-h-[60dvh] max-w-6xl flex-col justify-end px-4 pb-10 pt-24 md:min-h-[70vh] md:px-10 md:pb-12">
                     {show.live && (
-                        <span className="mb-3 w-fit rounded-md bg-red-600 px-2 py-1 text-xs font-bold uppercase">Élő</span>
+                        <span className="mb-3 w-fit rounded-md bg-live px-2 py-1 text-xs font-bold uppercase text-white shadow-[0_6px_16px_rgba(255,59,48,0.4)]">{t("media.live")}</span>
                     )}
                     {show.videoCategoryLabel && (
                         <span className="mb-3 ml-2 inline-block w-fit rounded-md bg-white/15 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-accent">
@@ -82,15 +88,24 @@ export default function ShowDetailsPage() {
                     )}
                     <h1 className="max-w-3xl text-3xl font-extrabold tracking-tight md:text-6xl">{show.title}</h1>
                     <p className="mt-3 text-sm uppercase tracking-widest text-accent">
-                        {formatWhen(show.startTime)}
+                        {mounted ? formatWhen(show.startAtUtc || show.startTime) : ""}
                         {show.streamer?.name ? ` · ${show.streamer.name}` : ""}
                     </p>
+                    <div className="mt-2 max-w-xl text-sm font-normal normal-case tracking-normal text-zinc-300">
+                        <EventTimeDisplay startAtUtc={show.startAtUtc || show.startTime} />
+                    </div>
+                    <CalendarExportButtons
+                        showId={show.id}
+                        title={show.title}
+                        startAtUtc={show.startAtUtc || show.startTime}
+                        endAtUtc={show.endAtUtc}
+                    />
                     <div className="mt-6 flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
                         {watchHref && (
                             <Button asChild size="lg" className="w-full sm:w-auto">
                                 <Link href={watchHref}>
                                     <Play className="size-5 fill-current" />
-                                    {ended ? "Visszanézés" : "Előnézet / nézés"}
+                                    {ended ? t("show.replay") : t("show.watch")}
                                 </Link>
                             </Button>
                         )}
@@ -102,7 +117,7 @@ export default function ShowDetailsPage() {
                             onClick={() => setFav(toggleFavorite(show, user?.id))}
                         >
                             <Heart className={fav ? "fill-accent text-accent" : ""} />
-                            {fav ? "Kedvenc" : "Kedvencekhez"}
+                            {fav ? t("media.favorite") : t("media.favoriteAdd")}
                         </Button>
                     </div>
                 </div>
@@ -125,7 +140,7 @@ export default function ShowDetailsPage() {
                     )}
                     <ReviewForm showId={String(id)} />
                     <div className="mt-10">
-                        <ShowTalk showId={String(id)} canAsk={Boolean(show.live)} />
+                        <ShowTalk showId={String(id)} canAsk={Boolean(show.live)} live={Boolean(show.live)} />
                     </div>
                 </div>
 

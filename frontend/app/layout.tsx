@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { Outfit } from "next/font/google";
 import "./globals.css";
 import AppShell from "../components/AppShell";
 import SiteFooter from "../components/SiteFooter";
-import { DEFAULT_LOCALE, isLocale, translate } from "../lib/i18n/messages";
-import { PREFIX_LOCALES } from "../lib/i18n/paths";
+import ConditionalFooter from "../components/ConditionalFooter";
+import { DEFAULT_LOCALE, isLocale } from "../lib/i18n/messages";
+import { metadataForPath, siteUrl } from "../lib/seo";
 
 const outfit = Outfit({
     subsets: ["latin", "latin-ext"],
@@ -14,15 +15,10 @@ const outfit = Outfit({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-    const jar = await cookies();
-    const raw = jar.get("liveshow_locale")?.value;
-    const locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
-    const languages: Record<string, string> = { "x-default": "/", hu: "/" };
-    for (const code of PREFIX_LOCALES) languages[code] = `/${code}`;
+    const page = await metadataForPath("/", DEFAULT_LOCALE);
     return {
-        title: translate("seo.title", locale),
-        description: translate("seo.description", locale),
-        alternates: { languages },
+        metadataBase: new URL(siteUrl()),
+        ...page,
         appleWebApp: {
             capable: true,
             title: "LiveShow",
@@ -37,20 +33,28 @@ export const viewport: Viewport = {
     initialScale: 1,
     maximumScale: 5,
     viewportFit: "cover",
-    themeColor: "#050508",
+    themeColor: "#1E1E1E",
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-    const jar = await cookies();
-    const raw = jar.get("liveshow_locale")?.value;
-    const locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+    const hdr = await headers();
+    const fromHeader = hdr.get("x-locale");
+    const locale = isLocale(fromHeader) ? fromHeader : DEFAULT_LOCALE;
+    const path = hdr.get("x-liveshow-path") || "/";
+    const nonce = hdr.get("x-nonce") || undefined;
     return (
         <html lang={locale} className={outfit.variable} suppressHydrationWarning>
-            <body className="min-h-dvh bg-background font-sans antialiased">
-                <AppShell initialLocale={locale}>
-                    {children}
-                    <SiteFooter />
-                </AppShell>
+            <body className="min-h-dvh bg-background font-sans antialiased" data-csp-nonce={nonce}>
+                <div className="flex min-h-dvh flex-col">
+                    <div className="flex-1">
+                        <AppShell initialLocale={locale} initialPath={path}>
+                            {children}
+                        </AppShell>
+                    </div>
+                    <ConditionalFooter>
+                        <SiteFooter locale={locale} />
+                    </ConditionalFooter>
+                </div>
             </body>
         </html>
     );

@@ -6,7 +6,7 @@ export async function readShowStatuses(prisma: PrismaService, ids: string[]) {
     if (!ids.length) return map;
     const placeholders = ids.map((_, i) => `$${i + 1}`).join(", ");
     const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, COALESCE(status, 'active') AS status FROM "Show" WHERE id IN (${placeholders})`,
+        `SELECT id, status FROM "Show" WHERE id IN (${placeholders})`,
         ...ids,
     );
     for (const row of rows) {
@@ -19,7 +19,7 @@ export async function idsByShowStatus(prisma: PrismaService, statuses: ShowStatu
     if (!statuses.length) return [];
     const placeholders = statuses.map((_, i) => `$${i + 1}`).join(", ");
     const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id FROM "Show" WHERE COALESCE(status, 'active') IN (${placeholders})`,
+        `SELECT id FROM "Show" WHERE status IN (${placeholders})`,
         ...statuses,
     );
     return rows.map((r) => r.id as string);

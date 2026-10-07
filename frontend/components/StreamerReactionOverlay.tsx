@@ -120,7 +120,7 @@ export function StreamerReactionFloat({
 export function StreamerReactionStats({ counts }: { counts: ReactionCounts }) {
     const rows = REACTION_STATS_ORDER.filter((row) => (counts[row.key] || 0) > 0);
     if (!rows.length) {
-        return <p className="mb-2 text-center text-[11px] text-white/45">Még nincs nézői reakció</p>;
+        return <p className="mb-2 text-center text-[11px] text-white/40">Még nincs nézői reakció</p>;
     }
     return (
         <div
@@ -128,7 +128,7 @@ export function StreamerReactionStats({ counts }: { counts: ReactionCounts }) {
             aria-label="Reakció statisztika"
         >
             {rows.map((row) => (
-                <span key={row.key} className="tabular-nums">
+                <span key={row.key} className="tabular-nums drop-shadow">
                     {row.emoji} {counts[row.key]}
                 </span>
             ))}

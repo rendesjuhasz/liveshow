@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { Eye } from "lucide-react";
+import { Eye, FlipHorizontal, Maximize2, Mic, MicOff, Minus, Plus } from "lucide-react";
 import { apiFetch, apiUpload } from "@/api/http";
 import StreamerLiveCamera, {
     type StreamerLiveCameraHandle,
@@ -24,7 +24,7 @@ function formatClock(ms: number) {
 }
 
 const BTN =
-    "flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-xl text-white backdrop-blur-sm active:scale-95";
+    "flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/12 text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-xl active:scale-95";
 
 export default function StreamerLiveStudio({
     showId,
@@ -399,43 +399,43 @@ export default function StreamerLiveStudio({
                         <p className={`font-mono text-lg font-semibold tabular-nums drop-shadow ${clockClass(quality)}`}>
                             {clock}
                         </p>
-                        {netLabel ? <p className="mt-1 text-sm font-semibold text-red-400">{netLabel}</p> : null}
-                        {signError ? <p className="mt-1 max-w-[14rem] text-xs font-semibold text-red-300">{signError}</p> : null}
+                        {netLabel ? <p className="mt-1 text-sm font-semibold text-red-400 drop-shadow">{netLabel}</p> : null}
+                        {signError ? <p className="mt-1 max-w-[14rem] text-xs font-semibold text-red-300 drop-shadow">{signError}</p> : null}
                     </div>
-                    <p className="flex items-center gap-1 text-sm text-white/90">
-                        <Eye className="h-4 w-4" />
+                    <p className="flex items-center gap-1 text-sm font-semibold text-white drop-shadow">
+                        <Eye className="h-4 w-4 text-white/85" />
                         {viewers}
                     </p>
                 </div>
-                <p className="mt-2 rounded-lg bg-amber-500/90 px-3 py-1.5 text-center text-xs font-semibold text-black">
+                <p className="mt-2 rounded-lg border border-white/15 bg-amber-400/80 px-3 py-1.5 text-center text-xs font-semibold text-black shadow-[0_8px_20px_rgba(0,0,0,0.25)] backdrop-blur-md">
                     Ne hagyd el ezt az oldalt élő adás közben.
                 </p>
             </div>
                 {overlayOn && question?.text ? (
-                    <div className="pointer-events-none absolute inset-x-4 top-1/3 z-20 rounded-2xl bg-black/70 px-4 py-3 text-center text-lg font-semibold leading-snug">
+                    <div className="pointer-events-none absolute inset-x-4 top-1/3 z-20 rounded-2xl border border-white/15 bg-black/45 px-4 py-3 text-center text-lg font-semibold leading-snug shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
                         ❓ {question.text}
                     </div>
                 ) : null}
                 {emptyHint && !question ? (
-                    <p className="pointer-events-none absolute inset-x-4 bottom-36 z-20 text-center text-sm text-white/80">
+                    <p className="pointer-events-none absolute inset-x-4 bottom-36 z-20 text-center text-sm font-medium text-white/80">
                         Nincs kérdés
                     </p>
                 ) : null}
                 {savingArchive ? (
-                    <p className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/55 text-center text-base font-semibold text-white">
+                    <p className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/55 text-center text-base font-semibold text-white backdrop-blur-sm">
                         Felvétel feltöltése…
                     </p>
                 ) : null}
 
             {confirmStop ? (
-                <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 px-4">
-                    <div className="w-full max-w-sm rounded-2xl bg-neutral-950 p-5 text-center shadow-2xl">
+                <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+                    <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/70 p-5 text-center shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
                         <p className="text-lg font-bold">Biztosan leállítod az élő adást?</p>
                         <p className="mt-2 text-sm text-white/70">A nézők azonnal elvesztik a közvetítést.</p>
                         <div className="mt-5 grid gap-2">
                             <button
                                 type="button"
-                                className="min-h-12 rounded-xl bg-emerald-600 font-bold"
+                                className="min-h-12 rounded-xl bg-[#25f4ee] font-bold text-black"
                                 onClick={() => setConfirmStop(false)}
                             >
                                 Adásban maradok
@@ -453,8 +453,8 @@ export default function StreamerLiveStudio({
             ) : null}
 
             {showCrisis && !confirmStop && !savingArchive ? (
-                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-4">
-                    <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-neutral-950 p-5 text-center">
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+                    <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/70 p-5 text-center shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
                         <p className="text-lg font-bold">
                             {recovering || restoreBusy
                                 ? "Újracsatlakozás..."
@@ -474,7 +474,7 @@ export default function StreamerLiveStudio({
                             <button
                                 type="button"
                                 disabled={Boolean(restoreBusy)}
-                                className="min-h-12 rounded-xl bg-sky-600 font-bold disabled:opacity-50"
+                                className="min-h-12 rounded-xl bg-[#25f4ee] font-bold text-black disabled:opacity-50"
                                 onClick={() => void runRestore("reconnect")}
                             >
                                 Újracsatlakozás...
@@ -482,7 +482,7 @@ export default function StreamerLiveStudio({
                             <button
                                 type="button"
                                 disabled={Boolean(restoreBusy)}
-                                className="min-h-11 rounded-xl bg-white/10 font-semibold disabled:opacity-50"
+                                className="min-h-11 rounded-xl border border-white/15 bg-white/10 font-semibold disabled:opacity-50"
                                 onClick={() => void runRestore("camera")}
                             >
                                 {restoreBusy === "camera" ? "Újracsatlakozás..." : "Kamera újraindítása"}
@@ -490,7 +490,7 @@ export default function StreamerLiveStudio({
                             <button
                                 type="button"
                                 disabled={Boolean(restoreBusy)}
-                                className="min-h-11 rounded-xl bg-white/10 font-semibold disabled:opacity-50"
+                                className="min-h-11 rounded-xl border border-white/15 bg-white/10 font-semibold disabled:opacity-50"
                                 onClick={() => void runRestore("stream")}
                             >
                                 {restoreBusy === "stream" ? "Újracsatlakozás..." : "Stream helyreállítása"}
@@ -514,17 +514,17 @@ export default function StreamerLiveStudio({
                 </div>
             ) : null}
             {recall ? (
-                <div className="absolute inset-x-4 top-1/4 z-30 rounded-2xl bg-neutral-950/95 p-4 shadow-2xl">
+                <div className="absolute inset-x-4 top-1/4 z-30 rounded-2xl border border-white/15 bg-black/75 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
                     <p className="text-lg font-semibold leading-snug">{question?.text || "Nincs kérdés"}</p>
                     <div className="mt-4 grid grid-cols-2 gap-3">
                         <button
                             type="button"
-                            className="rounded-xl bg-red-700 py-3 font-bold"
+                            className="rounded-xl bg-[#fe2c55] py-3 font-bold"
                             onClick={() => void rejectQuestion()}
                         >
                             Kérdés elvetése
                         </button>
-                        <button type="button" className="rounded-xl bg-neutral-700 py-3 font-bold" onClick={() => setRecall(false)}>
+                        <button type="button" className="rounded-xl bg-white/15 py-3 font-bold" onClick={() => setRecall(false)}>
                             Mégsem
                         </button>
                     </div>
@@ -532,7 +532,7 @@ export default function StreamerLiveStudio({
             ) : null}
 
             <div
-                className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/85 to-transparent px-[max(0.75rem,env(safe-area-inset-left),env(safe-area-inset-right))] ${
+                className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent px-[max(0.75rem,env(safe-area-inset-left),env(safe-area-inset-right))] ${
                     landscape
                         ? "pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2"
                         : "pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3"
@@ -541,28 +541,28 @@ export default function StreamerLiveStudio({
                 {expanded ? (
                     <div className="flex justify-end">
                         <button type="button" className={BTN} aria-label="Vezérlők" onClick={() => setExpanded(false)}>
-                            ⛶
+                            <Maximize2 className="size-5" />
                         </button>
                     </div>
                 ) : (
                     <>
                 <StreamerReactionStats counts={reactionCounts} />
                 {overlayOn && question?.text ? (
-                    <p className={`mb-2 overflow-auto text-center font-semibold leading-snug ${landscape ? "max-h-10 text-sm" : "max-h-24 text-base"}`}>
+                    <p className={`mb-2 overflow-auto text-center font-semibold leading-snug drop-shadow ${landscape ? "max-h-10 text-sm" : "max-h-24 text-base"}`}>
                         ❓ {question.text}
                     </p>
                 ) : (
-                    <p className={`mb-2 text-center text-white/70 ${landscape ? "text-xs" : "text-sm"}`}>
+                    <p className={`mb-2 text-center text-white/55 ${landscape ? "text-xs" : "text-sm"}`}>
                         {question ? "A kérdés eltűnt. Röviden: megválaszoltam. Hosszan: elvetés." : "Még nincs beküldött kérdés"}
                     </p>
                 )}
                 <div className={`mb-2 flex items-center justify-center gap-2 ${landscape ? "mb-1.5" : "mb-3"}`}>
                     <button type="button" className={landscape ? `${BTN} !h-10 !w-10 text-base` : BTN} aria-label="Kamera váltás" onClick={() => void camRef.current?.flipCamera()}>
-                        🔄
+                        <FlipHorizontal className={landscape ? "size-4" : "size-5"} />
                     </button>
                     <button
                         type="button"
-                        className={`${landscape ? `${BTN} !h-10 !w-10 text-base` : BTN} ${micBroken && micOn ? "bg-red-600/90 text-white" : ""}`}
+                        className={`${landscape ? `${BTN} !h-10 !w-10 text-base` : BTN} ${micBroken && micOn ? "!border-red-400/60 !bg-red-600/90 text-white" : ""}`}
                         aria-label="Mikrofon"
                         onClick={() => {
                             const next = !micOn;
@@ -571,7 +571,11 @@ export default function StreamerLiveStudio({
                             if (!next) setMicBroken(false);
                         }}
                     >
-                        {micBroken && micOn ? "🔴🎤" : micOn ? "🎤" : "🔇"}
+                        {micOn ? (
+                            <Mic className={`${landscape ? "size-4" : "size-5"} ${micBroken ? "text-white" : ""}`} />
+                        ) : (
+                            <MicOff className={landscape ? "size-4" : "size-5"} />
+                        )}
                     </button>
                     <button
                         type="button"
@@ -579,7 +583,7 @@ export default function StreamerLiveStudio({
                         aria-label="Zoom be"
                         onClick={() => setZoom(camRef.current?.zoomBy(1) ?? Math.min(3, zoom + 0.15))}
                     >
-                        ➕
+                        <Plus className={landscape ? "size-4" : "size-5"} />
                     </button>
                     <button
                         type="button"
@@ -587,7 +591,7 @@ export default function StreamerLiveStudio({
                         aria-label="Zoom ki"
                         onClick={() => setZoom(camRef.current?.zoomBy(-1) ?? Math.max(1, zoom - 0.2))}
                     >
-                        ➖
+                        <Minus className={landscape ? "size-4" : "size-5"} />
                     </button>
                     <button
                         type="button"
@@ -595,7 +599,7 @@ export default function StreamerLiveStudio({
                         aria-label="Több kép, kevesebb gomb"
                         onClick={() => toggleFullscreen()}
                     >
-                        ⛶
+                        <Maximize2 className={landscape ? "size-4" : "size-5"} />
                     </button>
                 </div>
                 <div className="flex flex-col items-center">
@@ -608,7 +612,7 @@ export default function StreamerLiveStudio({
                         window.clearTimeout(pressTimer.current);
                     }}
                     onContextMenu={(e) => e.preventDefault()}
-                    className={`w-full touch-none rounded-2xl bg-emerald-600 font-bold disabled:opacity-60 ${landscape ? "min-h-11 text-base" : "min-h-14 text-lg"}`}
+                    className={`w-full touch-none rounded-2xl bg-gradient-to-r from-[#25f4ee] to-[#fe2c55] font-bold text-white shadow-[0_10px_28px_rgba(254,44,85,0.35)] disabled:opacity-60 ${landscape ? "min-h-11 text-base" : "min-h-14 text-lg"}`}
                 >
                     {question ? "✅ Megválaszoltam, következő" : "Várakozás kérdésre"}
                 </button>

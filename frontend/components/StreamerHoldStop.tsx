@@ -72,14 +72,14 @@ export default function StreamerHoldStop({
             onLostPointerCapture={onUp}
             onContextMenu={(e) => e.preventDefault()}
             aria-label="Adás leállítása: tartsd nyomva két másodpercig"
-            className={`relative overflow-hidden touch-none border border-white/20 bg-transparent font-medium text-red-200/90 disabled:opacity-40 ${
+            className={`relative overflow-hidden touch-none border border-white/25 bg-white/5 font-medium text-red-100/90 shadow-[0_8px_20px_rgba(0,0,0,0.25)] backdrop-blur-md disabled:opacity-40 ${
                 landscape
                     ? "mt-0 min-h-10 shrink-0 basis-28 rounded-xl text-xs"
                     : "mt-3 min-h-11 w-full max-w-[13rem] self-center rounded-xl text-sm"
             }`}
         >
             <span
-                className="pointer-events-none absolute inset-y-0 left-0 bg-red-700/80 transition-[width] duration-75"
+                className="pointer-events-none absolute inset-y-0 left-0 bg-[#fe2c55]/90 transition-[width] duration-75"
                 style={{ width: `${Math.round(pct * 100)}%` }}
             />
             <span className="relative z-10">

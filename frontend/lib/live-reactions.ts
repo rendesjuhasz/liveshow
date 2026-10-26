@@ -20,6 +20,14 @@ export function emptyReactionCounts(): ReactionCounts {
     return { heart: 0, fire: 0, laugh: 0, clap: 0, like: 0, wow: 0, sad: 0, angry: 0 };
 }
 
+/** Tartalomkészítő stúdió: felúszó emoji a kép jobb-belső sávjában, nem a kereten. */
+export function streamerReactionOrigin(width: number, height: number) {
+    return {
+        right: Math.max(96, Math.round(width * 0.22)),
+        bottom: Math.max(140, Math.round(height * 0.28)),
+    };
+}
+
 export function mergeReactionCounts(raw?: Partial<ReactionCounts> | null): ReactionCounts {
     const next = emptyReactionCounts();
     for (const [key, value] of Object.entries(raw || {})) {

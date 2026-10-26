@@ -3,12 +3,13 @@
 import { Suspense, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { isAdmin, isStreamer, useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/I18nProvider";
 import PasswordField from "@/components/PasswordField";
 import SocialAuthButtons from "@/components/SocialAuthButtons";
 import { safeViewerReturnPath } from "@/lib/auth-return";
+import { markStreamerLoginIntent } from "@/lib/streamer-login-intent";
 
 function LoginForm() {
     const { login } = useAuth();
@@ -30,7 +31,16 @@ function LoginForm() {
         setError("");
         setBusy(true);
         try {
-            await login(email, password);
+            const nextUser = await login(email, password);
+            if (isStreamer(nextUser) && !nextPath) {
+                markStreamerLoginIntent();
+                window.location.assign("/streamer");
+                return;
+            }
+            if (isAdmin(nextUser) && !nextUser.streamer && !nextPath) {
+                window.location.assign("/admin");
+                return;
+            }
             router.replace(safeViewerReturnPath(nextPath));
         } catch (err) {
             const message =

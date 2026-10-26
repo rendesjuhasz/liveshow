@@ -7,6 +7,8 @@ import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import ReportButton from "@/components/ReportButton";
+import EventCard from "@/components/media/EventCard";
+import { isEndedShow, watchHref, type MediaItem } from "@/lib/media";
 
 export default function StreamerProfilePage() {
     const params = useParams<{ id: string }>();
@@ -61,7 +63,7 @@ export default function StreamerProfilePage() {
     }
 
     return (
-        <div className="mx-auto min-h-dvh max-w-3xl px-4 py-10 text-white md:px-10">
+        <div className="mx-auto min-h-dvh max-w-5xl px-4 py-10 text-white md:px-10">
             <Link href="/streamers" className="text-sm text-accent hover:underline">
                 ← Tartalomkészítők
             </Link>
@@ -107,31 +109,41 @@ export default function StreamerProfilePage() {
             </p>
 
             <h2 className="mb-3 text-xl font-bold">Műsorok</h2>
-            <ul className="mb-10 space-y-2">
-                {(data.shows || []).map((s: any) => {
-                    const ended = Boolean(s.status === "archived" || s.scheduleStatus === "ended" || s.wentLiveAt);
-                    const href = s.live ? `/live/${s.id}` : ended ? `/archive/${s.id}` : `/shows/${s.id}`;
-                    return (
-                    <li key={s.id}>
-                        <Link href={href} className="text-accent hover:underline">
-                            {s.title}
-                        </Link>
-                        {s.live ? (
-                            <span className="ml-2 text-sm text-zinc-400">
-                                {Number(s.viewerCount || 0).toLocaleString("hu-HU")} néző
-                            </span>
-                        ) : ended ? (
-                            <span className="ml-2 text-sm text-zinc-400">
-                                {Number(s.viewCount || 0).toLocaleString("hu-HU")} megtekintés
-                            </span>
-                        ) : null}
-                    </li>
-                    );
-                })}
-                {(!data.shows || data.shows.length === 0) && (
-                    <li className="text-neutral-500">Még nincs műsor.</li>
-                )}
-            </ul>
+            {(data.shows || []).length > 0 ? (
+                <div className="mb-10 grid gap-4 sm:grid-cols-2">
+                    {(data.shows || []).map((s: any) => {
+                        const item: MediaItem = {
+                            id: s.id,
+                            title: s.title,
+                            image: s.image,
+                            startTime: s.startTime,
+                            startAtUtc: s.startAtUtc || s.startTime,
+                            endAtUtc: s.endAtUtc,
+                            live: s.live,
+                            wentLiveAt: s.wentLiveAt,
+                            streamId: s.streamId,
+                            exists: s.exists,
+                            status: s.status,
+                            videoCategory: s.videoCategory,
+                            ended: s.ended,
+                            viewCount: s.viewCount,
+                            viewerCount: s.viewerCount,
+                            streamer: { id: data.id, name: data.name },
+                        };
+                        return (
+                            <EventCard
+                                key={s.id}
+                                item={item}
+                                href={watchHref(item)}
+                                wide
+                                hoverPreview={isEndedShow(item) && item.exists !== false}
+                            />
+                        );
+                    })}
+                </div>
+            ) : (
+                <p className="mb-10 text-neutral-500">Még nincs műsor.</p>
+            )}
 
             <h2 className="mb-3 text-xl font-bold">Értékelések</h2>
             {(data.reviews || []).length === 0 && (

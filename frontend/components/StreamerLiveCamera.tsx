@@ -47,6 +47,7 @@ type Props = {
         counts?: ReactionCounts;
     }) => void;
     onReactionCounts?: (counts: ReactionCounts) => void;
+    onSupport?: (payload: { author: string; tickets: number; ts: number }) => void;
 };
 
 function qualityFromStats(opts: {
@@ -62,7 +63,7 @@ function qualityFromStats(opts: {
 }
 
 const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function StreamerLiveCamera(
-    { stream, showId, fill, zoomPreview = 1, onLink, onAudioBroken, onSignalingError, onMediaHealth, onReaction, onReactionCounts },
+    { stream, showId, fill, zoomPreview = 1, onLink, onAudioBroken, onSignalingError, onMediaHealth, onReaction, onReactionCounts, onSupport },
     ref,
 ) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -80,12 +81,14 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
     const onHealthRef = useRef(onMediaHealth);
     const onReactionRef = useRef(onReaction);
     const onCountsRef = useRef(onReactionCounts);
+    const onSupportRef = useRef(onSupport);
     onLinkRef.current = onLink;
     onAudioRef.current = onAudioBroken;
     onErrRef.current = onSignalingError;
     onHealthRef.current = onMediaHealth;
     onReactionRef.current = onReaction;
     onCountsRef.current = onReactionCounts;
+    onSupportRef.current = onSupport;
     streamRef.current = stream;
     const [error, setError] = useState("");
     const skipEndedRef = useRef(false);
@@ -502,6 +505,14 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                 });
                 socket.on("live:reactions", (payload: { counts?: ReactionCounts }) => {
                     if (payload?.counts) onCountsRef.current?.(payload.counts);
+                });
+                socket.on("live:support", (payload: { author?: string; tickets?: number; ts?: number }) => {
+                    const tickets = Math.max(1, Math.floor(Number(payload?.tickets) || 1));
+                    onSupportRef.current?.({
+                        author: String(payload?.author || "").trim() || "Néző",
+                        tickets,
+                        ts: Number(payload?.ts) || Date.now(),
+                    });
                 });
             } catch (err: unknown) {
                 if (!cancelled) {

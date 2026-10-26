@@ -16,6 +16,7 @@ import { assertNoOffPlatformContact } from "../security/contact-leak";
 import { setShowVideoCategory } from "../shows/video-category-db";
 import { getArchiveFile, getRecordingFile } from "../streaming/hls-paths";
 import { resolveInside } from "../security/path-jail";
+import { advisoryXactLock } from "../db/advisory-lock";
 import {
     BACKUP_DAYS,
     PRIVATE_DEADLINES,
@@ -258,9 +259,7 @@ export class PrivateStreamsService implements OnModuleInit {
         if (!offer) throw new NotFoundException("A kiválasztott ajánlat hiányzik.");
 
         const ticket = await this.prisma.$transaction(async (tx) => {
-            await tx.$queryRaw`
-                SELECT pg_advisory_xact_lock(hashtext(${`privco:${userId}`}), hashtext(${requestId}))
-            `;
+            await advisoryXactLock(tx, `privco:${userId}`, requestId);
             const locked = await tx.$queryRaw<any[]>`
                 SELECT * FROM "PrivateRequest" WHERE id = ${requestId} FOR UPDATE
             `;

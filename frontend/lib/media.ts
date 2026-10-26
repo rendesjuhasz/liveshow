@@ -75,6 +75,14 @@ export function isUpcoming(item: MediaItem, now = Date.now()) {
     return startMs <= now && now < startMs + 2 * 60 * 60 * 1000 && !item.wentLiveAt;
 }
 
+export function watchHref(item: MediaItem) {
+    const id = mediaId(item);
+    if (!id) return "/shows";
+    if (item.live) return `/live/${id}`;
+    if (isEndedShow(item)) return `/archive/${id}`;
+    return `/shows/${id}`;
+}
+
 export function isEndedShow(item: MediaItem, now = Date.now()) {
     if (item.live) return false;
     if (item.scheduleStatus === "delayed" || item.scheduleStatus === "missed") return false;

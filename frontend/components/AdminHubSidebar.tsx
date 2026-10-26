@@ -8,6 +8,9 @@ export default function AdminHubSidebar() {
         <aside className="border-b border-white/10 bg-gray-950 md:w-72 md:shrink-0 md:border-b-0 md:border-r md:sticky md:top-0 md:h-dvh md:overflow-y-auto">
             <div className="p-4">
                 <p className="text-sm font-semibold text-yellow-300">Admin</p>
+                <Link href="/" className="mt-2 inline-block text-sm text-accent underline">
+                    Vissza a LiveShow főoldalra
+                </Link>
                 <p className="mt-1 text-xs text-zinc-500">
                     Válassz menüt — utána teljes képernyőn nyílik.
                 </p>

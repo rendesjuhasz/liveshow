@@ -19,9 +19,9 @@ export default function AdminAccessGate({ children }: { children: React.ReactNod
         return (
             <div className="flex min-h-dvh items-center justify-center bg-gray-900 px-4 text-white">
                 <div className="max-w-md text-center">
-                    <p className="mb-4">Az adminhoz be kell jelentkezni.</p>
-                    <Link href="/admin/login" className="text-accent underline">
-                        Admin belépés
+                    <p className="mb-4">Ez az admin felület, nem a nyilvános LiveShow.</p>
+                    <Link href="/" className="text-accent underline">
+                        Vissza a LiveShow főoldalra
                     </Link>
                 </div>
             </div>

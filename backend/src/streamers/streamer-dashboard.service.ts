@@ -4,6 +4,7 @@ import {
     HttpException,
     Injectable,
     NotFoundException,
+    Optional,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { IngestService } from "../ingest/ingest.service";
@@ -34,6 +35,7 @@ import { ViewLogService } from "../stats/view-log.service";
 import { ReportsService } from "../moderation/reports.service";
 import { ChatService } from "../moderation/chat.service";
 import { parseScheduleInput } from "../time/timezone";
+import { WebrtcGateway } from "../webrtc-signaling/webrtc.gateway";
 
 type StreamerRow = {
     id: string;
@@ -97,6 +99,7 @@ export class StreamerDashboardService {
         private readonly views: ViewLogService,
         private readonly reports: ReportsService,
         private readonly chat: ChatService,
+        @Optional() private readonly liveIo?: WebrtcGateway,
     ) {}
 
     private async ownShow(streamerId: string, showId: string) {
@@ -526,6 +529,7 @@ export class StreamerDashboardService {
 
         const fresh = await this.prisma.show.findUnique({ where: { id: show.id } });
         if (!live) {
+            this.liveIo?.emitLiveEnded(show.id);
             const everLive = wasLive || hasEverGoneLive({
                 live: false,
                 status: tagged.status,

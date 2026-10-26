@@ -300,4 +300,23 @@ export class WebrtcGateway implements OnGatewayConnection, OnGatewayDisconnect, 
             this.emitReactionCounts(showId);
         }
     }
+
+    emitLiveEnded(showId: string) {
+        const id = String(showId || "").trim();
+        if (!id) return;
+        this.server.to(`view:${id}`).emit("live:ended");
+    }
+
+    emitLiveSupport(showId: string, payload: { author: string; tickets: number; ts?: number }) {
+        const id = String(showId || "").trim();
+        if (!id) return;
+        const packet = {
+            author: String(payload.author || "Néző").trim() || "Néző",
+            tickets: Math.max(1, Math.floor(Number(payload.tickets) || 1)),
+            ts: Number(payload.ts) || Date.now(),
+        };
+        this.server.to(`pub:${id}`).emit("live:support", packet);
+        const pub = this.publishers.get(id);
+        if (pub) this.server.to(pub).emit("live:support", packet);
+    }
 }

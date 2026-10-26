@@ -50,6 +50,9 @@ export async function replaceLivekitTrack(room: Room, next: MediaStreamTrack) {
 }
 
 export function attachRemoteTrack(track: { attach: (el: HTMLMediaElement) => HTMLMediaElement }, video: HTMLVideoElement) {
+    video.playsInline = true;
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
     track.attach(video);
 }
 

@@ -12,6 +12,7 @@ import { createLiveWakeLock } from "@/lib/live-wake-lock";
 import { emptyReactionCounts, mergeReactionCounts, type ReactionCounts } from "@/lib/live-reactions";
 import { StreamerReactionFloat, StreamerReactionStats } from "@/components/StreamerReactionOverlay";
 import StreamerHoldStop from "@/components/StreamerHoldStop";
+import StreamerSupportToast, { type SupportNotice } from "@/components/StreamerSupportToast";
 
 type QuestionRow = { text?: string; topicKey?: string } | null;
 
@@ -68,6 +69,7 @@ export default function StreamerLiveStudio({
     const [signError, setSignError] = useState("");
     const [reactionCounts, setReactionCounts] = useState<ReactionCounts>(emptyReactionCounts);
     const [reactionEvent, setReactionEvent] = useState<{ value: string; ts: number } | null>(null);
+    const [supportNotice, setSupportNotice] = useState<SupportNotice | null>(null);
     const [confirmStop, setConfirmStop] = useState(false);
     const [leftPage, setLeftPage] = useState(false);
     const [cameraLive, setCameraLive] = useState(true);
@@ -390,9 +392,11 @@ export default function StreamerLiveStudio({
                         if (value) setReactionEvent({ value, ts: payload.ts });
                     }}
                     onReactionCounts={(counts) => setReactionCounts(mergeReactionCounts(counts))}
+                    onSupport={(payload) => setSupportNotice(payload)}
                 />
             </div>
             <StreamerReactionFloat event={reactionEvent} session={startedAt} />
+            <StreamerSupportToast notice={supportNotice} />
             <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pt-[max(0.6rem,env(safe-area-inset-top))]">
                 <div className="flex items-start justify-between">
                     <div>

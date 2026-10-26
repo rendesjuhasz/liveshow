@@ -8,7 +8,7 @@ function makeService() {
     let rolledBack = false;
     const prisma = {
         show: {
-            findUnique: jest.fn().mockResolvedValue({ id: "s1", streamerId: "st1" }),
+            findUnique: jest.fn().mockResolvedValue({ id: "s1", streamerId: "st1", live: true }),
         },
         $transaction: jest.fn(async (fn: (client: typeof tx) => unknown) => {
             try {
@@ -53,5 +53,19 @@ describe("addSupport ticket + insert transaction", () => {
         expect(ticketGroups.spendOne.mock.calls[0][1]).toBe(tx);
         expect(tx.$executeRaw).toHaveBeenCalled();
         expect(getRolledBack()).toBe(false);
+    });
+
+    it("spends the requested ticket count in one transaction", async () => {
+        const { svc, ticketGroups } = makeService();
+        ticketGroups.assertCanAsk.mockResolvedValue(12);
+        const result = await svc.addSupport("u1", "s1", "support", "", 5);
+        expect(result.ticketsSpent).toBe(5);
+        expect(ticketGroups.spendOne).toHaveBeenCalledTimes(5);
+    });
+
+    it("rejects support when the show is not live", async () => {
+        const { svc, prisma } = makeService();
+        prisma.show.findUnique.mockResolvedValue({ id: "s1", streamerId: "st1", live: false });
+        await expect(svc.addSupport("u1", "s1", "support", "", 2)).rejects.toThrow("élő");
     });
 });

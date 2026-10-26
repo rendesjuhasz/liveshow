@@ -11,7 +11,7 @@ function audio() {
     return ctx;
 }
 
-function beep(freq: number, duration: number, delay = 0) {
+function beep(freq: number, duration: number, delay = 0, peak = 0.18) {
     const ac = audio();
     if (!ac) return;
     const osc = ac.createOscillator();
@@ -19,7 +19,7 @@ function beep(freq: number, duration: number, delay = 0) {
     osc.type = "sine";
     osc.frequency.value = freq;
     gain.gain.setValueAtTime(0.0001, ac.currentTime + delay);
-    gain.gain.exponentialRampToValueAtTime(0.18, ac.currentTime + delay + 0.02);
+    gain.gain.exponentialRampToValueAtTime(peak, ac.currentTime + delay + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + delay + duration);
     osc.connect(gain);
     gain.connect(ac.destination);
@@ -27,7 +27,12 @@ function beep(freq: number, duration: number, delay = 0) {
     osc.stop(ac.currentTime + delay + duration + 0.02);
 }
 
-export function playStreamerAlert(kind: "net" | "mic" | "question" | "background") {
+export function playStreamerAlert(kind: "net" | "mic" | "question" | "background" | "support") {
+    if (kind === "support") {
+        beep(660, 0.12, 0, 0.06);
+        beep(880, 0.16, 0.11, 0.05);
+        return;
+    }
     if (kind === "background") {
         beep(520, 0.18, 0);
         beep(400, 0.22, 0.2);

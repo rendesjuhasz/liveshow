@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { isAdmin, isStreamer, useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import PasswordField from "@/components/PasswordField";
+import { markStreamerLoginIntent } from "@/lib/streamer-login-intent";
 
 export default function StreamerLoginPage() {
     const { login, ready } = useAuth();
@@ -31,7 +32,8 @@ export default function StreamerLoginPage() {
                 setBusy(false);
                 return;
             }
-            router.replace("/streamer");
+            markStreamerLoginIntent();
+            window.location.assign("/streamer");
         } catch (err: any) {
             setError(err.message || "Hiba történt a bejelentkezés során.");
             setBusy(false);

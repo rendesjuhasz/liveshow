@@ -2,13 +2,13 @@
 
 import { useParams } from "next/navigation";
 import { isPlaceholderStreamId } from "@/lib/getStreamToken";
-import LiveViewer from "./LiveViewer";
+import LiveWatchScreen from "./LiveWatchScreen";
 import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function LivePage() {
     const { t } = useT();
-    const { id } = useParams<{ id: string }>();
-    const showId = decodeURIComponent(id ?? "").trim();
+    const rawId = useParams<{ id: string | string[] }>().id;
+    const showId = decodeURIComponent(String(Array.isArray(rawId) ? rawId[0] : rawId ?? "")).trim();
 
     if (!showId || isPlaceholderStreamId(showId)) {
         return (
@@ -19,5 +19,5 @@ export default function LivePage() {
         );
     }
 
-    return <LiveViewer showId={showId} />;
+    return <LiveWatchScreen showId={showId} />;
 }

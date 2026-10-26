@@ -5,8 +5,8 @@ import { apiFetch } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import HeroBanner from "@/components/media/HeroBanner";
 import MediaRow from "@/components/media/MediaRow";
-import { isUpcoming, mediaId, type MediaItem } from "@/lib/media";
-import { getFavorites, getWatched } from "@/lib/library";
+import { isUpcoming, mediaId, watchHref, type MediaItem } from "@/lib/media";
+import { getFavorites } from "@/lib/library";
 import FaqList, { type FaqItem } from "@/components/FaqList";
 import WishWall from "@/components/WishWall";
 import Link from "next/link";
@@ -46,7 +46,6 @@ export default function HomePage() {
     const [popular, setPopular] = useState<MediaItem[]>([]);
     const [faqItems, setFaqItems] = useState<FaqItem[]>([]);
     const [favs, setFavs] = useState<MediaItem[]>([]);
-    const [watched, setWatched] = useState<MediaItem[]>([]);
     const snapRef = useRef<ReturnType<typeof readHomeScroll>>(null);
     const rootRef = useRef<HTMLDivElement>(null);
     const appliedY = useRef(false);
@@ -108,7 +107,6 @@ export default function HomePage() {
 
     useEffect(() => {
         setFavs(getFavorites(user?.id).map((f) => ({ id: f.id, title: f.title, image: f.image, startTime: f.startTime })));
-        setWatched(getWatched(user?.id).map((f) => ({ id: f.id, title: f.title, image: f.image, startTime: f.startTime })));
     }, [user?.id]);
 
     useLayoutEffect(() => {
@@ -195,13 +193,12 @@ export default function HomePage() {
             )}
 
             <div className="-mt-10 relative z-20 space-y-2">
-                <MediaRow title={t("home.featured")} items={featuredRow} />
-                <MediaRow title={t("home.soon")} items={upcoming} />
+                <MediaRow title={t("home.featured")} items={featuredRow} hrefFor={watchHref} />
+                <MediaRow title={t("home.soon")} items={upcoming} hrefFor={watchHref} />
                 <MediaRow title={t("home.liveStreams")} items={live} hrefFor={hrefLive} wide />
                 <MediaRow title={t("home.popularEvents")} items={popular} hrefFor={hrefArchive} wide hoverPreview />
                 <MediaRow title={t("home.watchAgain")} items={archives} hrefFor={hrefArchive} wide hoverPreview />
-                {favs.length > 0 && <MediaRow title={t("home.favorites")} items={favs} />}
-                {watched.length > 0 && <MediaRow title={t("home.continue")} items={watched} />}
+                {favs.length > 0 && <MediaRow title={t("home.favorites")} items={favs} hrefFor={watchHref} />}
             </div>
 
             <WishWall />

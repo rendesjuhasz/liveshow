@@ -13,6 +13,7 @@ import { canReservePayout, computeStreamerRevenue } from "./revenue";
 import { ensurePayoutSchema, getPayoutSettings, setPayoutSettings } from "./platform-config";
 import { payoutReceiptHtml, type PayoutSnapshot } from "./payout-receipt";
 import { USER_ROLES } from "../auth/roles";
+import { advisoryXactLock } from "../db/advisory-lock";
 
 @Injectable()
 export class PayoutsService implements OnModuleInit {
@@ -49,9 +50,7 @@ export class PayoutsService implements OnModuleInit {
         const id = randomUUID();
 
         await this.prisma.$transaction(async (tx) => {
-            await tx.$queryRaw`
-                SELECT pg_advisory_xact_lock(hashtext(${`payout:${opts.streamerId}`}))
-            `;
+            await advisoryXactLock(tx, `payout:${opts.streamerId}`);
             const money = await computeStreamerRevenue(tx as PrismaService, opts.streamerId);
             const value = Math.round(Number(opts.amount ?? money.available));
             if (!canReservePayout(money.available, value)) {

@@ -117,6 +117,6 @@ describe("payout reservation concurrency", () => {
         expect(denied).toHaveLength(1);
         expect(denied[0].status === "rejected" && denied[0].reason).toBeInstanceOf(BadRequestException);
         expect(inserts).toEqual([10000]);
-        expect(String(tx.$queryRaw.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
+        expect(String(tx.$executeRaw.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
     });
 });

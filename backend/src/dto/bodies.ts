@@ -412,6 +412,7 @@ export class QuestionCreateDto {
 export class SupportDto {
     @IsOptional() @IsString() @MaxLength(40) kind?: string;
     @IsOptional() @IsString() @MaxLength(2000) text?: string;
+    @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(20) tickets?: number;
 }
 
 export class BannedWordDto {

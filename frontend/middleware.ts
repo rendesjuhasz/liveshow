@@ -64,6 +64,8 @@ function withNonce(request: NextRequest, extra?: Headers) {
     requestHeaders.set("Content-Security-Policy", csp);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
     response.headers.set("Content-Security-Policy", csp);
+    response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
+    response.headers.set("CDN-Cache-Control", "no-store");
     return applyMediaPermissions(response);
 }
 
@@ -157,10 +159,12 @@ export async function middleware(request: NextRequest) {
                 return withCsp(NextResponse.redirect(url));
             }
         } else if (session.kind !== "admin") {
-            const url = request.nextUrl.clone();
-            url.pathname = "/admin/login";
-            url.search = session.kind === "user" ? "error=forbidden" : "";
-            return withCsp(NextResponse.redirect(url));
+            // Public site is `/`. Safari often reopens the last /admin URL when the
+            // domain is typed; send non-admins home instead of the admin login screen.
+            const res = NextResponse.redirect(publicAbsoluteUrl(request, "/"));
+            const out = withCsp(res);
+            out.headers.set("Cache-Control", "private, no-store");
+            return out;
         }
     }
 
@@ -203,13 +207,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: [
-        {
-            source: "/((?!_next/static|_next/image|favicon.ico|socket\\.io|live-io).*)",
-            missing: [
-                { type: "header", key: "next-router-prefetch" },
-                { type: "header", key: "purpose", value: "prefetch" },
-            ],
-        },
-    ],
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|socket\\.io|live-io).*)"],
 };

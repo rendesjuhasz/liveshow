@@ -22,6 +22,7 @@ export default function LiveKitWatch({
     onStalled,
     onSocket,
     onError,
+    onEnded,
 }: {
     showId: string;
     videoRef: RefObject<HTMLVideoElement | null>;
@@ -29,6 +30,7 @@ export default function LiveKitWatch({
     onStalled?: () => void;
     onSocket?: (socket: Socket | null) => void;
     onError?: (message: string) => void;
+    onEnded?: () => void;
 }) {
     const onReadyRef = useRef(onReady);
     onReadyRef.current = onReady;
@@ -38,6 +40,8 @@ export default function LiveKitWatch({
     onSocketRef.current = onSocket;
     const onErrorRef = useRef(onError);
     onErrorRef.current = onError;
+    const onEndedRef = useRef(onEnded);
+    onEndedRef.current = onEnded;
     const [needsTap, setNeedsTap] = useState(false);
 
     useEffect(() => {
@@ -134,6 +138,10 @@ export default function LiveKitWatch({
                 socket?.emit("live:viewer", { showId });
             };
             socket.on("connect", joinView);
+            socket.on("live:ended", () => {
+                stall();
+                onEndedRef.current?.();
+            });
             if (socket.connected) joinView();
             joinTimer = window.setInterval(joinView, 8000);
             await join();
@@ -166,10 +174,10 @@ export default function LiveKitWatch({
     if (!needsTap) return null;
 
     return (
-        <div className="mb-2">
+        <div className="absolute inset-x-0 top-[42%] z-40 flex justify-center px-4">
             <button
                 type="button"
-                className="mt-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold"
+                className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-xl"
                 onClick={tapToPlay}
             >
                 Hang bekapcsolása

@@ -2,8 +2,9 @@ import {
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
+import { posterSeekSeconds } from "./show-poster";
 import { promises as fsp } from "fs";
 import * as path from "path";
 import {
@@ -17,6 +18,7 @@ import {
 import { fileSize, fileStat, pathExists } from "./fs-async";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 @Injectable()
 export class FfmpegPipeline {
@@ -97,6 +99,34 @@ export class FfmpegPipeline {
             throw new NotFoundException("A videó feldolgozása nem sikerült. Próbáld MP4 formátumban.");
         }
         return output;
+    }
+
+    async extractPoster(videoPath: string, destPath: string, durationSec = 0) {
+        const seek = posterSeekSeconds(durationSec);
+        await fsp.mkdir(path.dirname(destPath), { recursive: true });
+        const opts = { timeout: 60_000, windowsHide: true, maxBuffer: 2 * 1024 * 1024 };
+        const args = (ss: number) => [
+            "-y",
+            ...(ss > 0 ? ["-ss", ss.toFixed(2)] : []),
+            "-i",
+            videoPath,
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=1280:-2",
+            "-q:v",
+            "3",
+            destPath,
+        ];
+        try {
+            await execFileAsync("ffmpeg", args(seek), opts);
+        } catch {
+            await execFileAsync("ffmpeg", args(0), opts);
+        }
+        if ((await fileSize(destPath)) < 200) {
+            throw new Error("A borítókép nem készült el.");
+        }
+        return destPath;
     }
 
     async probeDurationSeconds(filePath: string): Promise<number> {

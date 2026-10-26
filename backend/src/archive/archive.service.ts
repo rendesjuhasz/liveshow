@@ -38,6 +38,12 @@ import { fileSize, pathExists } from "../streaming/fs-async";
 import { CACHE_TTL, PublicTtlCache } from "../cache/public-cache.module";
 import { readStoredPublicLinks } from "../streamers/public-links";
 import { isApprovedStreamer } from "../streamers/status";
+import { COVER_DIR, ensureVodDirs } from "../uploads/vod-multer";
+import {
+    autoPosterFileName,
+    autoPosterStoredPath,
+    shouldReplaceShowImage,
+} from "../streaming/show-poster";
 
 @Injectable()
 export class ArchiveService implements OnModuleInit, OnModuleDestroy {
@@ -212,12 +218,44 @@ export class ArchiveService implements OnModuleInit, OnModuleDestroy {
         };
     }
 
-    private async syncPrismaArchive(showId: string, streamId: string) {
+    private async ensureAutoPoster(showId: string, filePath: string | null, duration: number) {
+        if (!filePath || !(await pathExists(filePath))) return false;
+        const show = await this.prisma.show.findUnique({
+            where: { id: showId },
+            select: { image: true },
+        });
+        if (!show || !shouldReplaceShowImage(show.image, showId)) return false;
+        ensureVodDirs();
+        const dest = path.join(COVER_DIR, autoPosterFileName(showId));
+        const stored = autoPosterStoredPath(showId);
+        if ((await fileSize(dest)) >= 200 && String(show.image || "").trim() === stored) {
+            return false;
+        }
+        try {
+            await this.ffmpeg.extractPoster(filePath, dest, duration);
+        } catch (err: any) {
+            this.logger.warn(`Borítókép ${showId}: ${err?.message || err}`);
+            return false;
+        }
+        if ((await fileSize(dest)) < 200) return false;
+        if (String(show.image || "").trim() !== stored) {
+            await this.prisma.show
+                .update({ where: { id: showId }, data: { image: stored } })
+                .catch(() => undefined);
+            this.bustCatalogCache();
+        }
+        return true;
+    }
+
+    private async syncPrismaArchive(showId: string, streamId: string, opts?: { poster?: boolean }) {
         const info = await this.ffmpeg.getArchiveInfo(streamId);
         const duration =
             info.exists && info.filePath ? await this.ffmpeg.probeDurationSeconds(info.filePath) : 0;
         const meta = await this.persistArchiveMeta(showId, streamId, info, duration);
         if (!info.exists) return meta;
+        if (opts?.poster !== false) {
+            await this.ensureAutoPoster(showId, meta.filePath, duration);
+        }
 
         const recording = getRecordingFile(streamId);
         if (await pathExists(recording)) {
@@ -468,6 +506,7 @@ export class ArchiveService implements OnModuleInit, OnModuleDestroy {
         if (this.backfillRunning) return;
         this.backfillRunning = true;
         try {
+        let posterBudget = 24;
         const shows = await this.prisma.show.findMany({
             where: { live: false },
             select: { id: true, streamId: true },
@@ -478,8 +517,11 @@ export class ArchiveService implements OnModuleInit, OnModuleDestroy {
             if (!streamId) continue;
             const disk = await this.ffmpeg.getArchiveInfo(streamId);
             if (disk.exists) {
-                await this.syncPrismaArchive(show.id, streamId);
+                const meta = await this.syncPrismaArchive(show.id, streamId, { poster: false });
                 await setShowStatus(this.prisma, show.id, "archived").catch(() => undefined);
+                if (posterBudget > 0 && (await this.ensureAutoPoster(show.id, meta.filePath, meta.duration))) {
+                    posterBudget -= 1;
+                }
                 continue;
             }
             const recording = getRecordingFile(streamId);
@@ -488,6 +530,23 @@ export class ArchiveService implements OnModuleInit, OnModuleDestroy {
                 await this.generateArchive(show.id);
             } catch {
                 /* recording may still be unreadable */
+            }
+        }
+        if (posterBudget > 0) {
+            const liveShows = await this.prisma.show.findMany({
+                where: { live: true },
+                select: { id: true, streamId: true, image: true },
+                take: 20,
+            });
+            for (const show of liveShows) {
+                if (posterBudget <= 0) break;
+                if (!shouldReplaceShowImage(show.image, show.id)) continue;
+                const streamId = show.streamId?.trim();
+                if (!streamId) continue;
+                const recording = getRecordingFile(streamId);
+                if ((await fileSize(recording)) < 80_000) continue;
+                const duration = await this.ffmpeg.probeDurationSeconds(recording);
+                if (await this.ensureAutoPoster(show.id, recording, duration)) posterBudget -= 1;
             }
         }
         } catch (err: any) {

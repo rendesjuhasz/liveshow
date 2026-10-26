@@ -6,6 +6,8 @@ import { apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import type { StreamAlert } from "@/lib/stream-alert";
+import { playStreamerAlert } from "@/lib/streamer-alert-tone";
+import { useSupportSoundPref } from "@/lib/streamer-support-sound";
 
 export default function StreamerAlertsPage() {
     const gate = useStreamerGate();
@@ -20,6 +22,7 @@ export default function StreamerAlertsPage() {
     const [pushEnabled, setPushEnabled] = useState(true);
     const [discordWebhook, setDiscordWebhook] = useState("");
     const [telegramChatId, setTelegramChatId] = useState("");
+    const supportSound = useSupportSoundPref();
 
     const loadAlerts = useCallback(() => {
         const q = new URLSearchParams();
@@ -209,6 +212,17 @@ export default function StreamerAlertsPage() {
                 }}
             >
                 <h2 className="font-semibold">Értesítések</h2>
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={supportSound.on}
+                        onChange={(e) => {
+                            supportSound.setOn(e.target.checked);
+                            if (e.target.checked) playStreamerAlert("support");
+                        }}
+                    />
+                    Hangjelzés nézői támogatásnál (élő stúdió, jobb felső felugró)
+                </label>
                 <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.target.checked)} />
                     Email (tartalomkészítő kapcsolat)

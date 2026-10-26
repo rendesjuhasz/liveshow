@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Heart, Play, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { coverUrl, isEndedShow, mediaId, type MediaItem } from "@/lib/media";
+import { coverUrl, isEndedShow, mediaId, watchHref, type MediaItem } from "@/lib/media";
 import { formatCount } from "@/lib/views";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { useEventCountdown } from "@/hooks/useEventCountdown";
@@ -37,7 +37,7 @@ function EventCard({
     const { user } = useAuth();
     const { t } = useT();
     const id = mediaId(item);
-    const to = href || (isEndedShow(item) ? `/archive/${id}` : `/shows/${id}`);
+    const to = href || watchHref(item);
     const ended = isEndedShow(item);
     const countdown = useEventCountdown(item.live || ended ? { ended: true } : item);
     const [fav, setFav] = useState(false);

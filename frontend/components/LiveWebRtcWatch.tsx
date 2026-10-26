@@ -13,6 +13,7 @@ export default function LiveWebRtcWatch({
     onPreview,
     onStalled,
     onSocket,
+    onEnded,
 }: {
     showId: string;
     videoRef: RefObject<HTMLVideoElement | null>;
@@ -20,6 +21,7 @@ export default function LiveWebRtcWatch({
     onPreview?: (url: string | null) => void;
     onStalled?: () => void;
     onSocket?: (socket: Socket | null) => void;
+    onEnded?: () => void;
 }) {
     const onReadyRef = useRef(onReady);
     onReadyRef.current = onReady;
@@ -29,6 +31,8 @@ export default function LiveWebRtcWatch({
     onStalledRef.current = onStalled;
     const onSocketRef = useRef(onSocket);
     onSocketRef.current = onSocket;
+    const onEndedRef = useRef(onEnded);
+    onEndedRef.current = onEnded;
     const [hint, setHint] = useState("Kapcsolódás az élő adáshoz...");
     const [needsTap, setNeedsTap] = useState(false);
 
@@ -204,6 +208,7 @@ export default function LiveWebRtcWatch({
                 const video = videoRef.current;
                 if (video) video.srcObject = null;
                 setHint("Az élő kamera leállt.");
+                onEndedRef.current?.();
             });
         })();
 
@@ -229,12 +234,12 @@ export default function LiveWebRtcWatch({
     if (!hint && !needsTap) return null;
 
     return (
-        <div className="mb-2">
-            {hint ? <p className="text-sm text-zinc-400">{hint}</p> : null}
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-2 px-4">
+            {hint ? <p className="text-sm text-white/80 drop-shadow">{hint}</p> : null}
             {needsTap ? (
                 <button
                     type="button"
-                    className="mt-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold"
+                    className="pointer-events-auto mt-0 rounded-full border border-white/20 bg-white/12 px-4 py-2 text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-xl"
                     onClick={tapToPlay}
                 >
                     Koppints a lejátszáshoz

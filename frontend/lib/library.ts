@@ -9,8 +9,23 @@ export type LibraryCard = {
     at: number;
 };
 
+const WATCH_PURGE = "liveshow:watch-purged:4";
+
 function key(kind: "fav" | "watch", userId?: string | null) {
     return `liveshow:${kind}:${userId || "anon"}`;
+}
+
+function purgeWatchLists() {
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem(WATCH_PURGE) === "1") return;
+    const remove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith("liveshow:watch:") || k.startsWith("liveshow:watch-cleared:")) remove.push(k);
+    }
+    for (const k of remove) localStorage.removeItem(k);
+    localStorage.setItem(WATCH_PURGE, "1");
 }
 
 function read(kind: "fav" | "watch", userId?: string | null): LibraryCard[] {
@@ -57,13 +72,11 @@ export function toggleFavorite(item: MediaItem, userId?: string | null) {
     return next.some((x) => x.id === id);
 }
 
-export function getWatched(userId?: string | null) {
-    return read("watch", userId);
+export function getWatched(_userId?: string | null) {
+    purgeWatchLists();
+    return [];
 }
 
-export function recordWatched(item: MediaItem, userId?: string | null) {
-    const id = mediaId(item);
-    if (!id) return;
-    const list = read("watch", userId).filter((x) => x.id !== id);
-    write("watch", userId, [snapshot(item), ...list]);
+export function recordWatched(_item: MediaItem, _userId?: string | null) {
+    purgeWatchLists();
 }

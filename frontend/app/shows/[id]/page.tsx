@@ -140,7 +140,12 @@ export default function ShowDetailsPage() {
                     )}
                     <ReviewForm showId={String(id)} />
                     <div className="mt-10">
-                        <ShowTalk showId={String(id)} canAsk={Boolean(show.live)} live={Boolean(show.live)} />
+                        <ShowTalk
+                            showId={String(id)}
+                            ownShow={Boolean(user?.streamer?.id && show?.streamer?.id === user.streamer.id)}
+                            canAsk={Boolean(show.live)}
+                            live={Boolean(show.live)}
+                        />
                     </div>
                 </div>
 

@@ -47,7 +47,7 @@ export class QuestionsController {
         @Param("showId") showId: string,
         @Body() body: SupportDto,
     ) {
-        return this.questionsService.addSupport(req.user.id, showId, body.kind, body.text);
+        return this.questionsService.addSupport(req.user.id, showId, body.kind, body.text, body.tickets);
     }
 
     @Get("notifications")

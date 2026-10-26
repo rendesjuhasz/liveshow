@@ -60,7 +60,18 @@ const nextConfig: NextConfig = {
         value: "max-age=15552000; includeSubDomains",
       });
     }
-    return [{ source: "/:path*", headers: security }];
+    const noStore = {
+      key: "Cache-Control",
+      value: "private, no-store, no-cache, must-revalidate",
+    };
+    return [
+      { source: "/:path*", headers: security },
+      { source: "/", headers: [noStore] },
+      {
+        source: "/_next/static/:path*",
+        headers: isProd ? [] : [{ key: "Cache-Control", value: "no-store" }],
+      },
+    ].filter((rule) => rule.headers.length > 0);
   },
   async rewrites() {
     const proxy = [

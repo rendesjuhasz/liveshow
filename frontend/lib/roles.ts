@@ -57,6 +57,26 @@ export function isStudioChromePath(pathname = "") {
     return isAdminAppPath(pathname) || isStreamerChromePath(pathname);
 }
 
+export function isLiveWatchPath(pathname = "") {
+    const { path } = stripLocalePrefix(pathname);
+    return /^\/live\/[^/]+\/?$/.test(path);
+}
+
+export function isArchiveWatchPath(pathname = "") {
+    const { path } = stripLocalePrefix(pathname);
+    if (path === "/archive" || path.startsWith("/archive/category")) return false;
+    return /^\/archive\/[^/]+\/?$/.test(path);
+}
+
+export function isTheaterWatchPath(pathname = "") {
+    return isLiveWatchPath(pathname) || isArchiveWatchPath(pathname);
+}
+
+export function isHomePath(pathname = "") {
+    const { path } = stripLocalePrefix(pathname);
+    return path === "/";
+}
+
 export function appSurfaceKey(pathname = "") {
     const { path } = stripLocalePrefix(pathname);
     if (isAdminAppPath(path)) return "nav.surface.admin";

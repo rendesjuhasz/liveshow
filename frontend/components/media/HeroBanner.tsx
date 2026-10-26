@@ -4,18 +4,14 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Info, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { coverUrl, formatWhen, isEndedShow, type MediaItem } from "@/lib/media";
+import { coverUrl, formatWhen, watchHref, type MediaItem } from "@/lib/media";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { useMounted } from "@/lib/use-mounted";
 
 export default function HeroBanner({ item }: { item: MediaItem }) {
     const { t } = useT();
     const mounted = useMounted();
-    const watchHref = item.live
-        ? `/live/${item.id}`
-        : isEndedShow(item)
-          ? `/archive/${item.id}`
-          : `/shows/${item.id}`;
+    const watchTo = watchHref(item);
     const when = mounted ? formatWhen(item.startAtUtc || item.startTime) : "";
 
     return (
@@ -57,7 +53,7 @@ export default function HeroBanner({ item }: { item: MediaItem }) {
                 </p>
                 <div className="mt-6 flex w-full flex-col gap-3 sm:mt-8 sm:w-auto sm:flex-row sm:flex-wrap">
                     <Button asChild variant="gold" size="lg" className="w-full sm:w-auto">
-                        <Link href={watchHref}>
+                        <Link href={watchTo}>
                             <Play className="size-5 fill-current" />
                             {t("home.watchNow")}
                         </Link>

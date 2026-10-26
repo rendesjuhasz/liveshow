@@ -32,9 +32,22 @@ type PlayerProps = {
     streamUrl?: string | null;
     showId?: string;
     purpose?: "live" | "private";
+    liveControls?: boolean;
+    ownShow?: boolean;
+    onBroadcastLive?: (live: boolean) => void;
+    onBroadcastEnded?: () => void;
 };
 
-export default function Player({ streamId, streamUrl, showId, purpose = "live" }: PlayerProps) {
+export default function Player({
+    streamId,
+    streamUrl,
+    showId,
+    purpose = "live",
+    liveControls = true,
+    ownShow = false,
+    onBroadcastLive,
+    onBroadcastEnded,
+}: PlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const { t, locale } = useT();
@@ -50,6 +63,22 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
     const webrtcLiveRef = useRef(false);
     const liveSocketRef = useRef<Socket | null>(null);
     const committedBackendRef = useRef<LiveVideoBackend | null>(null);
+    const onBroadcastLiveRef = useRef(onBroadcastLive);
+    const onBroadcastEndedRef = useRef(onBroadcastEnded);
+    onBroadcastLiveRef.current = onBroadcastLive;
+    onBroadcastEndedRef.current = onBroadcastEnded;
+
+    useEffect(() => {
+        onBroadcastLiveRef.current?.(webrtcLive);
+    }, [webrtcLive]);
+
+    useEffect(() => {
+        const el = videoRef.current;
+        if (!el) return;
+        el.playsInline = true;
+        el.setAttribute("playsinline", "true");
+        el.setAttribute("webkit-playsinline", "true");
+    }, []);
 
     useEffect(() => {
         committedBackendRef.current = null;
@@ -246,10 +275,20 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
     const subs = tracks.filter((tr) => tr.kind === "subtitle");
     const extras = tracks.filter((tr) => tr.kind === "audio");
 
+    const liveFill = purpose === "live";
+
     return (
-        <div>
-            {loading && !previewUrl && <p>{t("common.loading")}</p>}
-            {error && <p className="text-danger">{error}</p>}
+        <div className={liveFill ? "relative h-full" : undefined}>
+            {loading && !previewUrl && (
+                <p className={liveFill ? "pointer-events-none absolute inset-x-3 top-1/2 z-10 -translate-y-1/2 text-center text-sm text-white/50 drop-shadow" : undefined}>
+                    {t("common.loading")}
+                </p>
+            )}
+            {error && (
+                <p className={liveFill ? "absolute inset-x-3 top-28 z-20 text-sm font-semibold text-red-300 drop-shadow" : "text-danger"}>
+                    {error}
+                </p>
+            )}
             {purpose === "live" && showId && liveBackend === "livekit" ? (
                 <LiveKitWatch
                     showId={showId}
@@ -273,6 +312,7 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
                         setError(message);
                         setLoading(false);
                     }}
+                    onEnded={() => onBroadcastEndedRef.current?.()}
                 />
             ) : null}
             {purpose === "live" && showId && liveBackend === "mesh" ? (
@@ -300,16 +340,27 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
                         hlsRef.current?.destroy();
                         hlsRef.current = null;
                     }}
+                    onEnded={() => onBroadcastEndedRef.current?.()}
                 />
             ) : null}
-            <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+            <div
+                className={
+                    liveFill
+                        ? "relative h-full w-full overflow-visible bg-black"
+                        : "relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+                }
+            >
                 <video
                     ref={videoRef}
-                    controls={webrtcLive}
+                    controls={!liveFill && webrtcLive}
                     autoPlay
                     playsInline
                     muted
-                    className="absolute inset-0 h-full w-full bg-black"
+                    className={
+                        liveFill
+                            ? "pointer-events-none absolute inset-0 z-0 h-full w-full max-w-none bg-black object-cover"
+                            : "absolute inset-0 h-full w-full bg-black"
+                    }
                 >
                     {subs.map((tr) => (
                         <track
@@ -327,25 +378,40 @@ export default function Player({ streamId, streamUrl, showId, purpose = "live" }
                     <img
                         src={previewUrl}
                         alt=""
-                        className="pointer-events-none absolute inset-0 z-10 h-full w-full object-contain"
+                        className={`pointer-events-none absolute inset-0 z-10 h-full w-full ${liveFill ? "max-w-none object-cover" : "object-contain"}`}
+                    />
+                ) : null}
+                {purpose === "live" && showId ? (
+                    <ViewerReactionBar
+                        shareKind="live"
+                        shareId={showId}
+                        enableSupport={Boolean(liveControls || webrtcLive)}
+                        ownShow={ownShow}
+                        live={Boolean(liveControls || webrtcLive)}
+                        onReact={
+                            liveControls || webrtcLive
+                                ? (emoji) => {
+                                      liveSocketRef.current?.emit("live:reaction", {
+                                          type: "reaction",
+                                          reactionType: "emoji",
+                                          value: emoji,
+                                          streamId,
+                                          showId,
+                                      });
+                                  }
+                                : undefined
+                        }
                     />
                 ) : null}
             </div>
-            {purpose === "live" && showId ? (
-                <ViewerReactionBar
-                    onReact={(emoji) => {
-                        liveSocketRef.current?.emit("live:reaction", {
-                            type: "reaction",
-                            reactionType: "emoji",
-                            value: emoji,
-                            streamId,
-                            showId,
-                        });
-                    }}
-                />
-            ) : null}
             {(subs.length > 0 || hlsAudio.length > 1 || extras.length > 0) && (
-                <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                <div
+                    className={
+                        liveFill
+                            ? "absolute bottom-3 left-3 z-30 mt-0 flex max-w-[min(70%,20rem)] flex-wrap gap-2 text-xs"
+                            : "mt-3 flex flex-wrap gap-3 text-sm"
+                    }
+                >
                     {subs.length > 0 && (
                         <label className="flex items-center gap-2">
                             {t("player.subtitles")}

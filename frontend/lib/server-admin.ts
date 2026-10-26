@@ -15,6 +15,5 @@ export async function requireAdminPage() {
         .join("; ");
     const session = await fetchAdminSession(cookieHeader);
     if (session.kind === "admin") return;
-    if (session.kind === "user") redirect("/admin/login?error=forbidden");
-    redirect("/admin/login");
+    redirect("/");
 }

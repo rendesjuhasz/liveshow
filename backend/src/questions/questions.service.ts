@@ -5,6 +5,7 @@ import {
     Injectable,
     NotFoundException,
     OnModuleInit,
+    Optional,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -29,6 +30,8 @@ import {
     viewerStatusLabelHu,
 } from "./question-rank";
 import { isOpenQuestionStatus, planClusterResolution } from "./question-resolve";
+import { advisoryXactLock } from "../db/advisory-lock";
+import { WebrtcGateway } from "../webrtc-signaling/webrtc.gateway";
 
 type Actor = { id: string; role?: string; email?: string };
 
@@ -38,6 +41,7 @@ export class QuestionsService implements OnModuleInit {
         private readonly prisma: PrismaService,
         private readonly ticketGroups: TicketGroupsService,
         private readonly follows: FollowsService,
+        @Optional() private readonly liveIo?: WebrtcGateway,
     ) {}
 
     async onModuleInit() {
@@ -50,7 +54,26 @@ export class QuestionsService implements OnModuleInit {
             SELECT COUNT(*)::int AS count FROM "Question"
             WHERE "showId" = ${id} AND status IN ('pending', 'approved')
         `;
-        return { pendingCount: rows[0]?.count || 0 };
+        let current: { text: string; supportCount: number; questionCount: number } | null = null;
+        try {
+            const extra = await this.prisma.$queryRaw<{ liveQuestionTopicKey?: string | null }[]>`
+                SELECT "liveQuestionTopicKey" FROM "Show" WHERE id = ${id}
+            `;
+            const cluster = await this.pickCluster(id, extra[0]?.liveQuestionTopicKey);
+            if (cluster?.text) {
+                current = {
+                    text: cluster.text,
+                    supportCount: cluster.supportCount,
+                    questionCount: cluster.questionCount,
+                };
+            }
+        } catch {
+            current = null;
+        }
+        return {
+            pendingCount: rows[0]?.count || 0,
+            current,
+        };
     }
 
     async listMine(userId: string, showId?: string) {
@@ -158,9 +181,15 @@ export class QuestionsService implements OnModuleInit {
         const show = await this.prisma.show.findUnique({ where: { id } });
         if (!show) throw new NotFoundException("A műsor nem található.");
         if (!show.live) {
-            throw new BadRequestException(
-                "Az élő adásnak vége. Új kérdés már nem küldhető; a jegyed megmarad.",
-            );
+            const streamLive = await this.prisma.stream.findFirst({
+                where: { showId: id, isLive: true },
+                select: { id: true },
+            }).catch(() => null);
+            if (!streamLive) {
+                throw new BadRequestException(
+                    "Az élő adásnak vége. Új kérdés már nem küldhető; a jegyed megmarad.",
+                );
+            }
         }
         if (show.streamerId) {
             const host = await this.prisma.streamer.findUnique({
@@ -255,9 +284,7 @@ export class QuestionsService implements OnModuleInit {
         }
 
         const created = await this.prisma.$transaction(async (tx) => {
-            await tx.$queryRaw`
-                SELECT pg_advisory_xact_lock(hashtext(${`qpend:${userId}`}), hashtext(${id}))
-            `;
+            await advisoryXactLock(tx, `qpend:${userId}`, id);
             const pendingRows = await tx.$queryRaw<any[]>`
                 SELECT COUNT(*)::int AS count FROM "Question"
                 WHERE "showId" = ${id} AND "userId" = ${userId} AND status = 'pending'
@@ -520,7 +547,7 @@ export class QuestionsService implements OnModuleInit {
         }
     }
 
-    async addSupport(userId: string, showId?: string, kind?: string, text?: string) {
+    async addSupport(userId: string, showId?: string, kind?: string, text?: string, tickets?: number) {
         const id = this.requireShowId(showId);
         const show = await this.prisma.show.findUnique({ where: { id } });
         if (!show) throw new NotFoundException("A műsor nem található.");
@@ -536,37 +563,60 @@ export class QuestionsService implements OnModuleInit {
         assertNoOffPlatformContact(body);
 
         let spentTicket = false;
+        let ticketsSpent = 0;
         const rowId = randomUUID();
         if (k === "support") {
+            if (!show.live) {
+                throw new BadRequestException("Támogatás csak élő adás alatt küldhető.");
+            }
             if (!show.streamerId) {
                 throw new BadRequestException("Ehhez a műsorhoz nem küldhető jegyes támogatás.");
             }
-            await this.ticketGroups.assertCanAsk(userId, id);
-            await this.prisma.$transaction(async (tx) => {
-                const spent = await this.ticketGroups.spendOne(
-                    {
-                        viewerUserId: userId,
-                        streamerId: show.streamerId as string,
-                        showId: id,
-                        reason: "support",
-                    },
-                    tx,
+            ticketsSpent = Math.min(20, Math.max(1, Math.floor(Number(tickets) || 1)));
+            const usable = await this.ticketGroups.assertCanAsk(userId, id);
+            if (usable < ticketsSpent) {
+                throw new BadRequestException(
+                    `Nincs elég felhasználható jegyed. Ehhez a támogatáshoz ${ticketsSpent} jegy kell.`,
                 );
-                if (!spent) {
-                    throw new BadRequestException(
-                        "Nincs felhasználható jegyed. Vásárolj jegycsomagot, a támogatás 1 jegyet von le.",
+            }
+            await this.prisma.$transaction(async (tx) => {
+                for (let i = 0; i < ticketsSpent; i++) {
+                    const spent = await this.ticketGroups.spendOne(
+                        {
+                            viewerUserId: userId,
+                            streamerId: show.streamerId as string,
+                            showId: id,
+                            reason: "support",
+                        },
+                        tx,
                     );
+                    if (!spent) {
+                        throw new BadRequestException(
+                            "Nincs felhasználható jegyed. Vásárolj jegycsomagot.",
+                        );
+                    }
                 }
                 await tx.$executeRaw`
-                    INSERT INTO "ShowSupport" (id, "showId", "userId", kind, text, "createdAt")
-                    VALUES (${rowId}, ${id}, ${userId}, ${k}, ${body || null}, NOW())
+                    INSERT INTO "ShowSupport" (id, "showId", "userId", kind, text, "ticketsSpent", "createdAt")
+                    VALUES (${rowId}, ${id}, ${userId}, ${k}, ${body || null}, ${ticketsSpent}, NOW())
                 `;
             });
             spentTicket = true;
+            let author = "Néző";
+            try {
+                const viewer = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+                author = String(viewer?.name || "").trim() || "Néző";
+            } catch {
+                /* név nélkül is mehet az értesítés */
+            }
+            this.liveIo?.emitLiveSupport(id, {
+                author,
+                tickets: ticketsSpent,
+            });
         } else {
             await this.prisma.$executeRaw`
-                INSERT INTO "ShowSupport" (id, "showId", "userId", kind, text, "createdAt")
-                VALUES (${rowId}, ${id}, ${userId}, ${k}, ${body || null}, NOW())
+                INSERT INTO "ShowSupport" (id, "showId", "userId", kind, text, "ticketsSpent", "createdAt")
+                VALUES (${rowId}, ${id}, ${userId}, ${k}, ${body || null}, 0, NOW())
             `;
         }
         const wallet = spentTicket ? await this.ticketGroups.balance(userId, id).catch(() => null) : null;
@@ -574,7 +624,7 @@ export class QuestionsService implements OnModuleInit {
             id: rowId,
             kind: k,
             spentTicket,
-            ticketsSpent: spentTicket ? 1 : 0,
+            ticketsSpent,
             ticketBalance: wallet ? Number(wallet.usableOnShow ?? wallet.balance) || 0 : undefined,
         };
     }
@@ -583,7 +633,7 @@ export class QuestionsService implements OnModuleInit {
         const show = await this.requireStreamerShow(streamerId, showId);
         try {
             const rows = await this.prisma.$queryRaw<any[]>`
-                SELECT s.id, s.kind, s.text, s."createdAt", u.name AS "userName"
+                SELECT s.id, s.kind, s.text, s."ticketsSpent", s."createdAt", u.name AS "userName"
                 FROM "ShowSupport" s
                 JOIN "User" u ON u.id = s."userId"
                 WHERE s."showId" = ${show.id}
@@ -594,6 +644,7 @@ export class QuestionsService implements OnModuleInit {
                 id: r.id,
                 kind: r.kind,
                 text: r.text,
+                ticketsSpent: Number(r.ticketsSpent) || 0,
                 createdAt: r.createdAt,
                 author: String(r.userName || "").trim() || "Néző",
             }));
@@ -841,8 +892,10 @@ export class QuestionsService implements OnModuleInit {
                 "userId" TEXT NOT NULL,
                 "kind" TEXT NOT NULL,
                 "text" TEXT,
+                "ticketsSpent" INTEGER NOT NULL DEFAULT 0,
                 "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
             )`,
+            `ALTER TABLE "ShowSupport" ADD COLUMN IF NOT EXISTS "ticketsSpent" INTEGER NOT NULL DEFAULT 0`,
             `UPDATE "Question" SET status = 'pending' WHERE status = 'approved'`,
         ];
         for (const sql of stmts) {

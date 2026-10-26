@@ -48,6 +48,9 @@ function AdminLoginForm() {
                 onSubmit={handleLogin}
                 className="w-full max-w-md rounded-2xl bg-card p-5 shadow-[0_12px_40px_rgba(0,0,0,0.4)] sm:p-8"
             >
+                <Link href="/" className="mb-6 inline-block text-sm text-accent underline">
+                    Vissza a LiveShow főoldalra
+                </Link>
                 <p className="mb-2 text-xs font-bold uppercase tracking-widest text-accent">Admin</p>
                 <h1 className="mb-2 text-3xl font-extrabold">Admin belépés</h1>
                 <p className="mb-6 text-sm text-zinc-400">

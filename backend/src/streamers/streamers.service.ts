@@ -16,6 +16,7 @@ import { assertNoOffPlatformContact } from "../security/contact-leak";
 import { privateShowIds } from "../private-streams/private-schema";
 import { ViewLogService } from "../stats/view-log.service";
 import { hashSecret, newOpaqueToken } from "../auth/secrets";
+import { endedShowIdSet } from "../shows/show-ended";
 
 @Injectable()
 export class StreamersService {
@@ -71,7 +72,18 @@ export class StreamersService {
                 createdAt: true,
                 userId: true,
                 shows: {
-                    select: { id: true, title: true, startTime: true, live: true },
+                    select: {
+                        id: true,
+                        title: true,
+                        image: true,
+                        startTime: true,
+                        endTime: true,
+                        live: true,
+                        streamId: true,
+                        archiveExists: true,
+                        status: true,
+                        videoCategory: true,
+                    },
                     orderBy: { startTime: "desc" },
                 },
             },
@@ -87,10 +99,22 @@ export class StreamersService {
         const publicShows = (publicStreamer.shows || []).filter((s) => !hidden.has(s.id));
         const viewCounts = await this.views.countsByShowIds(publicShows.map((s) => s.id));
         const liveMap = this.views.liveByShow();
+        const endedIds = await endedShowIdSet(this.prisma, publicShows);
         return {
             ...publicStreamer,
             shows: publicShows.map((s) => ({
-                ...s,
+                id: s.id,
+                title: s.title,
+                image: s.image,
+                startTime: s.startTime,
+                startAtUtc: s.startTime,
+                endAtUtc: s.endTime,
+                live: s.live,
+                streamId: s.streamId,
+                exists: Boolean(s.archiveExists),
+                status: s.status,
+                videoCategory: s.videoCategory,
+                ended: endedIds.has(s.id),
                 viewCount: viewCounts.get(s.id) || 0,
                 viewerCount: s.live ? liveMap.get(s.id) || 0 : 0,
             })),

@@ -45,11 +45,44 @@ html {
     text-size-adjust: 100%;
 }
 
+html[data-live-watch] header,
+html:has([data-live-viewer]) header,
+body:has([data-live-viewer]) header {
+    display: none !important;
+}
+
+html[data-live-watch] footer,
+html:has([data-live-viewer]) footer,
+body:has([data-live-viewer]) footer {
+    display: none !important;
+}
+
+[data-main-pad] {
+    padding-top: calc(4rem + env(safe-area-inset-top));
+}
+
+html[data-live-watch] [data-main-pad],
+html[data-home] [data-main-pad],
+html:has([data-live-viewer]) [data-main-pad],
+body:has([data-live-viewer]) [data-main-pad] {
+    padding-top: 0 !important;
+}
+
 html,
 body {
     overflow-x: hidden;
     max-width: 100%;
     min-height: 100dvh;
+}
+
+html[data-live-watch],
+html:has([data-live-viewer]),
+html[data-live-watch] body,
+html:has([data-live-viewer]) body {
+    overflow: hidden !important;
+    height: 100dvh;
+    max-height: 100dvh;
+    overscroll-behavior: none;
 }
 
 body {
@@ -123,4 +156,84 @@ svg {
 
 html[data-cookie-ready]:not([data-cookie-consent]) .cookie-banner {
     display: block !important;
+}
+
+.live-watch-overlay {
+    pointer-events: none;
+}
+.live-watch-overlay > * {
+    pointer-events: auto;
+}
+.live-watch-overlay section {
+    min-height: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0.35rem 0.1rem;
+    border-radius: 0;
+}
+.live-watch-overlay h2 {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+.live-watch-overlay h2 + p {
+    display: none;
+}
+.live-watch-overlay ul {
+    max-height: 7.5rem;
+}
+.live-watch-overlay input,
+.live-watch-overlay textarea,
+.live-watch-overlay select {
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.live-watch-overlay button[type="submit"] {
+    background-image: linear-gradient(90deg, #25f4ee, #fe2c55);
+    color: #fff;
+}
+.live-watch-overlay [data-live-chat-error] {
+    background: #111111 !important;
+    color: #ff8a94 !important;
+    opacity: 1 !important;
+    text-shadow: none;
+}
+
+dialog.viewer-share-dialog:not([open]) {
+    display: none !important;
+}
+dialog.viewer-share-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: min(28rem, calc(100vw - 1.5rem));
+    max-height: min(90dvh, 36rem);
+    overflow: auto;
+    border: 1px solid #5a5a5a;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    color: #ffffff;
+    background: #2f2f2f !important;
+    background-color: #2f2f2f !important;
+    opacity: 1 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+dialog.viewer-share-dialog::backdrop {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    opacity: 1 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+@media (max-width: 639px) {
+    dialog.viewer-share-dialog {
+        margin: auto 0 0;
+        width: 100%;
+        max-width: none;
+        border-radius: 1rem 1rem 0 0;
+    }
 }

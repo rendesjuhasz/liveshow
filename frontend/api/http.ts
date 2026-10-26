@@ -141,13 +141,14 @@ async function parseJson(response: Response) {
 
 function throwIfNotOk(response: Response, data: any) {
     if (response.ok) return;
-    const message =
-        data?.message ||
-        data?.error ||
-        (Array.isArray(data?.message) ? data.message.join(", ") : null) ||
-        `API error: ${response.status}`;
+    const raw = data?.message ?? data?.error;
+    const message = Array.isArray(raw)
+        ? raw.map((item) => String(item || "").trim()).filter(Boolean).join(" ")
+        : raw;
     throw new ApiError(
-        typeof message === "string" ? message : `API error: ${response.status}`,
+        typeof message === "string" && message.trim()
+            ? message
+            : `API error: ${response.status}`,
         response.status,
     );
 }

@@ -7,7 +7,7 @@ import { Bell, ChevronDown, Menu, Search, UserRound, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isAdmin, isStreamer, useAuth } from "@/context/AuthContext";
 import { displayInitial, displayName } from "@/lib/display-name";
-import { isAdminAppPath, isStreamerAppPath, isStreamerChromePath, isStudioChromePath } from "@/lib/roles";
+import { isAdminAppPath, isStreamerAppPath, isStreamerChromePath, isStudioChromePath, isTheaterWatchPath } from "@/lib/roles";
 import { viewerLoginHref } from "@/lib/auth-return";
 import { apiFetch } from "@/api/http";
 import SearchDialog from "@/components/search/SearchDialog";
@@ -65,7 +65,9 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
     const { path: localeFreePath } = stripLocalePrefix(pathname || "/");
     const onAdminApp = isAdminAppPath(pathname);
     const onStudio = isStudioChromePath(pathname);
-    const homeBar = localeFreePath === "/";
+    const liveWatch = isTheaterWatchPath(pathname);
+    const hidePublicChrome = onStudio || liveWatch;
+    const homeBar = localeFreePath === "/" || liveWatch;
 
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 24);
@@ -151,6 +153,8 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
         return () => window.clearInterval(timer);
     }, [user]);
 
+    if (liveWatch) return null;
+
     return (
         <>
             <header
@@ -164,7 +168,10 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
                 <nav className="flex h-16 items-center gap-1.5 px-2 sm:gap-3 sm:px-3 md:gap-6 md:px-8">
                     <button
                         type="button"
-                        className="flex size-11 shrink-0 items-center justify-center rounded-xl text-white hover:bg-white/10 md:hidden"
+                        className={cn(
+                            "flex size-11 shrink-0 items-center justify-center rounded-xl text-white hover:bg-white/10 md:hidden",
+                            liveWatch && "hidden",
+                        )}
                         aria-label={mobileOpen ? t("nav.closeMenu") : t("nav.menu")}
                         aria-expanded={mobileOpen}
                         onClick={() => {
@@ -178,7 +185,7 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
                         </span>
                     </button>
                     <LocaleLink
-                        href="/"
+                        href={liveWatch ? "/live" : "/"}
                         scroll={false}
                         data-brand-logo
                         className="min-w-0 shrink truncate text-lg font-black tracking-tight sm:text-xl"
@@ -193,7 +200,7 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
                             {t("nav.backToPublic")}
                         </LocaleLink>
                     )}
-                    {!onStudio && (
+                    {!hidePublicChrome && (
                     <div className="hidden items-center gap-5 text-sm text-zinc-300 md:flex">
                         {LINK_KEYS.map((l) => (
                             <LocaleLink
@@ -218,20 +225,23 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
                     {isStreamer(user) && !onStreamerChrome && (
                         <Link
                             href="/streamer"
-                            className="hidden shrink-0 rounded-xl bg-accent px-3 py-2 text-sm font-bold text-black md:inline-flex"
+                            className="shrink-0 rounded-xl bg-accent px-2 py-2 text-xs font-bold text-black sm:px-3 sm:text-sm"
                         >
                             {t("nav.streamerMode")}
                         </Link>
                     )}
                     <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
-                        {mounted && !onStudio && (
+                        {mounted && !hidePublicChrome && (
                             <span className="hidden md:inline-flex">
                                 <LanguageSwitcher compact />
                             </span>
                         )}
                         <button
                             type="button"
-                            className="flex size-11 items-center justify-center rounded-xl text-white hover:bg-white/10"
+                            className={cn(
+                                "flex size-11 items-center justify-center rounded-xl text-white hover:bg-white/10",
+                                liveWatch && "hidden",
+                            )}
                             aria-label={t("nav.search")}
                             onClick={() => setSearchOpen(true)}
                             suppressHydrationWarning
@@ -395,12 +405,12 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
 
             {mobileOpen && (
                 <div className="fixed inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-40 max-h-[calc(100dvh-4rem-env(safe-area-inset-top))] overflow-y-auto border-b border-white/5 bg-[#1e1e1e]/95 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
-                    {!onStudio && (
+                    {!hidePublicChrome && (
                         <div className="mb-4">
                             <LanguageSwitcher />
                         </div>
                     )}
-                    {!onStudio && (
+                    {!hidePublicChrome && (
                     <div className="grid gap-1">
                         {LINK_KEYS.map((l) => (
                             <LocaleLink

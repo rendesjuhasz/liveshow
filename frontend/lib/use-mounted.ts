@@ -1,10 +1,12 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-
-const subscribe = () => () => {};
+import { useEffect, useState } from "react";
 
 /** False during SSR and the hydration render; true after mount. */
 export function useMounted() {
-    return useSyncExternalStore(subscribe, () => true, () => false);
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+    return mounted;
 }

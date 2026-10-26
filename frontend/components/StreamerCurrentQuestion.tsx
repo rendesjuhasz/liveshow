@@ -158,7 +158,7 @@ export default function StreamerCurrentQuestion({
                         <li key={row.id} className="rounded-lg bg-neutral-900/80 p-3">
                             <span className="text-xs uppercase text-neutral-500">
                                 {row.kind === "support"
-                                    ? "Támogatás (1 jegy)"
+                                    ? `Támogatás (${Number(row.ticketsSpent) || 1} jegy)`
                                     : row.kind === "thanks"
                                       ? "Köszönet"
                                       : row.kind === "feedback"

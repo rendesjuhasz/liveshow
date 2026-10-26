@@ -26,6 +26,12 @@ export default function AdminTemplate({ children }: { children: React.ReactNode 
             <header className="sticky top-0 z-20 border-b border-white/10 bg-gray-950">
                 <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-8">
                     <Link
+                        href="/"
+                        className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/15"
+                    >
+                        Vissza a LiveShow főoldalra
+                    </Link>
+                    <Link
                         href="/admin"
                         className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/15"
                     >

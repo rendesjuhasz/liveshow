@@ -547,13 +547,14 @@ model ShowNotifyStat {
 }
 
 model ShowSupport {
-  id        String   @id @default(uuid())
-  showId    String
-  userId    String
+  id           String   @id @default(uuid())
+  showId       String
+  userId       String
   /// "opinion" | "feedback" | "thanks" | "support"
-  kind      String
-  text      String?
-  createdAt DateTime @default(now())
+  kind         String
+  text         String?
+  ticketsSpent Int      @default(0)
+  createdAt    DateTime @default(now())
   show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

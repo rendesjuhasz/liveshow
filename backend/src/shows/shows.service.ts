@@ -65,7 +65,11 @@ function toShowDto(show: any) {
             streamId: show.streamId ?? null,
             streamerId: show.streamerId ?? null,
             streamer: show.streamer
-                ? { id: show.streamer.id, name: show.streamer.name }
+                ? {
+                      id: show.streamer.id,
+                      name: show.streamer.name,
+                      avatarUrl: show.streamer.avatarUrl ?? null,
+                  }
                 : null,
             startTime: startAtUtc,
             startAtUtc,

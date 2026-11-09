@@ -5,6 +5,7 @@ import {
     HttpException,
     HttpStatus,
 } from "@nestjs/common";
+import { localizeClassValidatorMessage } from "./class-validator-i18n";
 import { MESSAGES, translate } from "./messages";
 import { I18nService } from "./i18n.service";
 
@@ -20,7 +21,7 @@ function localizeMessage(message: string, locale: string) {
     for (const [key, row] of Object.entries(MESSAGES)) {
         if (row.hu === message) return translate(key, locale);
     }
-    return message;
+    return localizeClassValidatorMessage(message, locale);
 }
 
 @Catch()

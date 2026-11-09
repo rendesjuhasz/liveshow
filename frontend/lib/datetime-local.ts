@@ -36,24 +36,45 @@ export function showScheduleClientError(input: {
     endLocal?: string;
     timezone: string;
 }): string | null {
-    if (!String(input.title || "").trim()) return "Add meg a műsor címét.";
-    if (!String(input.videoCategory || "").trim()) return "Válassz videókategóriát.";
+    const fields = showScheduleClientErrors(input);
+    return fields.title || fields.videoCategory || fields.startTime || fields.endTime || fields.timezone || null;
+}
+
+export function showScheduleClientErrors(input: {
+    title: string;
+    videoCategory: string;
+    startLocal: string;
+    endLocal?: string;
+    timezone: string;
+}): { title?: string; videoCategory?: string; startTime?: string; endTime?: string; timezone?: string } {
+    const fields: {
+        title?: string;
+        videoCategory?: string;
+        startTime?: string;
+        endTime?: string;
+        timezone?: string;
+    } = {};
+    if (!String(input.title || "").trim()) fields.title = "Add meg a műsor címét.";
+    if (!String(input.videoCategory || "").trim()) fields.videoCategory = "Válassz videókategóriát.";
     const start = normalizeDatetimeLocal(input.startLocal);
-    if (!start) return "Add meg a kezdés dátumát és óráját.";
+    if (!start) fields.startTime = "Add meg a kezdés dátumát és óráját.";
     try {
-        const startUtc = zonedLocalToUtc(start, input.timezone);
-        if (startUtc.getTime() <= Date.now() - 60_000) {
-            return "A kezdésnek a jövőben kell lennie, különben a műsor az archívumba kerül, nem a Hamarosan listába.";
-        }
-        const end = normalizeDatetimeLocal(input.endLocal || "");
-        if (end) {
-            const endUtc = zonedLocalToUtc(end, input.timezone);
-            if (endUtc.getTime() <= startUtc.getTime()) {
-                return "A befejezésnek a kezdés után kell lennie.";
+        if (start) {
+            const startUtc = zonedLocalToUtc(start, input.timezone);
+            if (startUtc.getTime() <= Date.now() - 60_000) {
+                fields.startTime =
+                    "A kezdésnek a jövőben kell lennie, különben a műsor az archívumba kerül, nem a Hamarosan listába.";
+            }
+            const end = normalizeDatetimeLocal(input.endLocal || "");
+            if (end) {
+                const endUtc = zonedLocalToUtc(end, input.timezone);
+                if (endUtc.getTime() <= startUtc.getTime()) {
+                    fields.endTime = "A befejezésnek a kezdés után kell lennie.";
+                }
             }
         }
     } catch {
-        return "Érvénytelen időpont vagy időzóna.";
+        fields.timezone = "Érvénytelen időpont vagy időzóna.";
     }
-    return null;
+    return fields;
 }

@@ -4,13 +4,20 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
+import { FormFieldError, fieldControlClass } from "@/components/FormFieldError";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import { showStatusLabel } from "@/lib/show-status";
 import VideoCategorySelect from "@/components/VideoCategorySelect";
 import MarketingKitCard from "@/components/MarketingKitCard";
 import EventScheduleFields from "@/components/EventScheduleFields";
 import { detectBrowserTimeZone, utcToWallClock } from "@/lib/timezone";
-import { normalizeDatetimeLocal, showScheduleClientError } from "@/lib/datetime-local";
+import { normalizeDatetimeLocal, showScheduleClientErrors } from "@/lib/datetime-local";
+import {
+    SHOW_FIELD_IDS,
+    type ShowFieldErrors,
+    focusFirstShowFieldError,
+    splitApiFormError,
+} from "@/lib/form-field-errors";
 import {
     ShowTranslationGlobe,
     ShowTranslationsProvider,
@@ -29,6 +36,7 @@ export default function StreamerShowEditPage() {
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [error, setError] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<ShowFieldErrors>({});
     const [status, setStatus] = useState("draft");
     const [videoCategory, setVideoCategory] = useState("");
     const [startTime, setStartTime] = useState("");
@@ -97,24 +105,30 @@ export default function StreamerShowEditPage() {
                     e.preventDefault();
                     const startLocal = normalizeDatetimeLocal(startTime);
                     const endLocal = normalizeDatetimeLocal(endTime) || undefined;
-                    const clientError = showScheduleClientError({
+                    const clientFields = showScheduleClientErrors({
                         title,
                         videoCategory,
                         startLocal,
                         endLocal,
                         timezone,
                     });
-                    if (clientError) {
-                        setError(clientError);
+                    if (Object.keys(clientFields).length) {
+                        setFieldErrors(clientFields);
+                        setError("");
+                        focusFirstShowFieldError(clientFields);
                         return;
                     }
+                    setFieldErrors({});
                     setError("");
                     setBusy(true);
                     try {
                         await save();
                         router.push("/streamer/shows");
                     } catch (err: any) {
-                        setError(err.message || "Nem sikerült menteni.");
+                        const split = splitApiFormError(err);
+                        setFieldErrors(split.fieldErrors);
+                        setError(split.formError || (Object.keys(split.fieldErrors).length ? "" : "Nem sikerült menteni."));
+                        if (Object.keys(split.fieldErrors).length) focusFirstShowFieldError(split.fieldErrors);
                     } finally {
                         setBusy(false);
                     }
@@ -126,12 +140,17 @@ export default function StreamerShowEditPage() {
                         <ShowTranslationGlobe field="title" />
                     </div>
                     <input
-                        id="show-title"
-                        className="p-3 rounded text-black"
+                        id={SHOW_FIELD_IDS.title}
+                        className={fieldControlClass(Boolean(fieldErrors.title), "p-3 rounded text-black")}
+                        aria-invalid={Boolean(fieldErrors.title) || undefined}
+                        aria-describedby={fieldErrors.title ? `${SHOW_FIELD_IDS.title}-error` : undefined}
                         value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        required
+                        onChange={(e) => {
+                            setTitle(e.target.value);
+                            setFieldErrors((prev) => ({ ...prev, title: undefined }));
+                        }}
                     />
+                    <FormFieldError fieldId={SHOW_FIELD_IDS.title} message={fieldErrors.title} />
                 </div>
                 <div className="grid gap-1">
                     <div className="flex items-center justify-between gap-2">
@@ -139,11 +158,17 @@ export default function StreamerShowEditPage() {
                         <ShowTranslationGlobe field="description" />
                     </div>
                     <textarea
-                        id="show-description"
-                        className="p-3 rounded text-black min-h-24"
+                        id={SHOW_FIELD_IDS.description}
+                        className={fieldControlClass(Boolean(fieldErrors.description), "p-3 rounded text-black min-h-24")}
+                        aria-invalid={Boolean(fieldErrors.description) || undefined}
+                        aria-describedby={fieldErrors.description ? `${SHOW_FIELD_IDS.description}-error` : undefined}
                         value={description}
-                        onChange={(e) => setDescription(e.target.value)}
+                        onChange={(e) => {
+                            setDescription(e.target.value);
+                            setFieldErrors((prev) => ({ ...prev, description: undefined }));
+                        }}
                     />
+                    <FormFieldError fieldId={SHOW_FIELD_IDS.description} message={fieldErrors.description} />
                 </div>
                 <label className="grid gap-1">
                     {t("studio.originalLocale")}
@@ -179,13 +204,36 @@ export default function StreamerShowEditPage() {
                     startLocal={startTime}
                     endLocal={endTime}
                     timezone={timezone}
-                    onStartLocal={setStartTime}
-                    onEndLocal={setEndTime}
-                    onTimezone={setTimezone}
+                    onStartLocal={(value) => {
+                        setStartTime(value);
+                        setFieldErrors((prev) => ({ ...prev, startTime: undefined }));
+                    }}
+                    onEndLocal={(value) => {
+                        setEndTime(value);
+                        setFieldErrors((prev) => ({ ...prev, endTime: undefined }));
+                    }}
+                    onTimezone={(value) => {
+                        setTimezone(value);
+                        setFieldErrors((prev) => ({ ...prev, timezone: undefined }));
+                    }}
+                    requiredStart={false}
+                    startError={fieldErrors.startTime}
+                    endError={fieldErrors.endTime}
+                    timezoneError={fieldErrors.timezone}
                 />
                 <label className="grid gap-1">
                     Kategória
-                    <VideoCategorySelect value={videoCategory} onChange={setVideoCategory} />
+                    <VideoCategorySelect
+                        id={SHOW_FIELD_IDS.videoCategory}
+                        value={videoCategory}
+                        onChange={(value) => {
+                            setVideoCategory(value);
+                            setFieldErrors((prev) => ({ ...prev, videoCategory: undefined }));
+                        }}
+                        required={false}
+                        invalid={Boolean(fieldErrors.videoCategory)}
+                    />
+                    <FormFieldError fieldId={SHOW_FIELD_IDS.videoCategory} message={fieldErrors.videoCategory} />
                 </label>
                 {error && <p className="text-red-400">{error}</p>}
                 <button
@@ -200,6 +248,22 @@ export default function StreamerShowEditPage() {
                         disabled={busy}
                         className="bg-blue-600 font-bold p-3 rounded-xl disabled:opacity-50"
                         onClick={async () => {
+                            const startLocal = normalizeDatetimeLocal(startTime);
+                            const endLocal = normalizeDatetimeLocal(endTime) || undefined;
+                            const clientFields = showScheduleClientErrors({
+                                title,
+                                videoCategory,
+                                startLocal,
+                                endLocal,
+                                timezone,
+                            });
+                            if (Object.keys(clientFields).length) {
+                                setFieldErrors(clientFields);
+                                setError("");
+                                focusFirstShowFieldError(clientFields);
+                                return;
+                            }
+                            setFieldErrors({});
                             setError("");
                             setBusy(true);
                             try {
@@ -207,7 +271,10 @@ export default function StreamerShowEditPage() {
                                 await apiFetch(`/streamer/shows/${id}/submit`, { method: "POST" });
                                 router.push("/streamer/shows");
                             } catch (err: any) {
-                                setError(err.message || "A közzététel nem sikerült.");
+                                const split = splitApiFormError(err);
+                                setFieldErrors(split.fieldErrors);
+                                setError(split.formError || (Object.keys(split.fieldErrors).length ? "" : "A közzététel nem sikerült."));
+                                if (Object.keys(split.fieldErrors).length) focusFirstShowFieldError(split.fieldErrors);
                             } finally {
                                 setBusy(false);
                             }

@@ -1,3 +1,4 @@
+import { fieldControlClass } from "@/components/FormFieldError";
 import { VIDEO_CATEGORIES } from "@/lib/video-categories";
 
 export default function VideoCategorySelect({
@@ -5,16 +6,20 @@ export default function VideoCategorySelect({
     onChange,
     required = true,
     id,
+    invalid,
 }: {
     value: string;
     onChange: (value: string) => void;
     required?: boolean;
     id?: string;
+    invalid?: boolean;
 }) {
     return (
         <select
             id={id}
-            className="min-h-12 w-full rounded-xl p-3 text-base text-black"
+            aria-invalid={invalid || undefined}
+            aria-describedby={invalid && id ? `${id}-error` : undefined}
+            className={fieldControlClass(invalid, "min-h-12 w-full rounded-xl p-3 text-base text-black")}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             required={required}

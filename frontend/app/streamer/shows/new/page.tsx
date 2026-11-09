@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
+import { FormFieldError, fieldControlClass } from "@/components/FormFieldError";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import VideoCategorySelect from "@/components/VideoCategorySelect";
 import EventScheduleFields from "@/components/EventScheduleFields";
@@ -11,8 +12,14 @@ import { detectBrowserTimeZone } from "@/lib/timezone";
 import {
     defaultUpcomingStartLocal,
     normalizeDatetimeLocal,
-    showScheduleClientError,
+    showScheduleClientErrors,
 } from "@/lib/datetime-local";
+import {
+    SHOW_FIELD_IDS,
+    type ShowFieldErrors,
+    focusFirstShowFieldError,
+    splitApiFormError,
+} from "@/lib/form-field-errors";
 import {
     ShowTranslationGlobe,
     ShowTranslationsProvider,
@@ -35,6 +42,7 @@ export default function StreamerNewShowPage() {
     const [streamId, setStreamId] = useState("");
     const [videoCategory, setVideoCategory] = useState("");
     const [error, setError] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<ShowFieldErrors>({});
     const [busy, setBusy] = useState(false);
     const [originalLocale, setOriginalLocale] = useState<Locale>(() =>
         isLocale(locale) ? locale : DEFAULT_LOCALE,
@@ -45,17 +53,20 @@ export default function StreamerNewShowPage() {
         e.preventDefault();
         const startLocal = normalizeDatetimeLocal(startTime);
         const endLocal = normalizeDatetimeLocal(endTime) || undefined;
-        const clientError = showScheduleClientError({
+        const clientFields = showScheduleClientErrors({
             title,
             videoCategory,
             startLocal,
             endLocal,
             timezone,
         });
-        if (clientError) {
-            setError(clientError);
+        if (Object.keys(clientFields).length) {
+            setFieldErrors(clientFields);
+            setError("");
+            focusFirstShowFieldError(clientFields);
             return;
         }
+        setFieldErrors({});
         setError("");
         setBusy(true);
         try {
@@ -75,7 +86,10 @@ export default function StreamerNewShowPage() {
             });
             router.push("/streamer/shows");
         } catch (err: any) {
-            setError(err.message || "Nem sikerült létrehozni a műsort.");
+            const split = splitApiFormError(err);
+            setFieldErrors(split.fieldErrors);
+            setError(split.formError || (Object.keys(split.fieldErrors).length ? "" : "Nem sikerült létrehozni a műsort."));
+            if (Object.keys(split.fieldErrors).length) focusFirstShowFieldError(split.fieldErrors);
         } finally {
             setBusy(false);
         }
@@ -107,15 +121,31 @@ export default function StreamerNewShowPage() {
                         <ShowTranslationGlobe field="title" />
                     </div>
                     <input
-                        id="show-title"
-                        className="min-h-12 rounded-xl p-3 text-base text-black"
+                        id={SHOW_FIELD_IDS.title}
+                        className={fieldControlClass(Boolean(fieldErrors.title), "min-h-12 rounded-xl p-3 text-base text-black")}
+                        aria-invalid={Boolean(fieldErrors.title) || undefined}
+                        aria-describedby={fieldErrors.title ? `${SHOW_FIELD_IDS.title}-error` : undefined}
                         value={title}
-                        onChange={(e) => setTitle(e.target.value)}
+                        onChange={(e) => {
+                            setTitle(e.target.value);
+                            setFieldErrors((prev) => ({ ...prev, title: undefined }));
+                        }}
                     />
+                    <FormFieldError fieldId={SHOW_FIELD_IDS.title} message={fieldErrors.title} />
                 </div>
                 <label className="grid gap-1">
                     Kategória
-                    <VideoCategorySelect value={videoCategory} onChange={setVideoCategory} required={false} />
+                    <VideoCategorySelect
+                        id={SHOW_FIELD_IDS.videoCategory}
+                        value={videoCategory}
+                        onChange={(value) => {
+                            setVideoCategory(value);
+                            setFieldErrors((prev) => ({ ...prev, videoCategory: undefined }));
+                        }}
+                        required={false}
+                        invalid={Boolean(fieldErrors.videoCategory)}
+                    />
+                    <FormFieldError fieldId={SHOW_FIELD_IDS.videoCategory} message={fieldErrors.videoCategory} />
                 </label>
                 <div className="grid gap-1">
                     <div className="flex items-center justify-between gap-2">
@@ -123,11 +153,17 @@ export default function StreamerNewShowPage() {
                         <ShowTranslationGlobe field="description" />
                     </div>
                     <textarea
-                        id="show-description"
-                        className="min-h-24 rounded-xl p-3 text-base text-black"
+                        id={SHOW_FIELD_IDS.description}
+                        className={fieldControlClass(Boolean(fieldErrors.description), "min-h-24 rounded-xl p-3 text-base text-black")}
+                        aria-invalid={Boolean(fieldErrors.description) || undefined}
+                        aria-describedby={fieldErrors.description ? `${SHOW_FIELD_IDS.description}-error` : undefined}
                         value={description}
-                        onChange={(e) => setDescription(e.target.value)}
+                        onChange={(e) => {
+                            setDescription(e.target.value);
+                            setFieldErrors((prev) => ({ ...prev, description: undefined }));
+                        }}
                     />
+                    <FormFieldError fieldId={SHOW_FIELD_IDS.description} message={fieldErrors.description} />
                 </div>
                 <label className="grid gap-1">
                     {t("studio.originalLocale")}
@@ -163,19 +199,38 @@ export default function StreamerNewShowPage() {
                     startLocal={startTime}
                     endLocal={endTime}
                     timezone={timezone}
-                    onStartLocal={setStartTime}
-                    onEndLocal={setEndTime}
-                    onTimezone={setTimezone}
+                    onStartLocal={(value) => {
+                        setStartTime(value);
+                        setFieldErrors((prev) => ({ ...prev, startTime: undefined }));
+                    }}
+                    onEndLocal={(value) => {
+                        setEndTime(value);
+                        setFieldErrors((prev) => ({ ...prev, endTime: undefined }));
+                    }}
+                    onTimezone={(value) => {
+                        setTimezone(value);
+                        setFieldErrors((prev) => ({ ...prev, timezone: undefined }));
+                    }}
                     requiredStart={false}
+                    startError={fieldErrors.startTime}
+                    endError={fieldErrors.endTime}
+                    timezoneError={fieldErrors.timezone}
                 />
                 <label className="grid gap-1">
                     Stream ID (opcionális)
                     <input
-                        className="min-h-12 rounded-xl p-3 text-base text-black"
+                        id={SHOW_FIELD_IDS.streamId}
+                        className={fieldControlClass(Boolean(fieldErrors.streamId), "min-h-12 rounded-xl p-3 text-base text-black")}
+                        aria-invalid={Boolean(fieldErrors.streamId) || undefined}
+                        aria-describedby={fieldErrors.streamId ? `${SHOW_FIELD_IDS.streamId}-error` : undefined}
                         value={streamId}
-                        onChange={(e) => setStreamId(e.target.value)}
+                        onChange={(e) => {
+                            setStreamId(e.target.value);
+                            setFieldErrors((prev) => ({ ...prev, streamId: undefined }));
+                        }}
                         placeholder="üresen automatikus"
                     />
+                    <FormFieldError fieldId={SHOW_FIELD_IDS.streamId} message={fieldErrors.streamId} />
                 </label>
                 {error && (
                     <p className="rounded-xl bg-red-950/70 p-3 text-sm text-red-300" role="alert">

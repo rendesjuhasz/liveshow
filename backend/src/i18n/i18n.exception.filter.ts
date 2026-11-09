@@ -37,6 +37,7 @@ export class I18nExceptionFilter implements ExceptionFilter {
         let status = HttpStatus.INTERNAL_SERVER_ERROR;
         let message: string | string[] = translate("common.error", locale);
         let error = "Internal Server Error";
+        let fields: Record<string, string> | undefined;
 
         if (exception instanceof HttpException) {
             status = exception.getStatus();
@@ -45,13 +46,23 @@ export class I18nExceptionFilter implements ExceptionFilter {
             if (typeof payload === "string") {
                 message = localizeMessage(payload, locale);
             } else if (payload && typeof payload === "object") {
-                const body = payload as { message?: string | string[]; error?: string };
+                const body = payload as {
+                    message?: string | string[];
+                    error?: string;
+                    fields?: Record<string, string>;
+                };
                 if (Array.isArray(body.message)) {
                     message = body.message.map((item) => localizeMessage(String(item), locale));
                 } else if (body.message) {
                     message = localizeMessage(String(body.message), locale);
                 }
                 if (body.error) error = body.error;
+                if (body.fields && typeof body.fields === "object") {
+                    fields = {};
+                    for (const [key, value] of Object.entries(body.fields)) {
+                        fields[key] = localizeMessage(String(value), locale);
+                    }
+                }
             }
         } else if (exception instanceof Error && exception.message) {
             message = localizeMessage(exception.message, locale);
@@ -62,6 +73,7 @@ export class I18nExceptionFilter implements ExceptionFilter {
             message,
             error,
             locale,
+            ...(fields && Object.keys(fields).length ? { fields } : {}),
         });
     }
 }

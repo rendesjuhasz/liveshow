@@ -10,11 +10,13 @@ let memoryCsrf: string | null = null;
 
 export class ApiError extends Error {
     status: number;
+    fields?: Record<string, string>;
 
-    constructor(message: string, status = 0) {
+    constructor(message: string, status = 0, fields?: Record<string, string>) {
         super(message);
         this.name = "ApiError";
         this.status = status;
+        if (fields && Object.keys(fields).length) this.fields = fields;
     }
 }
 

@@ -146,11 +146,16 @@ function throwIfNotOk(response: Response, data: any) {
     const message = Array.isArray(raw)
         ? raw.map((item) => String(item || "").trim()).filter(Boolean).join(" ")
         : raw;
+    const fields =
+        data?.fields && typeof data.fields === "object" && !Array.isArray(data.fields)
+            ? (data.fields as Record<string, string>)
+            : undefined;
     throw new ApiError(
         typeof message === "string" && message.trim()
             ? message
             : `API error: ${response.status}`,
         response.status,
+        fields,
     );
 }
 

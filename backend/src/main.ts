@@ -10,6 +10,7 @@ import { AppModule } from "./app.module";
 import { corsOrigins, jwtSecret, assertRequiredSecrets } from "./auth/secrets";
 import { CSRF_HEADER } from "./security/http-guard";
 import { pingRateLimitStore, trustProxyEnabled } from "./security/rate-limit";
+import { validationPipeOptions } from "./i18n/validation-fields";
 
 async function bootstrap() {
     assertRequiredSecrets();
@@ -40,11 +41,7 @@ async function bootstrap() {
     );
 
     app.useGlobalPipes(
-        new ValidationPipe({
-            transform: true,
-            whitelist: true,
-            forbidNonWhitelisted: true,
-        }),
+        new ValidationPipe(validationPipeOptions),
     );
 
     app.enableCors({

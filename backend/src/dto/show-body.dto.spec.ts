@@ -1,11 +1,8 @@
 import { ArgumentMetadata, BadRequestException, ValidationPipe } from "@nestjs/common";
 import { ShowBodyDto } from "./bodies";
+import { validationPipeOptions } from "../i18n/validation-fields";
 
-const pipe = new ValidationPipe({
-    transform: true,
-    whitelist: true,
-    forbidNonWhitelisted: true,
-});
+const pipe = new ValidationPipe(validationPipeOptions);
 
 const meta: ArgumentMetadata = { type: "body", metatype: ShowBodyDto };
 
@@ -38,5 +35,16 @@ describe("ShowBodyDto originalLocale", () => {
     it("allows omitting originalLocale", async () => {
         const parsed = await parseBody({ title: "Teszt" });
         expect(parsed.originalLocale).toBeUndefined();
+    });
+
+    it("returns a title field key when the title is too long", async () => {
+        try {
+            await parseBody({ title: "x".repeat(201) });
+            throw new Error("expected ValidationPipe to reject the body");
+        } catch (err) {
+            expect(err).toBeInstanceOf(BadRequestException);
+            const fields = (err as BadRequestException).getResponse() as { fields?: Record<string, string> };
+            expect(fields.fields?.title).toContain("200");
+        }
     });
 });

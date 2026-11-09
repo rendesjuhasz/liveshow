@@ -63,7 +63,7 @@ export default function TicketPackShop({
                 window.location.href = data.checkoutUrl;
                 return;
             }
-            if (process.env.NODE_ENV !== "production" && data?.devPay && data?.purchaseId) {
+            if (data?.devPay && data?.purchaseId) {
                 await apiFetch("/payments/confirm-dev", {
                     method: "POST",
                     body: JSON.stringify({ packPurchaseId: data.purchaseId }),

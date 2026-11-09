@@ -33,19 +33,13 @@ export default function PrivateRequestDetailPage() {
             window.location.href = pay.checkoutUrl;
             return true;
         }
-        if (process.env.NODE_ENV !== "production" && pay?.ticketId) {
-            try {
-                await apiFetch("/payments/confirm-dev", {
-                    method: "POST",
-                    body: JSON.stringify({ ticketId: pay.ticketId }),
-                });
-                await load();
-                return true;
-            } catch (err: any) {
-                if (pay?.devPay) {
-                    throw err;
-                }
-            }
+        if (pay?.devPay && pay?.ticketId) {
+            await apiFetch("/payments/confirm-dev", {
+                method: "POST",
+                body: JSON.stringify({ ticketId: pay.ticketId }),
+            });
+            await load();
+            return true;
         }
         await load();
         return false;

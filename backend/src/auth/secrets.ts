@@ -39,11 +39,10 @@ export function socketCorsOrigin(): true | string[] {
 }
 
 export function isDevPayAllowed() {
-    if (process.env.NODE_ENV === "production") return false;
     const flag = String(process.env.ALLOW_DEV_PAY || "").trim().toLowerCase();
     if (flag === "true" || flag === "1" || flag === "yes") return true;
     if (flag === "false" || flag === "0" || flag === "no") return false;
-    return true;
+    return process.env.NODE_ENV !== "production";
 }
 
 export function barionWebhookSecret() {

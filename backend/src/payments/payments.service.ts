@@ -225,7 +225,7 @@ export class PaymentsService implements OnModuleInit {
     }
 
     async confirmDev(userId: string, ticketId: string, packPurchaseId?: string) {
-        if (process.env.NODE_ENV === "production" || !isDevPayAllowed()) {
+        if (!isDevPayAllowed()) {
             throw new BadRequestException("A tesztfizetés ebben a környezetben ki van kapcsolva.");
         }
         const packId = String(packPurchaseId || "").trim();

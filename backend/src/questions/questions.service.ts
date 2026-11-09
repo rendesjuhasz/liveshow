@@ -604,8 +604,11 @@ export class QuestionsService implements OnModuleInit {
             spentTicket = true;
             let author = "Néző";
             try {
-                const viewer = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-                author = String(viewer?.name || "").trim() || "Néző";
+                const viewer = await this.prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { username: true },
+                });
+                author = String(viewer?.username || "").trim() || "Néző";
             } catch {
                 /* név nélkül is mehet az értesítés */
             }
@@ -633,7 +636,7 @@ export class QuestionsService implements OnModuleInit {
         const show = await this.requireStreamerShow(streamerId, showId);
         try {
             const rows = await this.prisma.$queryRaw<any[]>`
-                SELECT s.id, s.kind, s.text, s."ticketsSpent", s."createdAt", u.name AS "userName"
+                SELECT s.id, s.kind, s.text, s."ticketsSpent", s."createdAt", u.username AS "userName"
                 FROM "ShowSupport" s
                 JOIN "User" u ON u.id = s."userId"
                 WHERE s."showId" = ${show.id}

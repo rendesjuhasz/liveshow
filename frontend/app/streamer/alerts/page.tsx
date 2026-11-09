@@ -8,8 +8,10 @@ import { useStreamerGate } from "@/lib/useStreamerGate";
 import type { StreamAlert } from "@/lib/stream-alert";
 import { playStreamerAlert } from "@/lib/streamer-alert-tone";
 import { useSupportSoundPref } from "@/lib/streamer-support-sound";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function StreamerAlertsPage() {
+    const { formatDateTime } = useT();
     const gate = useStreamerGate();
     const [shows, setShows] = useState<any[]>([]);
     const [showId, setShowId] = useState("");
@@ -173,7 +175,7 @@ export default function StreamerAlertsPage() {
                             </div>
                         )}
                         <p className="mt-2 text-xs text-neutral-500">
-                            {new Date(a.createdAt).toLocaleString("hu-HU")}
+                            {formatDateTime(a.createdAt)}
                             {a.resolvedAt ? " · lezárva" : ""}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">

@@ -307,7 +307,7 @@ export class ArchiveService implements OnModuleInit, OnModuleDestroy {
         const shows = await this.prisma.show.findMany({
             where: { id: { in: publicIds }, archiveExists: true } as any,
             orderBy: { startTime: dateOrder },
-            include: { archives: true, streamer: true },
+            include: { archives: true, streamer: { include: { user: { select: { username: true } } } } },
         });
         const tagged = await withShowStatuses(this.prisma, shows);
         const endedIds = await endedShowIdSet(this.prisma, tagged);
@@ -332,7 +332,7 @@ export class ArchiveService implements OnModuleInit, OnModuleDestroy {
                     size: meta.size,
                     duration: meta.duration,
                     createdAt: meta.createdAt,
-                    streamer: show.streamer?.name || null,
+                    streamer: String(show.streamer?.user?.username || "").trim() || null,
                     exists: meta.exists,
                     ended: true,
                     viewCount: 0,
@@ -405,13 +405,17 @@ export class ArchiveService implements OnModuleInit, OnModuleDestroy {
         if (show.streamerId) {
             const owner = await this.prisma.streamer.findUnique({
                 where: { id: show.streamerId },
+                include: { user: { select: { username: true } } },
             });
             if (owner && isApprovedStreamer(owner.status)) {
                 const links = readStoredPublicLinks(
                     (owner as { publicLinks?: unknown }).publicLinks,
                 );
                 if (links.length) {
-                    creatorLinks = { name: owner.name, links };
+                    creatorLinks = {
+                        name: String(owner.user?.username || "").trim() || "Tartalomkészítő",
+                        links,
+                    };
                 }
             }
         }

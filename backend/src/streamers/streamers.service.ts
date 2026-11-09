@@ -41,15 +41,22 @@ export class StreamersService {
                 avatarUrl: true,
                 category: true,
                 createdAt: true,
+                user: { select: { username: true } },
                 shows: { select: { id: true, title: true } },
             },
         });
         const ratings = await this.reviews.ratingsForStreamerIds(rows.map((r) => r.id));
-        return rows.map((row) => ({
-            ...row,
-            average: ratings.get(row.id)?.average || 0,
-            reviewCount: ratings.get(row.id)?.count || 0,
-        }));
+        return rows.map((row) => {
+            const { user, ...rest } = row;
+            const username = String(user?.username || "").trim();
+            return {
+                ...rest,
+                name: username || "Tartalomkészítő",
+                username: username || null,
+                average: ratings.get(row.id)?.average || 0,
+                reviewCount: ratings.get(row.id)?.count || 0,
+            };
+        });
     }
 
     payoutReceipt(id: string) {
@@ -71,6 +78,7 @@ export class StreamersService {
                 category: true,
                 createdAt: true,
                 userId: true,
+                user: { select: { username: true } },
                 shows: {
                     select: {
                         id: true,
@@ -91,7 +99,8 @@ export class StreamersService {
         if (!streamer) {
             throw new NotFoundException("A tartalomkészítő nem található.");
         }
-        const { userId, ...publicStreamer } = streamer;
+        const { userId, user, ...publicStreamer } = streamer;
+        const username = String(user?.username || "").trim();
         const hidden = await privateShowIds(this.prisma).catch(() => new Set<string>());
         const reviews = await this.reviews.listForStreamer(id, false);
         const followerCount = await this.follows.followerCount(id);
@@ -102,6 +111,8 @@ export class StreamersService {
         const endedIds = await endedShowIdSet(this.prisma, publicShows);
         return {
             ...publicStreamer,
+            name: username || "Tartalomkészítő",
+            username: username || null,
             shows: publicShows.map((s) => ({
                 id: s.id,
                 title: s.title,

@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useModeratorGate } from "@/lib/useModeratorGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function AdminQuestionsPage() {
+    const { formatDateTime } = useT();
     const gate = useModeratorGate();
     const [shows, setShows] = useState<any[]>([]);
     const [showId, setShowId] = useState("");
@@ -132,7 +134,7 @@ export default function AdminQuestionsPage() {
                                     <li key={q.id} className="bg-gray-800 p-4 rounded-xl">
                                         <p>{q.text}</p>
                                         <p className="text-sm text-gray-400 mt-1">
-                                            {q.user?.email} · {new Date(q.createdAt).toLocaleString("hu-HU")}
+                                            {q.user?.email} · {formatDateTime(q.createdAt)}
                                         </p>
                                         <div className="flex gap-2 mt-3">
                                             <button
@@ -174,7 +176,7 @@ export default function AdminQuestionsPage() {
                                 </p>
                                 <p className="text-gray-400">
                                     {a.actor?.email || "rendszer"} · {a.question?.text} ·{" "}
-                                    {new Date(a.createdAt).toLocaleString("hu-HU")}
+                                    {formatDateTime(a.createdAt)}
                                 </p>
                             </li>
                         ))}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useModeratorGate } from "@/lib/useModeratorGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 const LABELS: Record<string, string> = {
     pending: "Függőben",
@@ -11,6 +12,7 @@ const LABELS: Record<string, string> = {
 };
 
 export default function AdminReviewsPage() {
+    const { formatDateTime } = useT();
     const gate = useModeratorGate();
     const [rows, setRows] = useState<any[]>([]);
     const [error, setError] = useState("");
@@ -83,7 +85,7 @@ export default function AdminReviewsPage() {
                             <p className="text-sm text-gray-400">{r.userEmail}</p>
                             {r.comment && <p className="mt-2 text-gray-200">{r.comment}</p>}
                             <p className="text-xs text-gray-500 mt-2">
-                                {r.createdAt ? new Date(r.createdAt).toLocaleString("hu-HU") : ""}
+                                {r.createdAt ? formatDateTime(r.createdAt) : ""}
                             </p>
                             <div className="flex gap-2 mt-3">
                                 {r.status !== "approved" && (

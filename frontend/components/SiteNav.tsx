@@ -404,7 +404,7 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
             </header>
 
             {mobileOpen && (
-                <div className="fixed inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-40 max-h-[calc(100dvh-4rem-env(safe-area-inset-top))] overflow-y-auto border-b border-white/5 bg-[#1e1e1e]/95 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
+                <div className="fixed inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-[45] max-h-[calc(100dvh-4rem-env(safe-area-inset-top))] overflow-y-auto border-b border-white/5 bg-[#1e1e1e]/95 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
                     {!hidePublicChrome && (
                         <div className="mb-4">
                             <LanguageSwitcher />

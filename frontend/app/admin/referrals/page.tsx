@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 type Settings = {
     enabled: boolean;
@@ -28,6 +29,7 @@ function Card({ label, value, hint }: { label: string; value: string | number; h
 }
 
 export default function AdminReferralsPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [settings, setSettings] = useState<Settings>({
         enabled: true,
@@ -198,7 +200,7 @@ export default function AdminReferralsPage() {
                                     <td className="p-2">{r.qualifyingPurchaseTickets}</td>
                                     <td className="p-2">{r.rewardTicketsGranted}</td>
                                     <td className="p-2">
-                                        {r.createdAt ? new Date(r.createdAt).toLocaleString("hu-HU") : "—"}
+                                        {r.createdAt ? formatDateTime(r.createdAt) : "—"}
                                     </td>
                                 </tr>
                             ))}

@@ -13,6 +13,7 @@ import type { EventCountdown } from "@/lib/event-countdown";
 import { isFavorite, toggleFavorite } from "@/lib/library";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/api/http";
+import OriginalLanguageBadge from "@/components/OriginalLanguageBadge";
 import {
     PREVIEW_CLIP_SEC,
     PREVIEW_HOVER_MS,
@@ -35,7 +36,7 @@ function EventCard({
     hoverPreview?: boolean;
 }) {
     const { user } = useAuth();
-    const { t } = useT();
+    const { t, locale } = useT();
     const id = mediaId(item);
     const to = href || watchHref(item);
     const ended = isEndedShow(item);
@@ -207,7 +208,13 @@ function EventCard({
                         </span>
                     </div>
                     <div className={cn("absolute inset-x-0 bottom-0 z-[2]", wide ? "p-3" : "p-2 sm:p-2.5")}>
-                        <p className="line-clamp-1 text-sm font-semibold leading-tight">{item.title}</p>
+                        <p className="flex items-center gap-1.5 text-sm font-semibold leading-tight">
+                            <OriginalLanguageBadge
+                                originalLocale={item.originalLocale}
+                                contentTranslated={item.contentTranslated}
+                            />
+                            <span className="line-clamp-1">{item.title}</span>
+                        </p>
                         <EventCardMeta
                             live={Boolean(item.live)}
                             ended={ended}
@@ -216,6 +223,7 @@ function EventCard({
                             viewerCount={item.viewerCount}
                             viewCount={item.viewCount}
                             t={t}
+                            locale={locale}
                         />
                     </div>
                 </div>
@@ -243,6 +251,7 @@ function EventCardMeta({
     viewerCount,
     viewCount,
     t,
+    locale,
 }: {
     live: boolean;
     ended: boolean;
@@ -251,12 +260,13 @@ function EventCardMeta({
     viewerCount?: number;
     viewCount?: number;
     t: (key: string) => string;
+    locale: string;
 }) {
     if (live) {
         return (
             <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-semibold text-white sm:text-[11px]">
                 <Eye className="size-3.5 shrink-0 text-accent" aria-hidden />
-                {t("media.viewers").replace("{n}", formatCount(viewerCount))}
+                {t("media.viewers").replace("{n}", formatCount(viewerCount, locale))}
             </p>
         );
     }
@@ -271,7 +281,7 @@ function EventCardMeta({
         return (
             <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-medium text-muted sm:text-[11px]">
                 <Eye className="size-3.5 shrink-0" aria-hidden />
-                {t("media.views").replace("{n}", formatCount(viewCount))}
+                {t("media.views").replace("{n}", formatCount(viewCount, locale))}
             </p>
         );
     }

@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { DEFAULT_LOCALE, isLocale } from "./lib/i18n/messages";
 import {
     LOCALE_CHOSEN_COOKIE,
     LOCALE_COOKIE,
@@ -8,15 +7,6 @@ import {
 } from "./lib/i18n/locale-choice";
 import { isLocalePrefixedAppPath, stripLocalePrefix, withLocalePrefix } from "./lib/i18n/paths";
 import { fetchAdminSession, isAdminConsolePath, isAdminLoginPath } from "./lib/admin-session";
-
-function localeCookie() {
-    return {
-        path: "/",
-        maxAge: 60 * 60 * 24 * 365,
-        sameSite: "lax" as const,
-        secure: process.env.NODE_ENV === "production",
-    };
-}
 
 function cspHeader(nonce: string) {
     const isProd = process.env.NODE_ENV === "production";
@@ -58,8 +48,16 @@ function withNonce(request: NextRequest, extra?: Headers) {
     requestHeaders.set("x-liveshow-path", path);
     requestHeaders.set("x-nonce", nonce);
     if (!requestHeaders.get("x-locale")) {
-        const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value;
-        requestHeaders.set("x-locale", isLocale(cookieLocale) ? cookieLocale : DEFAULT_LOCALE);
+        const { locale: pathLocale } = stripLocalePrefix(request.nextUrl.pathname);
+        requestHeaders.set(
+            "x-locale",
+            resolvePublicLocale(
+                pathLocale,
+                request.cookies.get(LOCALE_COOKIE)?.value,
+                request.cookies.get(LOCALE_CHOSEN_COOKIE)?.value === "1",
+                request.headers.get("accept-language"),
+            ),
+        );
     }
     requestHeaders.set("Content-Security-Policy", csp);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
@@ -184,25 +182,25 @@ export async function middleware(request: NextRequest) {
     const { locale: pathLocale, path } = stripLocalePrefix(pathname);
     const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value;
     const localeChosen = request.cookies.get(LOCALE_CHOSEN_COOKIE)?.value === "1";
-    const chosen = resolvePublicLocale(pathLocale, cookieLocale, localeChosen);
+    const resolved = resolvePublicLocale(
+        pathLocale,
+        cookieLocale,
+        localeChosen,
+        request.headers.get("accept-language"),
+    );
 
-    if (needsLocalePrefixRedirect(pathLocale, chosen)) {
-        const res = NextResponse.redirect(publicAbsoluteUrl(request, withLocalePrefix(path, chosen)));
-        res.cookies.set(LOCALE_COOKIE, chosen, localeCookie());
-        res.cookies.set(LOCALE_CHOSEN_COOKIE, "1", localeCookie());
+    if (needsLocalePrefixRedirect(pathLocale, resolved, localeChosen)) {
+        const res = NextResponse.redirect(publicAbsoluteUrl(request, withLocalePrefix(path, resolved)));
         const out = withCsp(res);
         out.headers.set("Cache-Control", "private, no-store");
         return out;
     }
 
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-locale", String(chosen));
+    requestHeaders.set("x-locale", String(resolved));
     requestHeaders.set("x-pathname", path);
     const res = withNonce(request, requestHeaders);
     res.headers.set("Cache-Control", "private, no-store");
-    if (chosen) {
-        res.cookies.set(LOCALE_COOKIE, String(chosen), localeCookie());
-    }
     return res;
 }
 

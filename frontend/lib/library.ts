@@ -72,7 +72,7 @@ export function toggleFavorite(item: MediaItem, userId?: string | null) {
     return next.some((x) => x.id === id);
 }
 
-export function getWatched(_userId?: string | null) {
+export function getWatched(_userId?: string | null): LibraryCard[] {
     purgeWatchLists();
     return [];
 }

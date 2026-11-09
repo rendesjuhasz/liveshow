@@ -6,8 +6,10 @@ import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import StreamerShell from "@/components/StreamerShell";
 import { formatWatchDuration } from "@/lib/views";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function StreamerDashboardPage() {
+    const { formatDateTime, formatNumber, t } = useT();
     const { user, ready } = useAuth();
     const [data, setData] = useState<any>(null);
     const [error, setError] = useState("");
@@ -100,7 +102,7 @@ export default function StreamerDashboardPage() {
                     />
                 )}
                 <div>
-                    <p className="text-xl font-semibold">{data.streamer.name}</p>
+                    <p className="text-xl font-semibold">{user?.username || data.streamer.name}</p>
                 </div>
             </div>
             {data.stats?.payoutDue?.label && (
@@ -124,19 +126,19 @@ export default function StreamerDashboardPage() {
                 <div className="rounded-xl bg-neutral-900 p-4">
                     <p className="text-sm text-neutral-400">Összes megtekintés</p>
                     <p className="text-2xl font-bold">
-                        {(data.viewStats?.totalViews ?? data.stats?.totalViews ?? 0).toLocaleString("hu-HU")}
+                        {formatNumber(data.viewStats?.totalViews ?? data.stats?.totalViews ?? 0)}
                     </p>
                 </div>
                 <div className="rounded-xl bg-neutral-900 p-4">
                     <p className="text-sm text-neutral-400">Átlagos élő nézőszám</p>
                     <p className="text-2xl font-bold">
-                        {(data.viewStats?.averageLiveViewers ?? data.stats?.averageLiveViewers ?? 0).toLocaleString("hu-HU")}
+                        {formatNumber(data.viewStats?.averageLiveViewers ?? data.stats?.averageLiveViewers ?? 0)}
                     </p>
                 </div>
                 <div className="rounded-xl bg-neutral-900 p-4">
                     <p className="text-sm text-neutral-400">Peak nézők</p>
                     <p className="text-2xl font-bold">
-                        {(data.viewStats?.peakLiveViewers ?? data.stats?.peakLiveViewers ?? 0).toLocaleString("hu-HU")}
+                        {formatNumber(data.viewStats?.peakLiveViewers ?? data.stats?.peakLiveViewers ?? 0)}
                     </p>
                 </div>
                 <div className="rounded-xl bg-neutral-900 p-4">
@@ -161,7 +163,7 @@ export default function StreamerDashboardPage() {
                     <p className="mb-1 text-sm text-neutral-400">Legnézettebb videó</p>
                     <p className="text-lg font-semibold">{data.viewStats.topVideo.title}</p>
                     <p className="text-sm text-neutral-300">
-                        {Number(data.viewStats.topVideo.views || 0).toLocaleString("hu-HU")} megtekintés
+                        {t("media.views").replace("{n}", formatNumber(data.viewStats.topVideo.views || 0))}
                     </p>
                 </div>
             )}
@@ -181,8 +183,8 @@ export default function StreamerDashboardPage() {
                             {data.viewStats.videos.map((row: any) => (
                                 <tr key={row.showId} className="border-t border-white/10">
                                     <td className="py-2 pr-3">{row.title}</td>
-                                    <td className="py-2">{Number(row.views || 0).toLocaleString("hu-HU")}</td>
-                                    <td className="py-2">{Number(row.peakViewers || 0).toLocaleString("hu-HU")}</td>
+                                    <td className="py-2">{formatNumber(row.views || 0)}</td>
+                                    <td className="py-2">{formatNumber(row.peakViewers || 0)}</td>
                                     <td className="py-2">{formatWatchDuration(row.avgWatchSeconds)}</td>
                                 </tr>
                             ))}
@@ -199,7 +201,7 @@ export default function StreamerDashboardPage() {
                                 <p className="font-medium">{row.showTitle || row.streamId || "Stream"}</p>
                                 <p className="text-red-300">{row.message}</p>
                                 <p className="text-xs text-neutral-500">
-                                    {row.createdAt ? new Date(row.createdAt).toLocaleString("hu-HU") : ""}
+                                    {row.createdAt ? formatDateTime(row.createdAt) : ""}
                                 </p>
                             </li>
                         ))}
@@ -214,7 +216,7 @@ export default function StreamerDashboardPage() {
                             <li key={row.id}>
                                 {row.name}
                                 {row.createdAt
-                                    ? ` · ${new Date(row.createdAt).toLocaleString("hu-HU")}`
+                                    ? ` · ${formatDateTime(row.createdAt)}`
                                     : ""}
                             </li>
                         ))}

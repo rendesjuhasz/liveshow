@@ -26,12 +26,17 @@ export const OTLETGAZDA_BADGE = {
     description: "A tartalomkészítő megvalósította az általad beküldött kívánságot.",
 };
 
-export function publicAuthorName(user?: { name?: string | null } | string | null) {
-    if (user && typeof user === "object") {
-        const name = String(user.name || "").trim();
-        if (name) return name.slice(0, 32);
+export function publicAuthorName(
+    user?: { username?: string | null; name?: string | null } | string | null,
+    fallback = "Néző",
+) {
+    if (typeof user === "string") {
+        const value = String(user || "").trim();
+        return value ? value.slice(0, 32) : fallback;
     }
-    return "Néző";
+    const username = String(user?.username || "").trim();
+    if (username) return username.slice(0, 32);
+    return fallback;
 }
 
 export function wishStatusLabelHu(status: string) {

@@ -7,6 +7,7 @@ import { isAdmin, isStreamer, useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import PasswordField from "@/components/PasswordField";
 import { markStreamerLoginIntent } from "@/lib/streamer-login-intent";
+import { needsUsername } from "@/lib/username";
 
 export default function StreamerLoginPage() {
     const { login, ready } = useAuth();
@@ -23,6 +24,10 @@ export default function StreamerLoginPage() {
         setBusy(true);
         try {
             const nextUser = await login(email, password);
+            if (needsUsername(nextUser)) {
+                router.replace("/username");
+                return;
+            }
             if (isAdmin(nextUser) && !nextUser.streamer) {
                 router.replace("/admin");
                 return;

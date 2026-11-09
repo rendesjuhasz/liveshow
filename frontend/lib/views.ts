@@ -1,18 +1,29 @@
-export function formatCount(n?: number | null) {
-    return Math.max(0, Math.floor(Number(n) || 0)).toLocaleString("en-US");
+import { DEFAULT_LOCALE, formatNumber, isLocale, translate } from "@/lib/i18n/messages";
+
+function countLocale(locale?: string | null) {
+    if (isLocale(locale)) return locale;
+    if (typeof document !== "undefined" && isLocale(document.documentElement.lang)) {
+        return document.documentElement.lang;
+    }
+    return DEFAULT_LOCALE;
 }
 
-export function viewsLabel(n?: number | null) {
-    return `${formatCount(n)} megtekintés`;
+export function formatCount(n?: number | null, locale?: string | null) {
+    return formatNumber(Math.max(0, Math.floor(Number(n) || 0)), countLocale(locale));
 }
 
-export function liveViewersLabel(n?: number | null) {
+export function viewsLabel(n?: number | null, locale?: string | null) {
+    return translate("media.views", countLocale(locale)).replace("{n}", formatCount(n, locale));
+}
+
+export function liveViewersLabel(n?: number | null, locale?: string | null) {
+    const loc = countLocale(locale);
     const count = Math.max(0, Math.floor(Number(n) || 0));
-    return `Jelenleg ${formatCount(count)} néző nézi`;
+    return translate("media.watchingNow", loc).replace("{n}", formatCount(count, loc));
 }
 
-export function liveViewersShort(n?: number | null) {
-    return `${formatCount(n)} néző`;
+export function liveViewersShort(n?: number | null, locale?: string | null) {
+    return translate("media.viewers", countLocale(locale)).replace("{n}", formatCount(n, locale));
 }
 
 export function formatWatchDuration(seconds?: number | null) {

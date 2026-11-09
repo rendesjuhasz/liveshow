@@ -6,8 +6,10 @@ import StreamerShell from "@/components/StreamerShell";
 import { WishStatusLine, type WishItem } from "@/components/WishWall";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function StreamerWishesPage() {
+    const { formatDateTime } = useT();
     const gate = useStreamerGate();
     const [items, setItems] = useState<WishItem[]>([]);
     const [error, setError] = useState("");
@@ -73,7 +75,7 @@ export default function StreamerWishesPage() {
                         <div className="mt-3">
                             <WishStatusLine wish={wish} />
                             <p className="mt-1 text-xs text-zinc-500">
-                                Beküldve: {new Date(wish.createdAt).toLocaleDateString("hu-HU")}
+                                Beküldve: {formatDateTime(wish.createdAt)}
                             </p>
                         </div>
                         {wish.status === "pending" && (

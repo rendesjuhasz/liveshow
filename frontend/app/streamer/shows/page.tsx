@@ -8,6 +8,7 @@ import { useStreamerGate } from "@/lib/useStreamerGate";
 import { showStatusClass, showStatusLabel } from "@/lib/show-status";
 import { videoCategoryLabel } from "@/lib/video-categories";
 import { formatWatchDuration } from "@/lib/views";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 type ShowRow = {
     id: string;
@@ -31,6 +32,7 @@ function ShowList({
     onPublished: (rows: ShowRow[]) => void;
     onError: (message: string) => void;
 }) {
+    const { formatDateTime, formatNumber, t } = useT();
     if (!shows.length) return <p className="text-neutral-500">Nincs ilyen műsor.</p>;
     return (
         <ul className="space-y-3">
@@ -46,13 +48,13 @@ function ShowList({
                             </span>
                             {" · "}
                             {show.startTime
-                                ? new Date(show.startAtUtc || show.startTime).toLocaleString()
+                                ? formatDateTime(show.startAtUtc || show.startTime)
                                 : "nincs dátum"}
                             {show.videoCategory ? ` · ${videoCategoryLabel(show.videoCategory)}` : ""}
                             {show.status === "archived"
-                                ? ` · ${Number(show.viewCount || 0).toLocaleString("hu-HU")} megtekintés`
+                                ? ` · ${t("media.views").replace("{n}", formatNumber(show.viewCount || 0))}`
                                 : ""}
-                            {show.peakViewers ? ` · peak ${Number(show.peakViewers).toLocaleString("hu-HU")}` : ""}
+                            {show.peakViewers ? ` · peak ${formatNumber(show.peakViewers)}` : ""}
                             {show.avgWatchSeconds
                                 ? ` · átlag ${formatWatchDuration(show.avgWatchSeconds)}`
                                 : ""}

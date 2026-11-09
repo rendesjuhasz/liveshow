@@ -36,6 +36,8 @@ import { ReportsService } from "../moderation/reports.service";
 import { ChatService } from "../moderation/chat.service";
 import { parseScheduleInput } from "../time/timezone";
 import { WebrtcGateway } from "../webrtc-signaling/webrtc.gateway";
+import { I18nService } from "../i18n/i18n.service";
+import { resolveOriginalLocale, type ShowTranslationInput } from "../i18n/show-content-translations";
 
 type StreamerRow = {
     id: string;
@@ -99,6 +101,7 @@ export class StreamerDashboardService {
         private readonly views: ViewLogService,
         private readonly reports: ReportsService,
         private readonly chat: ChatService,
+        private readonly i18n: I18nService,
         @Optional() private readonly liveIo?: WebrtcGateway,
     ) {}
 
@@ -163,6 +166,8 @@ export class StreamerDashboardService {
             streamId?: string;
             streamUrl?: string;
             videoCategory?: string;
+            originalLocale?: string;
+            translations?: ShowTranslationInput[];
         },
     ) {
         if (!data.title?.trim()) throw new BadRequestException("A cím kötelező.");
@@ -171,6 +176,7 @@ export class StreamerDashboardService {
 
         const streamId =
             data.streamId?.trim() || toLocalStreamId(streamer.id, data.title);
+        const originalLocale = resolveOriginalLocale(data.originalLocale);
 
         const show = await this.prisma.show.create({
             data: {
@@ -185,14 +191,17 @@ export class StreamerDashboardService {
                 streamId,
                 streamUrl: data.streamUrl?.trim() || null,
                 streamerId: streamer.id,
+                originalLocale,
             } as any,
         });
         await setShowStatus(this.prisma, show.id, "active");
         await setShowVideoCategory(this.prisma, show.id, videoCategory);
         void this.followNotify.notifyPublished(show.id).catch(() => undefined);
         await this.persistSchedule(show.id, schedule);
+        await this.i18n.persistShowTranslations(show.id, data.translations, originalLocale);
         return {
             ...show,
+            originalLocale,
             status: "active",
             startAtUtc: schedule.startAtUtc,
             endAtUtc: schedule.endAtUtc,
@@ -314,12 +323,18 @@ export class StreamerDashboardService {
         const show = await this.ownShow(streamer.id, showId);
         const tagged = await withShowStatus(this.prisma, show);
         const catMap = await videoCategoryByShowIds(this.prisma, [show.id]);
+        const translationRows = await this.i18n.contentFor("show", show.id);
         return {
             ...tagged,
             startAtUtc: tagged.startTime,
             endAtUtc: (tagged as any).endTime ?? null,
             timezone: (tagged as any).timezone || "Europe/Budapest",
             ...videoCategoryFields(catMap.get(show.id)),
+            originalLocale: resolveOriginalLocale((tagged as any).originalLocale),
+            translations: this.i18n.groupedShowTranslations(
+                translationRows,
+                (tagged as any).originalLocale,
+            ),
         };
     }
 
@@ -368,6 +383,8 @@ export class StreamerDashboardService {
             extrasContent?: string;
             privateStreamId?: string;
             videoCategory?: string;
+            originalLocale?: string;
+            translations?: ShowTranslationInput[];
         },
     ) {
         await this.ownShow(streamer.id, showId);
@@ -378,6 +395,9 @@ export class StreamerDashboardService {
         if (normalizeShowStatus(current.status) === "blocked") {
             throw new ForbiddenException("A tiltott műsort nem szerkesztheted.");
         }
+        const originalLocale = resolveOriginalLocale(
+            data.originalLocale !== undefined ? data.originalLocale : (current as any).originalLocale,
+        );
         const hasSchedule =
             data.startLocal ||
             data.startTime ||
@@ -415,12 +435,14 @@ export class StreamerDashboardService {
                 ...(data.streamUrl !== undefined
                     ? { streamUrl: data.streamUrl.trim() || null }
                     : {}),
+                originalLocale,
             } as any,
         });
         await this.persistSchedule(showId, schedule);
         if (data.videoCategory !== undefined) {
             await setShowVideoCategory(this.prisma, showId, parseRequiredVideoCategory(data.videoCategory));
         }
+        await this.i18n.persistShowTranslations(showId, data.translations, originalLocale);
         const show = await this.prisma.show.findUnique({ where: { id: showId } });
         const catMap = await videoCategoryByShowIds(this.prisma, [showId]);
         return {

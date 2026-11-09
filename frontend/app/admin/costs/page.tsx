@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
-function ft(n?: number) {
-    return `${Math.round(Number(n) || 0).toLocaleString("hu-HU")} Ft`;
+function ft(n: number | undefined, money: (amount: number) => string) {
+    return money(Math.round(Number(n) || 0));
 }
 
 function gb(bytes?: number) {
@@ -24,6 +25,7 @@ const RATE_FIELDS: { key: string; label: string; hint: string }[] = [
 ];
 
 export default function AdminCostsPage() {
+    const { formatMoney } = useT();
     const gate = useAdminGate();
     const [data, setData] = useState<any>(null);
     const [rates, setRates] = useState<Record<string, string>>({});
@@ -94,37 +96,37 @@ export default function AdminCostsPage() {
                 )}
                 {data?.loss && (
                     <p className="mb-4 rounded-xl border border-red-600 bg-red-900/40 p-4 text-red-200">
-                        Veszteség ebben a hónapban: a becsült üzemeltetés ({ft(data.total)}) nagyobb, mint a
-                        platform jutalék ({ft(revenue.platformCommission)}).
+                        Veszteség ebben a hónapban: a becsült üzemeltetés ({ft(data.total, formatMoney)}) nagyobb, mint a
+                        platform jutalék ({ft(revenue.platformCommission, formatMoney)}).
                     </p>
                 )}
                 {data?.overBudget && (
                     <p className="mb-4 rounded-xl border border-orange-600 bg-orange-900/40 p-4 text-orange-200">
-                        Túllépted a havi keretet ({ft(data.rates?.budgetMonthlyFt)}).
+                        Túllépted a havi keretet ({ft(data.rates?.budgetMonthlyFt, formatMoney)}).
                     </p>
                 )}
 
                 <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-xl bg-gray-800 p-4">
                         <p className="text-sm text-gray-400">Becsült üzemeltetés</p>
-                        <p className="text-2xl font-bold">{ft(data?.total)}</p>
+                        <p className="text-2xl font-bold">{ft(data?.total, formatMoney)}</p>
                     </div>
                     <div className="rounded-xl bg-gray-800 p-4">
                         <p className="text-sm text-gray-400">Platform jutalék (hó)</p>
-                        <p className="text-2xl font-bold">{ft(revenue.platformCommission)}</p>
+                        <p className="text-2xl font-bold">{ft(revenue.platformCommission, formatMoney)}</p>
                         <p className="text-xs text-gray-500">
-                            Bruttó {ft(revenue.gross)} · {revenue.commissionPercent ?? 0}%
+                            Bruttó {ft(revenue.gross, formatMoney)} · {revenue.commissionPercent ?? 0}%
                         </p>
                     </div>
                     <div className="rounded-xl bg-gray-800 p-4">
                         <p className="text-sm text-gray-400">Marzs (jutalék − költség)</p>
                         <p className={`text-2xl font-bold ${(data?.margin || 0) < 0 ? "text-red-400" : "text-green-400"}`}>
-                            {ft(data?.margin)}
+                            {ft(data?.margin, formatMoney)}
                         </p>
                     </div>
                     <div className="rounded-xl bg-gray-800 p-4">
                         <p className="text-sm text-gray-400">Tartalomkészítőnek (hó)</p>
-                        <p className="text-2xl font-bold">{ft(revenue.streamerNet)}</p>
+                        <p className="text-2xl font-bold">{ft(revenue.streamerNet, formatMoney)}</p>
                         <p className="text-xs text-gray-500">Ez nem a tied — payout</p>
                     </div>
                 </div>
@@ -148,7 +150,7 @@ export default function AdminCostsPage() {
                                 {label}
                                 {hint ? <span className="block text-gray-400">{hint}</span> : null}
                             </span>
-                            <span className="font-semibold">{ft(amount as number)}</span>
+                            <span className="font-semibold">{ft(amount as number, formatMoney)}</span>
                         </li>
                     ))}
                 </ul>

@@ -6,6 +6,7 @@ import {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
     type ReactNode,
 } from "react";
@@ -14,8 +15,10 @@ import { apiFetch } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import {
     DEFAULT_LOCALE,
+    FALLBACK_GUEST_LOCALE,
     formatDateTime,
     formatMoney,
+    formatNumber,
     isLocale,
     LOCALE_META,
     LOCALES,
@@ -23,10 +26,15 @@ import {
     type Locale,
 } from "./messages";
 import { stripLocalePrefix, withLocalePrefix } from "./paths";
-import { hasChosenLocaleCookie, LOCALE_CHOSEN_COOKIE, LOCALE_COOKIE } from "./locale-choice";
+import {
+    hasExplicitLocaleChoice,
+    LOCALE_CHOSEN_COOKIE,
+    LOCALE_COOKIE,
+    readLocaleCookie,
+} from "./locale-choice";
 
-const STORAGE = "liveshow_locale";
-const CHOSEN = "liveshow_locale_chosen";
+const STORAGE = LOCALE_COOKIE;
+const CHOSEN = LOCALE_CHOSEN_COOKIE;
 
 type Lang = { code: string; name: string; nativeName: string; enabled?: boolean };
 
@@ -36,6 +44,7 @@ type I18nContextType = {
     t: (key: string) => string;
     setLocale: (next: string) => Promise<void>;
     formatMoney: (amount: number) => string;
+    formatNumber: (value: number) => string;
     formatDateTime: (value: string | Date | null | undefined) => string;
 };
 
@@ -50,6 +59,7 @@ const I18nContext = createContext<I18nContextType>({
     t: (key) => translate(key, DEFAULT_LOCALE),
     setLocale: async () => undefined,
     formatMoney: (amount) => formatMoney(amount, DEFAULT_LOCALE),
+    formatNumber: (value) => formatNumber(value, DEFAULT_LOCALE),
     formatDateTime: (value) => formatDateTime(value, DEFAULT_LOCALE),
 });
 
@@ -61,6 +71,17 @@ function writeCookie(locale: string, chosen = false) {
     }
 }
 
+function readStoredLocale(): string | null {
+    try {
+        const fromStorage = window.localStorage.getItem(STORAGE);
+        if (isLocale(fromStorage)) return fromStorage;
+    } catch {
+        /* ignore */
+    }
+    const fromCookie = readLocaleCookie();
+    return isLocale(fromCookie) ? fromCookie : null;
+}
+
 export function I18nProvider({
     children,
     initialLocale,
@@ -70,24 +91,19 @@ export function I18nProvider({
 }) {
     const pathname = usePathname();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, ready } = useAuth();
     // Locale-prefixed URLs are rewritten to unprefixed routes (next.config). On the
     // server `usePathname()` is the rewritten path (`/forgot-password`); in the
     // browser it is `/en/forgot-password`. Prefer the URL prefix, else middleware
     // `x-locale` (initialLocale), so SSR and hydration use the same language.
     const pathHasLocalePrefix = /^\/(en|de|it|es|fr)(?=\/|$)/.test(pathname || "");
     const pathLocale = stripLocalePrefix(pathname || "/").locale;
-    const honorPathLocale =
-        pathHasLocalePrefix &&
-        isLocale(pathLocale) &&
-        isLocale(initialLocale) &&
-        initialLocale === pathLocale;
     const resolvedLocale = (
-        honorPathLocale && isLocale(pathLocale)
+        pathHasLocalePrefix && isLocale(pathLocale)
             ? pathLocale
             : isLocale(initialLocale)
               ? initialLocale
-              : DEFAULT_LOCALE
+              : FALLBACK_GUEST_LOCALE
     ) as Locale;
     const [locale, setLocaleState] = useState<string>(resolvedLocale);
     const [catalogLocale, setCatalogLocale] = useState<string>(resolvedLocale);
@@ -100,6 +116,7 @@ export function I18nProvider({
             enabled: true,
         })),
     );
+    const accountLocaleRef = useRef<string | null>(null);
 
     const loadCatalog = useCallback(async (lang: string) => {
         try {
@@ -116,54 +133,93 @@ export function I18nProvider({
         }
     }, []);
 
+    const applyUiLocale = useCallback(
+        (next: string, persistChosen: boolean) => {
+            const loc = isLocale(next) ? next : FALLBACK_GUEST_LOCALE;
+            setLocaleState(loc);
+            try {
+                window.localStorage.setItem(STORAGE, loc);
+                if (persistChosen) window.localStorage.setItem(CHOSEN, "1");
+                writeCookie(loc, persistChosen);
+            } catch {
+                /* ignore */
+            }
+            document.documentElement.lang = loc;
+            void loadCatalog(loc);
+            return loc;
+        },
+        [loadCatalog],
+    );
+
     useEffect(() => {
         const prefixed = /^\/(en|de|it|es|fr)(?=\/|$)/.test(pathname || "");
         const fromPath = stripLocalePrefix(pathname || "/").locale;
+        const chosen = hasExplicitLocaleChoice();
         try {
             if (window.localStorage.getItem(CHOSEN) === "1") {
-                const stored = window.localStorage.getItem(STORAGE);
+                const stored = readStoredLocale() || fromPath;
                 writeCookie(isLocale(stored) ? stored : fromPath, true);
             }
         } catch {
             /* ignore */
         }
-        const chosen = hasChosenLocaleCookie();
-        if (!chosen && prefixed) {
-            const stripped = stripLocalePrefix(pathname || "/").path;
-            const nextUrl = `${stripped}${window.location.search}${window.location.hash}`;
-            window.history.replaceState(window.history.state, "", nextUrl);
+        const stored = readStoredLocale();
+        let next: string;
+        if (prefixed && isLocale(fromPath)) {
+            next = fromPath;
+        } else if (chosen && isLocale(stored)) {
+            next = stored;
+        } else if (accountLocaleRef.current && isLocale(accountLocaleRef.current)) {
+            next = accountLocaleRef.current;
+        } else if (isLocale(initialLocale)) {
+            next = initialLocale;
+        } else {
+            next = FALLBACK_GUEST_LOCALE;
         }
-        const next =
-            chosen && prefixed && isLocale(fromPath)
-                ? fromPath
-                : isLocale(initialLocale)
-                  ? initialLocale
-                  : DEFAULT_LOCALE;
         if (next !== locale) setLocaleState(next);
         try {
-            window.localStorage.setItem(STORAGE, next);
-            writeCookie(next, chosen);
+            if (chosen && isLocale(stored)) {
+                window.localStorage.setItem(STORAGE, stored);
+                writeCookie(stored, true);
+            } else {
+                writeCookie(next, false);
+            }
         } catch {
             /* ignore */
         }
         document.documentElement.lang = next;
         void loadCatalog(next);
+        if (chosen && isLocale(stored) && !prefixed && stored !== DEFAULT_LOCALE) {
+            const { path: stripped } = stripLocalePrefix(pathname || "/");
+            const nextPath = withLocalePrefix(stripped, stored);
+            if (nextPath !== (pathname || "/")) router.replace(nextPath);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pathname, initialLocale]);
+
+    useEffect(() => {
+        if (!ready) return;
+        if (!user) {
+            accountLocaleRef.current = null;
+            return;
+        }
+        const account = user.locale;
+        if (!isLocale(account)) return;
+        accountLocaleRef.current = account;
+        if (hasExplicitLocaleChoice()) return;
+        const prefixed = /^\/(en|de|it|es|fr)(?=\/|$)/.test(pathname || "");
+        if (prefixed) return;
+        if (account === locale) return;
+        const loc = applyUiLocale(account, false);
+        const { path: stripped } = stripLocalePrefix(pathname || "/");
+        const nextPath = withLocalePrefix(stripped, loc);
+        if (nextPath !== (pathname || "/")) router.replace(nextPath);
+    }, [applyUiLocale, locale, pathname, ready, router, user]);
 
     const setLocale = useCallback(
         async (next: string) => {
             const loc = isLocale(next) ? next : DEFAULT_LOCALE;
-            setLocaleState(loc);
-            try {
-                window.localStorage.setItem(STORAGE, loc);
-                window.localStorage.setItem(CHOSEN, "1");
-                writeCookie(loc, true);
-            } catch {
-                /* ignore */
-            }
-            document.documentElement.lang = loc;
-            await loadCatalog(loc);
+            applyUiLocale(loc, true);
             if (user) {
                 await apiFetch("/auth/profile", {
                     method: "PATCH",
@@ -175,7 +231,7 @@ export function I18nProvider({
             const nextPath = withLocalePrefix(stripped, loc);
             if (nextPath !== path) router.replace(nextPath);
         },
-        [loadCatalog, pathname, router, user],
+        [applyUiLocale, pathname, router, user],
     );
 
     const t = useCallback(
@@ -193,6 +249,7 @@ export function I18nProvider({
             t,
             setLocale,
             formatMoney: (amount: number) => formatMoney(amount, locale),
+            formatNumber: (value: number) => formatNumber(value, locale),
             formatDateTime: (value: string | Date | null | undefined) => formatDateTime(value, locale),
         }),
         [languages, locale, setLocale, t],

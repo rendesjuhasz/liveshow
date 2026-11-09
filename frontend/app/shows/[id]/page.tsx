@@ -16,6 +16,7 @@ import TicketPackShop from "@/components/TicketPackShop";
 import EventTimeDisplay from "@/components/EventTimeDisplay";
 import CalendarExportButtons from "@/components/CalendarExportButtons";
 import { useT } from "@/lib/i18n/I18nProvider";
+import OriginalLanguageBadge from "@/components/OriginalLanguageBadge";
 import { useMounted } from "@/lib/use-mounted";
 
 export default function ShowDetailsPage() {
@@ -86,7 +87,13 @@ export default function ShowDetailsPage() {
                             {show.videoCategoryLabel}
                         </span>
                     )}
-                    <h1 className="max-w-3xl text-3xl font-extrabold tracking-tight md:text-6xl">{show.title}</h1>
+                    <h1 className="flex max-w-3xl flex-wrap items-center gap-2 text-3xl font-extrabold tracking-tight md:text-6xl">
+                        <OriginalLanguageBadge
+                            originalLocale={show.originalLocale}
+                            contentTranslated={show.contentTranslated}
+                        />
+                        <span>{show.title}</span>
+                    </h1>
                     <p className="mt-3 text-sm uppercase tracking-widest text-accent">
                         {mounted ? formatWhen(show.startAtUtc || show.startTime) : ""}
                         {show.streamer?.name ? ` · ${show.streamer.name}` : ""}

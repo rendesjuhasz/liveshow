@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function AdminCampaignsPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [campaigns, setCampaigns] = useState<any[]>([]);
     const [shows, setShows] = useState<any[]>([]);
@@ -207,7 +209,7 @@ export default function AdminCampaignsPage() {
                                 <li key={g.id}>
                                     {g.userEmail} · {g.source} ·{" "}
                                     {g.createdAt
-                                        ? new Date(g.createdAt).toLocaleString("hu-HU")
+                                        ? formatDateTime(g.createdAt)
                                         : ""}
                                 </li>
                             ))}

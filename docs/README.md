@@ -4,6 +4,7 @@ Ez a mappa a streaming / jegyértékesítő platform **átvételéhez és továb
 
 | # | Dokumentum | Tartalom |
 |---|------------|----------|
+| 0 | [00-platform-mukodes.md](./00-platform-mukodes.md) | **Hogyan működik** (néző, készítő, kérdés-kupac, jegy, teszt) |
 | 1 | [01-architektura.md](./01-architektura.md) | Rendszerfelépítés, adatáramlás, külső API-k |
 | 2 | [02-api.md](./02-api.md) | HTTP / WebSocket végpontok |
 | 3 | [03-adatbazis.md](./03-adatbazis.md) | Táblák, kapcsolatok, migrációk |

@@ -11,9 +11,19 @@ import MarketingKitCard from "@/components/MarketingKitCard";
 import EventScheduleFields from "@/components/EventScheduleFields";
 import { detectBrowserTimeZone, utcToWallClock } from "@/lib/timezone";
 import { normalizeDatetimeLocal, showScheduleClientError } from "@/lib/datetime-local";
+import {
+    ShowTranslationGlobe,
+    ShowTranslationsProvider,
+    emptyShowTranslations,
+    mergeShowTranslations,
+    translationHasCopy,
+} from "@/components/ShowContentTranslationsFields";
+import { useT } from "@/lib/i18n/I18nProvider";
+import { DEFAULT_LOCALE, isLocale, LOCALE_META, LOCALES, type Locale } from "@/lib/i18n/messages";
 
 export default function StreamerShowEditPage() {
     const gate = useStreamerGate();
+    const { t } = useT();
     const { id } = useParams<{ id: string }>();
     const router = useRouter();
     const [title, setTitle] = useState("");
@@ -25,6 +35,8 @@ export default function StreamerShowEditPage() {
     const [endTime, setEndTime] = useState("");
     const [timezone, setTimezone] = useState(detectBrowserTimeZone);
     const [busy, setBusy] = useState(false);
+    const [originalLocale, setOriginalLocale] = useState<Locale>(DEFAULT_LOCALE);
+    const [translations, setTranslations] = useState(() => emptyShowTranslations());
 
     useEffect(() => {
         if (!gate.ok || !id) return;
@@ -40,6 +52,9 @@ export default function StreamerShowEditPage() {
                     setStartTime(utcToWallClock(show.startAtUtc || show.startTime, tz));
                 }
                 if (show?.endAtUtc) setEndTime(utcToWallClock(show.endAtUtc, tz));
+                const nextOriginal = isLocale(show?.originalLocale) ? show.originalLocale : DEFAULT_LOCALE;
+                setOriginalLocale(nextOriginal);
+                setTranslations(mergeShowTranslations(show?.translations, nextOriginal));
             })
             .catch((err: any) => setError(err.message || "Nem sikerült betölteni."));
     }, [gate.ok, id]);
@@ -54,6 +69,8 @@ export default function StreamerShowEditPage() {
                 startLocal: normalizeDatetimeLocal(startTime),
                 endLocal: normalizeDatetimeLocal(endTime) || undefined,
                 timezone,
+                originalLocale,
+                translations,
             }),
         });
     }
@@ -68,6 +85,11 @@ export default function StreamerShowEditPage() {
                 Ha a státusz Aktív és a kezdés a jövőben van, a műsor a nézői Főoldalon a
                 Hamarosan eseményeknél látszik.
             </p>
+            <ShowTranslationsProvider
+                value={translations}
+                onChange={setTranslations}
+                originalLocale={originalLocale}
+            >
             <form
                 noValidate
                 className="max-w-xl grid gap-3 bg-neutral-900 p-6 rounded-2xl"
@@ -98,22 +120,60 @@ export default function StreamerShowEditPage() {
                     }
                 }}
             >
-                <label className="grid gap-1">
-                    Cím
+                <div className="grid gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="show-title">Cím</label>
+                        <ShowTranslationGlobe field="title" />
+                    </div>
                     <input
+                        id="show-title"
                         className="p-3 rounded text-black"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         required
                     />
-                </label>
-                <label className="grid gap-1">
-                    Leírás
+                </div>
+                <div className="grid gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="show-description">Leírás</label>
+                        <ShowTranslationGlobe field="description" />
+                    </div>
                     <textarea
+                        id="show-description"
                         className="p-3 rounded text-black min-h-24"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                     />
+                </div>
+                <label className="grid gap-1">
+                    {t("studio.originalLocale")}
+                    <select
+                        className="p-3 rounded text-black"
+                        value={originalLocale}
+                        onChange={(e) => {
+                            const next = e.target.value as Locale;
+                            const existing = translations.find((row) => row.locale === next);
+                            if (
+                                translationHasCopy(existing) &&
+                                !window.confirm(
+                                    t("studio.translations.confirmOriginalChange").replace(
+                                        "{lang}",
+                                        LOCALE_META[next].nativeName,
+                                    ),
+                                )
+                            ) {
+                                return;
+                            }
+                            setOriginalLocale(next);
+                            setTranslations((prev) => mergeShowTranslations(prev, next));
+                        }}
+                    >
+                        {LOCALES.map((code) => (
+                            <option key={code} value={code}>
+                                {LOCALE_META[code].nativeName}
+                            </option>
+                        ))}
+                    </select>
                 </label>
                 <EventScheduleFields
                     startLocal={startTime}
@@ -157,6 +217,7 @@ export default function StreamerShowEditPage() {
                     </button>
                 )}
             </form>
+            </ShowTranslationsProvider>
             {id ? <MarketingKitCard showId={String(id)} /> : null}
         </StreamerShell>
     );

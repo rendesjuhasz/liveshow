@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { isAdmin, useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/api/http";
 import { SHOW_STATUSES, showStatusClass, showStatusLabel } from "@/lib/show-status";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 type Show = {
     id: string;
@@ -16,6 +17,7 @@ type Show = {
 };
 
 export default function AdminShowsPage() {
+    const { formatDateTime } = useT();
     const { user, ready } = useAuth();
     const [shows, setShows] = useState<Show[]>([]);
     const [loading, setLoading] = useState(true);
@@ -112,7 +114,7 @@ export default function AdminShowsPage() {
                                 </p>
                                 <p className="text-gray-400">
                                     {show.startTime
-                                        ? new Date(show.startTime).toLocaleString("hu-HU")
+                                        ? formatDateTime(show.startTime)
                                         : "Nincs dátum"}
                                 </p>
                                 <p className="text-sm text-gray-500">Nézés: ingyenes (élő és archív)</p>

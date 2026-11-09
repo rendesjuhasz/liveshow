@@ -25,6 +25,7 @@ export type StreamerLiveCameraHandle = {
     flipCamera: () => Promise<void>;
     setMicEnabled: (on: boolean) => void;
     zoomBy: (delta: number) => number;
+    prepareStop: () => void;
     stopRecording: () => Promise<Blob | null>;
     restartCamera: () => Promise<boolean>;
     restoreStream: () => Promise<boolean>;
@@ -92,6 +93,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
     streamRef.current = stream;
     const [error, setError] = useState("");
     const skipEndedRef = useRef(false);
+    const stoppingRef = useRef(false);
     const recorderRef = useRef<MediaRecorder | null>(null);
     const recChunksRef = useRef<Blob[]>([]);
     const recMimeRef = useRef("");
@@ -120,27 +122,50 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
         const viewerIds = [...peersRef.current.keys()];
         await recreateViewersRef.current(viewerIds);
         next.addEventListener("ended", () => {
+            if (stoppingRef.current) return;
             void recoverVideoRef.current();
         });
     }
 
+    function haltCameraReuse() {
+        stoppingRef.current = true;
+        skipEndedRef.current = true;
+        if (videoRef.current) videoRef.current.srcObject = null;
+    }
+
     useImperativeHandle(ref, () => ({
+        prepareStop() {
+            haltCameraReuse();
+        },
         async flipCamera() {
             const current = streamRef.current;
-            if (!current) return;
+            if (!current || stoppingRef.current) return;
             const previousFacing = facingRef.current;
             const nextFacing = previousFacing === "user" ? "environment" : "user";
             skipEndedRef.current = true;
             const hold = makeHoldTrack();
             try {
                 await replacePeerTracks(peersRef.current, hold.track);
+                if (stoppingRef.current) {
+                    hold.stop();
+                    return;
+                }
                 current.getVideoTracks().forEach((track) => {
                     current.removeTrack(track);
                     track.stop();
                 });
                 await waitMs(350);
+                if (stoppingRef.current) {
+                    hold.stop();
+                    return;
+                }
                 facingRef.current = nextFacing;
                 const media = await openCamera({ facing: nextFacing, videoOnly: true });
+                if (stoppingRef.current) {
+                    stopStreamerMedia(media);
+                    hold.stop();
+                    return;
+                }
                 const next = media.getVideoTracks()[0];
                 if (!next) throw new Error("A kamera nem adott videósávot.");
                 await publishNewVideo(next);
@@ -154,14 +179,19 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                 onErrRef.current?.(message);
                 try {
                     await waitMs(400);
+                    if (stoppingRef.current) return;
                     const fallback = await openCamera({ facing: previousFacing, videoOnly: true });
+                    if (stoppingRef.current) {
+                        stopStreamerMedia(fallback);
+                        return;
+                    }
                     const track = fallback.getVideoTracks()[0];
                     if (track) await publishNewVideo(track);
                 } catch {
                     /* keep error */
                 }
             } finally {
-                skipEndedRef.current = false;
+                if (!stoppingRef.current) skipEndedRef.current = false;
             }
         },
         setMicEnabled(on: boolean) {
@@ -197,6 +227,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
             return recoverVideoRef.current();
         },
         async restoreStream() {
+            if (stoppingRef.current) return false;
             const sock = socketRef.current;
             if (sock && !sock.connected) sock.connect();
             if (sock?.connected) {
@@ -525,20 +556,34 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
         })();
 
         const recoverVideo = async () => {
-            if (skipEndedRef.current || cancelled) return false;
+            if (stoppingRef.current || skipEndedRef.current || cancelled) return false;
             const current = streamRef.current;
             if (!current) return false;
             skipEndedRef.current = true;
             onHealthRef.current?.({ cameraLive: false, recovering: true, message: "Újracsatlakozás..." });
             const hold = makeHoldTrack();
+            const abortRecover = () => stoppingRef.current || cancelled;
             try {
                 await replacePeerTracks(peersRef.current, hold.track);
+                if (abortRecover()) {
+                    hold.stop();
+                    return false;
+                }
                 current.getVideoTracks().forEach((track) => {
                     current.removeTrack(track);
                     track.stop();
                 });
                 await waitMs(400);
+                if (abortRecover()) {
+                    hold.stop();
+                    return false;
+                }
                 const media = await openCamera({ facing: facingRef.current, videoOnly: true });
+                if (abortRecover()) {
+                    stopStreamerMedia(media);
+                    hold.stop();
+                    return false;
+                }
                 const next = media.getVideoTracks()[0];
                 if (!next) {
                     onHealthRef.current?.({
@@ -561,7 +606,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                 onHealthRef.current?.({ cameraLive: false, recovering: false, message });
                 return false;
             } finally {
-                skipEndedRef.current = false;
+                if (!stoppingRef.current) skipEndedRef.current = false;
             }
         };
         stream.getVideoTracks().forEach((track) => {
@@ -571,6 +616,9 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
 
         return () => {
             cancelled = true;
+            stoppingRef.current = true;
+            skipEndedRef.current = true;
+            if (videoRef.current) videoRef.current.srcObject = null;
             removeVis();
             clearLkRefresh();
             if (beat) window.clearInterval(beat);

@@ -58,11 +58,14 @@ body:has([data-live-viewer]) footer {
 }
 
 [data-main-pad] {
-    padding-top: calc(4rem + env(safe-area-inset-top));
+    padding-top: calc(4rem + env(safe-area-inset-top) + var(--email-verify-banner-h, 0px));
+}
+
+html[data-home] [data-main-pad] {
+    padding-top: var(--email-verify-banner-h, 0px);
 }
 
 html[data-live-watch] [data-main-pad],
-html[data-home] [data-main-pad],
 html:has([data-live-viewer]) [data-main-pad],
 body:has([data-live-viewer]) [data-main-pad] {
     padding-top: 0 !important;

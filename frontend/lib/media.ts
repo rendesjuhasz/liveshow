@@ -39,6 +39,8 @@ export type MediaItem = {
     status?: string | null;
     videoCategory?: string | null;
     videoCategoryLabel?: string | null;
+    originalLocale?: string | null;
+    contentTranslated?: boolean | null;
     exists?: boolean;
     viewerCount?: number;
     viewCount?: number;

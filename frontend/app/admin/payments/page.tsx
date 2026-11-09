@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { apiDownload, apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { payoutStatusClass, payoutStatusLabel } from "@/lib/payout-status";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function AdminPaymentsPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [payments, setPayments] = useState<any[]>([]);
     const [payouts, setPayouts] = useState<any[]>([]);
@@ -227,8 +229,8 @@ export default function AdminPaymentsPage() {
                                     {p.method ? ` · ${p.method}` : ""}
                                     <span className="text-gray-500">
                                         {" "}
-                                        · igényelve {p.createdAt ? new Date(p.createdAt).toLocaleString("hu-HU") : "—"}
-                                        {p.paidAt ? ` · kifizetve ${new Date(p.paidAt).toLocaleString("hu-HU")}` : ""}
+                                        · igényelve {p.createdAt ? formatDateTime(p.createdAt) : "—"}
+                                        {p.paidAt ? ` · kifizetve ${formatDateTime(p.paidAt)}` : ""}
                                     </span>
                                 </span>
                                 <span className="flex gap-3">

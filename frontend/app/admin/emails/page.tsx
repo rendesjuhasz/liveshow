@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { isAdmin, useAuth } from "@/context/AuthContext";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 const LABELS: Record<string, string> = {
     registration: "Regisztráció",
@@ -15,6 +16,7 @@ const LABELS: Record<string, string> = {
 };
 
 export default function AdminEmailsPage() {
+    const { formatDateTime } = useT();
     const { user, ready } = useAuth();
     const [rows, setRows] = useState<any[]>([]);
     const [error, setError] = useState("");
@@ -50,7 +52,7 @@ export default function AdminEmailsPage() {
                             <p className="text-sm text-gray-300">{r.subject}</p>
                             <p className="text-xs text-gray-500 mt-2">
                                 {r.status} ·{" "}
-                                {r.createdAt ? new Date(r.createdAt).toLocaleString("hu-HU") : ""}
+                                {r.createdAt ? formatDateTime(r.createdAt) : ""}
                             </p>
                         </li>
                     ))}

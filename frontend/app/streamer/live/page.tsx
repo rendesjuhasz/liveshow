@@ -107,6 +107,11 @@ export default function StreamerLivePage() {
                 cameraRef.current = nextStream;
                 setCameraStream(nextStream);
                 setLiveStartedAt(Date.now());
+            } else {
+                stopStreamerMedia(cameraRef.current);
+                cameraRef.current = null;
+                setCameraStream(null);
+                setLiveStartedAt(0);
             }
             const data = await apiFetch(`/streamer/shows/${showId}/live`, {
                 method: "POST",
@@ -119,10 +124,6 @@ export default function StreamerLivePage() {
                 prev.map((s) => (s.id === showId ? { ...s, ...(data?.show || {}), live } : s)),
             );
             if (!live) {
-                stopStreamerMedia(cameraRef.current);
-                cameraRef.current = null;
-                setCameraStream(null);
-                setLiveStartedAt(0);
                 setMessage("Az élő adás leállt.");
             }
         } catch (err: unknown) {

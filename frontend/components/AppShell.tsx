@@ -7,6 +7,7 @@ import SiteNav from "@/components/SiteNav";
 import EmailVerifyBanner from "@/components/EmailVerifyBanner";
 import MaintenanceBanner from "@/components/MaintenanceBanner";
 import CookieBanner from "@/components/CookieBanner";
+import UsernameGate from "@/components/UsernameGate";
 import { readCookieConsent } from "@/lib/cookie-consent";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import TimezoneSync from "@/components/TimezoneSync";
@@ -62,8 +63,9 @@ export default function AppShell({
             <I18nProvider initialLocale={initialLocale}>
                 <TimezoneSync />
                 <RoleDocumentTitle />
+                <UsernameGate />
                 <SiteNav initialPath={initialPath} />
-                <EmailVerifyBanner />
+                <EmailVerifyBanner placement="global" />
                 <MaintenanceBanner />
                 <CookieBanner />
                 {children}

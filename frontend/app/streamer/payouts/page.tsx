@@ -5,8 +5,10 @@ import { apiDownload, apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import { payoutStatusClass, payoutStatusLabel } from "@/lib/payout-status";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function StreamerPayoutsPage() {
+    const { formatDateTime } = useT();
     const gate = useStreamerGate();
     const [rows, setRows] = useState<any[]>([]);
     const [revenue, setRevenue] = useState<any>(null);
@@ -99,7 +101,7 @@ export default function StreamerPayoutsPage() {
                         </span>
                         <span className="flex items-center gap-3">
                             <span className={payoutStatusClass(p.status)}>
-                                {payoutStatusLabel(p.status)} · {new Date(p.createdAt).toLocaleString("hu-HU")}
+                                {payoutStatusLabel(p.status)} · {formatDateTime(p.createdAt)}
                             </span>
                             {(p.status === "paid" || p.status === "approved") && (
                                 <button

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { isAdmin, useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import PasswordField from "@/components/PasswordField";
+import { needsUsername } from "@/lib/username";
 
 function errText(err: unknown) {
     if (err && typeof err === "object" && "message" in err && String((err as Error).message)) {
@@ -30,6 +31,10 @@ function AdminLoginForm() {
         setBusy(true);
         try {
             const nextUser = await login(email, password);
+            if (needsUsername(nextUser)) {
+                router.replace("/username");
+                return;
+            }
             if (!isAdmin(nextUser)) {
                 setError("Nincs admin jogosultság.");
                 setBusy(false);

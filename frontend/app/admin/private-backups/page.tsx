@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { getCsrfToken } from "@/api/auth-storage";
 import { useAdminGate } from "@/lib/useAdminGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function AdminPrivateBackupsPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [rows, setRows] = useState<any[]>([]);
     const [error, setError] = useState("");
@@ -60,7 +62,7 @@ export default function AdminPrivateBackupsPage() {
                         <li key={row.id} className="rounded-xl bg-gray-800 p-4">
                             <p className="font-semibold">{row.topic}</p>
                             <p className="text-sm text-gray-400">
-                                Lejár: {new Date(row.expiresAt).toLocaleString("hu-HU")}
+                                Lejár: {formatDateTime(row.expiresAt)}
                             </p>
                             <button
                                 type="button"

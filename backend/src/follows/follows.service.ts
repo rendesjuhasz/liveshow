@@ -131,7 +131,7 @@ export class FollowsService implements OnModuleInit {
             WHERE "streamerId" = ${streamerId} AND "createdAt" >= ${since}
         `;
         const recent = await this.prisma.$queryRaw<any[]>`
-            SELECT f.id, f."createdAt", u.name AS "userName"
+            SELECT f.id, f."createdAt", u.username AS "userName"
             FROM "StreamerFollow" f
             JOIN "User" u ON u.id = f."userId"
             WHERE f."streamerId" = ${streamerId}

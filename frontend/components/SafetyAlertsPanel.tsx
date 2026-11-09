@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { connectLiveSocket } from "@/lib/live-socket";
 import type { StreamAlert } from "@/lib/stream-alert";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 const SEVERITY: Record<string, string> = {
     info: "border-sky-400 bg-sky-950/90",
@@ -18,6 +19,7 @@ function isActive(a: StreamAlert) {
 }
 
 export default function SafetyAlertsPanel({ showId }: { showId: string }) {
+    const { formatDateTime } = useT();
     const [alerts, setAlerts] = useState<StreamAlert[]>([]);
     const [openId, setOpenId] = useState<string | null>(null);
     const [pushOk, setPushOk] = useState(false);
@@ -93,7 +95,7 @@ export default function SafetyAlertsPanel({ showId }: { showId: string }) {
                         className={`rounded-2xl border-2 p-4 shadow-lg ${SEVERITY[a.severity] || SEVERITY.warning}`}
                     >
                         <p className="text-base font-bold leading-snug md:text-lg">{a.title}</p>
-                        <p className="mt-1 text-xs text-white/70">{new Date(a.createdAt).toLocaleString("hu-HU")}</p>
+                        <p className="mt-1 text-xs text-white/70">{formatDateTime(a.createdAt)}</p>
                         <p className="mt-2 text-sm leading-relaxed text-white/90">
                             <span className="font-semibold">Ajánlás: </span>
                             {a.recommendation}

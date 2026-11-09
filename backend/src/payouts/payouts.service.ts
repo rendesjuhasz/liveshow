@@ -191,14 +191,15 @@ export class PayoutsService implements OnModuleInit {
     async leaderboard(limit = 20) {
         const settings = await getPayoutSettings(this.prisma);
         const rows = await this.prisma.$queryRaw<any[]>`
-            SELECT st.id, st.name, st."avatarUrl", st.status,
+            SELECT st.id, COALESCE(NULLIF(u.username, ''), 'Tartalomkészítő') AS name, st."avatarUrl", st.status,
                    COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."ticketsSpent" END), 0)::int AS tickets,
                    COALESCE(SUM(CASE WHEN COALESCE(sp."isGift", false) THEN 0 ELSE sp."calculatedAmount" END), 0)::int AS gross
             FROM "Streamer" st
+            LEFT JOIN "User" u ON u.id = st."userId"
             LEFT JOIN "TicketSpend" sp ON sp."streamerId" = st.id
               AND COALESCE(sp.reason, '') NOT IN ('refunded', 'question_hold')
             WHERE st.status = 'approved'
-            GROUP BY st.id, st.name, st."avatarUrl", st.status
+            GROUP BY st.id, u.username, st."avatarUrl", st.status
             ORDER BY gross DESC, tickets DESC
             LIMIT 20
         `.catch(() => []);

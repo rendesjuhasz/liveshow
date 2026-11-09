@@ -7,8 +7,10 @@ import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { streamerCategoryLabel } from "@/lib/streamer-categories";
 import { streamerStatusLabel, userAccountStatusLabel } from "@/lib/streamer-status";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function AdminStreamerProfilePage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const params = useParams();
     const id = String(params.id || "");
@@ -97,7 +99,7 @@ export default function AdminStreamerProfilePage() {
                             <li key={show.id} className="bg-gray-800 p-3 rounded">
                                 {show.title}
                                 {show.live ? " · élő adás" : " · nincs adásban"} ·{" "}
-                                {show.startTime ? new Date(show.startTime).toLocaleString("hu-HU") : "nincs dátum"}
+                                {show.startTime ? formatDateTime(show.startTime) : "nincs dátum"}
                             </li>
                         ))}
                     </ul>

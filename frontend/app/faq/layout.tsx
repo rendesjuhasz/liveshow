@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { routeMetadata } from "@/lib/route-metadata";
-import { FAQ_REVALIDATE } from "@/lib/page-cache";
 
-export const revalidate = FAQ_REVALIDATE;
+/** ISR seconds; keep in sync with FAQ_REVALIDATE in lib/page-cache.ts */
+export const revalidate = 300;
 
 export function generateMetadata() {
     return routeMetadata("/faq");

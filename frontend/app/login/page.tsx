@@ -10,6 +10,7 @@ import PasswordField from "@/components/PasswordField";
 import SocialAuthButtons from "@/components/SocialAuthButtons";
 import { safeViewerReturnPath } from "@/lib/auth-return";
 import { markStreamerLoginIntent } from "@/lib/streamer-login-intent";
+import { needsUsername } from "@/lib/username";
 
 function LoginForm() {
     const { login } = useAuth();
@@ -32,6 +33,10 @@ function LoginForm() {
         setBusy(true);
         try {
             const nextUser = await login(email, password);
+            if (needsUsername(nextUser)) {
+                router.replace("/username");
+                return;
+            }
             if (isStreamer(nextUser) && !nextPath) {
                 markStreamerLoginIntent();
                 window.location.assign("/streamer");

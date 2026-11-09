@@ -8,6 +8,7 @@ import {
     type MarketingPublish,
     type SocialAccount,
 } from "@/lib/marketing-kit";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 function kitText(kit: MarketingKit, tab: string) {
     if (tab === "facebook") return kit.facebookPost;
@@ -39,6 +40,7 @@ function fieldForTab(tab: string): keyof MarketingKit | null {
 }
 
 export default function MarketingKitCard({ showId }: { showId: string }) {
+    const { formatDateTime } = useT();
     const [kit, setKit] = useState<MarketingKit | null>(null);
     const [count, setCount] = useState(0);
     const [accounts, setAccounts] = useState<SocialAccount[]>([]);
@@ -180,7 +182,7 @@ export default function MarketingKitCard({ showId }: { showId: string }) {
                     </p>
                     {kit?.generatedAt && (
                         <p className="mt-1 text-xs text-neutral-500">
-                            Utoljára: {new Date(kit.generatedAt).toLocaleString("hu-HU")} · {kit.model} ·{" "}
+                            Utoljára: {formatDateTime(kit.generatedAt)} · {kit.model} ·{" "}
                             {(kit.durationMs / 1000).toFixed(1)}s · {count} sikeres generálás
                         </p>
                     )}

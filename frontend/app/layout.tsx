@@ -7,7 +7,7 @@ import AppShell from "../components/AppShell";
 import MainPad from "../components/layout/MainPad";
 import SiteFooter from "../components/SiteFooter";
 import ConditionalFooter from "../components/ConditionalFooter";
-import { DEFAULT_LOCALE, isLocale } from "../lib/i18n/messages";
+import { DEFAULT_LOCALE, FALLBACK_GUEST_LOCALE, isLocale } from "../lib/i18n/messages";
 import { metadataForPath, siteUrl } from "../lib/seo";
 import { isHomePath, isTheaterWatchPath } from "../lib/roles";
 
@@ -43,7 +43,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
     const hdr = await headers();
     const fromHeader = hdr.get("x-locale");
-    const locale = isLocale(fromHeader) ? fromHeader : DEFAULT_LOCALE;
+    const locale = isLocale(fromHeader) ? fromHeader : FALLBACK_GUEST_LOCALE;
     const path = hdr.get("x-liveshow-path") || "/";
     const nonce = hdr.get("x-nonce") || undefined;
     return (

@@ -13,6 +13,7 @@ export default function StreamerRegisterPage() {
     const router = useRouter();
     const { registerStreamer } = useAuth();
     const [name, setName] = useState("");
+    const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [bio, setBio] = useState("");
@@ -43,6 +44,7 @@ export default function StreamerRegisterPage() {
 
         const form = new FormData();
         form.append("name", name);
+        form.append("username", username);
         form.append("email", email);
         form.append("password", password);
         form.append("bio", bio);
@@ -78,6 +80,20 @@ export default function StreamerRegisterPage() {
                 </p>
 
                 <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl bg-neutral-900 p-4 sm:p-6">
+                    <label className="grid gap-1">
+                        <span>Felhasználónév</span>
+                        <input
+                            className="p-3 rounded text-black"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                            minLength={3}
+                            maxLength={24}
+                            required
+                        />
+                    </label>
+                    <p className="text-xs text-neutral-400">
+                        3–24 karakter, csak angol kisbetű, szám és aláhúzás. Később nem módosítható.
+                    </p>
                     <label className="grid gap-1">
                         <span>Teljes név</span>
                         <input

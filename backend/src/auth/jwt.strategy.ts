@@ -51,6 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             id: user.id,
             email: user.email,
             name: (user as { name?: string | null }).name || null,
+            username: (user as { username?: string | null }).username || null,
             role: isAdminRole(user) ? USER_ROLES.ADMIN : normalizeRole(user.role),
             emailVerified: flag[0]?.emailVerified !== false,
         };

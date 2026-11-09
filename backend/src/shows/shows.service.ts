@@ -17,6 +17,7 @@ import {
 import { endedShowIdSet, shouldPersistMissed } from "./show-ended";
 import { publicFrontendUrl } from "../auth/public-url";
 import { I18nService } from "../i18n/i18n.service";
+import { resolveOriginalLocale } from "../i18n/show-content-translations";
 import { privateShowIds } from "../private-streams/private-schema";
 import { VIDEO_CATEGORIES, videoCategoryFields, isVideoCategory } from "./video-categories";
 import {
@@ -60,6 +61,8 @@ function toShowDto(show: any) {
             id: show.id,
             title: show.title,
             description: show.description ?? null,
+            originalLocale: resolveOriginalLocale(show.originalLocale),
+            contentTranslated: Boolean(show.contentTranslated),
             image: show.image ?? null,
             streamUrl: show.streamUrl ?? null,
             streamId: show.streamId ?? null,
@@ -67,7 +70,10 @@ function toShowDto(show: any) {
             streamer: show.streamer
                 ? {
                       id: show.streamer.id,
-                      name: show.streamer.name,
+                      name:
+                          String(show.streamer.user?.username || "").trim() ||
+                          "Tartalomkészítő",
+                      username: String(show.streamer.user?.username || "").trim() || null,
                       avatarUrl: show.streamer.avatarUrl ?? null,
                   }
                 : null,
@@ -115,6 +121,9 @@ export class ShowsService implements OnModuleInit {
         await this.prisma.$executeRawUnsafe(
             `ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "wentLiveAt" TIMESTAMP(3)`,
         ).catch(() => undefined);
+        await this.prisma.$executeRawUnsafe(
+            `ALTER TABLE "Show" ADD COLUMN IF NOT EXISTS "originalLocale" TEXT NOT NULL DEFAULT 'hu'`,
+        ).catch(() => undefined);
         await ensureVideoCategoryColumn(this.prisma).catch(() => undefined);
         const { ensurePrivateSchema } = await import("../private-streams/private-schema");
         await ensurePrivateSchema(this.prisma).catch(() => undefined);
@@ -143,7 +152,7 @@ export class ShowsService implements OnModuleInit {
         const shows = await this.prisma.show.findMany({
             where: { id: { in: ids }, ...extraWhere },
             orderBy: { startTime: "asc" },
-            include: { streamer: true },
+            include: { streamer: { include: { user: { select: { username: true } } } } },
         });
         const hidden = await privateShowIds(this.prisma);
         const publicShows = shows.filter((show) => !hidden.has(show.id));
@@ -205,7 +214,7 @@ export class ShowsService implements OnModuleInit {
     async getShowById(id: string, opts?: { allowHidden?: boolean; lang?: string }) {
         const show = await this.prisma.show.findUnique({
             where: { id },
-            include: { streamer: true },
+            include: { streamer: { include: { user: { select: { username: true } } } } },
         });
 
         if (!show) {
@@ -273,7 +282,7 @@ export class ShowsService implements OnModuleInit {
         return this.prisma.show
             .findMany({
                 orderBy: { createdAt: "desc" },
-                include: { streamer: true },
+                include: { streamer: { include: { user: { select: { username: true } } } } },
             })
             .then(async (shows) => {
                 const withStatus = await withShowStatuses(this.prisma, shows);

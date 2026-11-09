@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { formatWatchDuration } from "@/lib/views";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 function Card({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
     return (
@@ -16,6 +17,7 @@ function Card({ label, value, hint }: { label: string; value: string | number; h
 }
 
 export default function AdminStatsPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [stats, setStats] = useState<any>(null);
     const [error, setError] = useState("");
@@ -225,7 +227,7 @@ export default function AdminStatsPage() {
                             <p className="text-xs text-gray-500 mt-1">
                                 {row.source || "ingest"}
                                 {row.createdAt
-                                    ? ` · ${new Date(row.createdAt).toLocaleString("hu-HU")}`
+                                    ? ` · ${formatDateTime(row.createdAt)}`
                                     : ""}
                             </p>
                         </li>

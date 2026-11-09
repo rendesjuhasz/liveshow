@@ -13,9 +13,19 @@ import {
     normalizeDatetimeLocal,
     showScheduleClientError,
 } from "@/lib/datetime-local";
+import {
+    ShowTranslationGlobe,
+    ShowTranslationsProvider,
+    emptyShowTranslations,
+    mergeShowTranslations,
+    translationHasCopy,
+} from "@/components/ShowContentTranslationsFields";
+import { useT } from "@/lib/i18n/I18nProvider";
+import { DEFAULT_LOCALE, isLocale, LOCALE_META, LOCALES, type Locale } from "@/lib/i18n/messages";
 
 export default function StreamerNewShowPage() {
     const gate = useStreamerGate();
+    const { t, locale } = useT();
     const router = useRouter();
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
@@ -26,6 +36,10 @@ export default function StreamerNewShowPage() {
     const [videoCategory, setVideoCategory] = useState("");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
+    const [originalLocale, setOriginalLocale] = useState<Locale>(() =>
+        isLocale(locale) ? locale : DEFAULT_LOCALE,
+    );
+    const [translations, setTranslations] = useState(() => emptyShowTranslations(locale));
 
     async function submit(e: React.FormEvent) {
         e.preventDefault();
@@ -55,6 +69,8 @@ export default function StreamerNewShowPage() {
                     timezone,
                     streamId,
                     videoCategory,
+                    originalLocale,
+                    translations,
                 }),
             });
             router.push("/streamer/shows");
@@ -70,6 +86,11 @@ export default function StreamerNewShowPage() {
 
     return (
         <StreamerShell title="Új műsor létrehozása">
+            <ShowTranslationsProvider
+                value={translations}
+                onChange={setTranslations}
+                originalLocale={originalLocale}
+            >
             <form
                 noValidate
                 onSubmit={submit}
@@ -80,25 +101,63 @@ export default function StreamerNewShowPage() {
                     eseményeknél. Ehhez jövőbeli kezdési időpont kell — az űrlap 2 órával
                     későbbre van előre kitöltve, ezt átírhatod.
                 </p>
-                <label className="grid gap-1">
-                    Cím
+                <div className="grid gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="show-title">Cím</label>
+                        <ShowTranslationGlobe field="title" />
+                    </div>
                     <input
+                        id="show-title"
                         className="min-h-12 rounded-xl p-3 text-base text-black"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                     />
-                </label>
+                </div>
                 <label className="grid gap-1">
                     Kategória
                     <VideoCategorySelect value={videoCategory} onChange={setVideoCategory} required={false} />
                 </label>
-                <label className="grid gap-1">
-                    Leírás
+                <div className="grid gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="show-description">Leírás</label>
+                        <ShowTranslationGlobe field="description" />
+                    </div>
                     <textarea
+                        id="show-description"
                         className="min-h-24 rounded-xl p-3 text-base text-black"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                     />
+                </div>
+                <label className="grid gap-1">
+                    {t("studio.originalLocale")}
+                    <select
+                        className="min-h-12 rounded-xl p-3 text-base text-black"
+                        value={originalLocale}
+                        onChange={(e) => {
+                            const next = e.target.value as Locale;
+                            const existing = translations.find((row) => row.locale === next);
+                            if (
+                                translationHasCopy(existing) &&
+                                !window.confirm(
+                                    t("studio.translations.confirmOriginalChange").replace(
+                                        "{lang}",
+                                        LOCALE_META[next].nativeName,
+                                    ),
+                                )
+                            ) {
+                                return;
+                            }
+                            setOriginalLocale(next);
+                            setTranslations((prev) => mergeShowTranslations(prev, next));
+                        }}
+                    >
+                        {LOCALES.map((code) => (
+                            <option key={code} value={code}>
+                                {LOCALE_META[code].nativeName}
+                            </option>
+                        ))}
+                    </select>
                 </label>
                 <EventScheduleFields
                     startLocal={startTime}
@@ -133,6 +192,7 @@ export default function StreamerNewShowPage() {
                     </button>
                 </div>
             </form>
+            </ShowTranslationsProvider>
         </StreamerShell>
     );
 }

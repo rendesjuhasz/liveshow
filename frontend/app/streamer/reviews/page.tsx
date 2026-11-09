@@ -5,8 +5,10 @@ import { apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
 import ReportButton from "@/components/ReportButton";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function StreamerReviewsPage() {
+    const { formatDateTime } = useT();
     const gate = useStreamerGate();
     const [data, setData] = useState<any>(null);
     const [error, setError] = useState("");
@@ -46,7 +48,7 @@ export default function StreamerReviewsPage() {
                             </div>
                         )}
                         <p className="text-sm text-neutral-500 mt-2">
-                            {new Date(r.createdAt).toLocaleString("hu-HU")}
+                            {formatDateTime(r.createdAt)}
                         </p>
                     </li>
                 ))}

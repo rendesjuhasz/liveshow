@@ -5,8 +5,10 @@ import Link from "next/link";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { streamerStatusLabel, userAccountStatusLabel } from "@/lib/streamer-status";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function AdminUsersPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [rows, setRows] = useState<any[]>([]);
     const [q, setQ] = useState("");
@@ -74,11 +76,13 @@ export default function AdminUsersPage() {
                     {filtered.map((u) => (
                         <li key={u.id} className="bg-gray-800 p-4 rounded-xl flex flex-wrap justify-between gap-3">
                             <div>
-                                <p className="font-semibold">{u.email}</p>
+                                <p className="font-semibold">
+                                    {u.username ? `@${u.username}` : u.email}
+                                </p>
                                 <p className="text-sm text-gray-400">
-                                    {u.role} · {userAccountStatusLabel(u.status)} · {u.provider || "local"}
+                                    {u.email} · {u.role} · {userAccountStatusLabel(u.status)} · {u.provider || "local"}
                                     {u.lastLoginAt
-                                        ? ` · utolsó belépés: ${new Date(u.lastLoginAt).toLocaleString("hu-HU")}`
+                                        ? ` · utolsó belépés: ${formatDateTime(u.lastLoginAt)}`
                                         : ""}
                                     {u.streamer
                                         ? ` · tartalomkészítő: ${u.streamer.name} (${streamerStatusLabel(u.streamer.status)})`

@@ -16,6 +16,7 @@ import {
     findBannedWord,
 } from "../questions/question-filters";
 import { WebrtcGateway } from "../webrtc-signaling/webrtc.gateway";
+import { USERNAME_REQUIRED_MESSAGE } from "../auth/username";
 
 @Injectable()
 export class ChatService {
@@ -31,7 +32,7 @@ export class ChatService {
         try {
             return await this.prisma.$queryRaw<any[]>`
                 SELECT c.id, c.text, c."createdAt", c.status,
-                       COALESCE(NULLIF(u.name, ''), 'Néző') AS author
+                       COALESCE(NULLIF(u.username, ''), 'Néző') AS author
                 FROM "ChatMessage" c
                 JOIN "User" u ON u.id = c."userId"
                 WHERE c."showId" = ${id}
@@ -59,6 +60,15 @@ export class ChatService {
         const id = this.requireShow(showId);
         const body = sanitizeUserText(text, MAX_CHAT_LEN);
         if (!body) throw new BadRequestException("Az üzenet szövege kötelező.");
+
+        const authorRow = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { username: true },
+        });
+        const author = String(authorRow?.username || "").trim();
+        if (!author) {
+            throw new ForbiddenException(USERNAME_REQUIRED_MESSAGE);
+        }
 
         const show = await this.prisma.show.findUnique({ where: { id } });
         if (!show) throw new NotFoundException("A műsor nem található.");
@@ -113,11 +123,6 @@ export class ChatService {
             throw new BadRequestException(filterReason || "Az üzenetet a szűrő elutasította.");
         }
 
-        const authorRow = await this.prisma.user.findUnique({
-            where: { id: userId },
-            select: { name: true },
-        });
-        const author = String(authorRow?.name || "").trim() || "Néző";
         const payload = {
             id: msgId,
             text: body,
@@ -135,7 +140,7 @@ export class ChatService {
         return this.prisma.$queryRaw<any[]>`
             SELECT c.id, c.text, c.status, c."filterReason", c."createdAt",
                    u.email AS "userEmail",
-                   COALESCE(NULLIF(u.name, ''), 'Néző') AS author
+                   COALESCE(NULLIF(u.username, ''), 'Néző') AS author
             FROM "ChatMessage" c
             JOIN "User" u ON u.id = c."userId"
             WHERE c."showId" = ${id}

@@ -85,7 +85,16 @@ export class FollowNotifyService implements OnModuleInit, OnModuleDestroy {
     private async dispatch(showId: string, kind: FollowNotifyKind) {
         const show = await this.prisma.show.findUnique({
             where: { id: showId },
-            include: { streamer: { select: { id: true, name: true, userId: true } } },
+            include: {
+                streamer: {
+                    select: {
+                        id: true,
+                        name: true,
+                        userId: true,
+                        user: { select: { username: true } },
+                    },
+                },
+            },
         });
         if (!show?.streamerId || !show.streamer) return;
         const status = String((show as any).status || "active");
@@ -99,7 +108,8 @@ export class FollowNotifyService implements OnModuleInit, OnModuleDestroy {
         const filtered = recipients.filter((r) => r.userId !== show.streamer?.userId);
         if (filtered.length === 0) return;
 
-        const streamerName = show.streamer.name || "Tartalomkészítő";
+        const streamerName =
+            String(show.streamer.user?.username || "").trim() || "Tartalomkészítő";
         const href = privateFlag ? `/profile?tab=private` : liveOrShowHref(kind, show.id);
 
         let sent = 0;

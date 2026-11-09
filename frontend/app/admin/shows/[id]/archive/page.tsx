@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { isAdmin, useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/api/http";
 import { buildSignedArchiveUrl } from "@/lib/getStreamToken";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 type ArchiveInfo = {
     exists: boolean;
@@ -16,6 +17,7 @@ type ArchiveInfo = {
 };
 
 export default function ArchiveAdminPage() {
+    const { formatDateTime } = useT();
     const { user, ready } = useAuth();
     const { id } = useParams<{ id: string }>();
     const [archive, setArchive] = useState<ArchiveInfo | null>(null);
@@ -153,7 +155,7 @@ export default function ArchiveAdminPage() {
                         <p className="mb-4">
                             <span className="font-bold">Létrehozva:</span>{" "}
                             {archive.createdAt
-                                ? new Date(archive.createdAt).toLocaleString("hu-HU")
+                                ? formatDateTime(archive.createdAt)
                                 : "-"}
                         </p>
 

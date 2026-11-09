@@ -21,7 +21,7 @@ export class AdminUsersService {
 
     async listUsers() {
         const rows = await this.prisma.$queryRaw<any[]>`
-            SELECT u.id, u.email, u.role, u."createdAt",
+            SELECT u.id, u.email, u.username, u.role, u."createdAt",
                    COALESCE(u.status, 'active') AS status,
                    COALESCE(u.provider, 'local') AS provider,
                    u."lastLoginAt",
@@ -39,7 +39,7 @@ export class AdminUsersService {
 
     async getUserProfile(id: string) {
         const users = await this.prisma.$queryRaw<any[]>`
-            SELECT u.id, u.email, u.role, u."createdAt",
+            SELECT u.id, u.email, u.username, u.role, u."createdAt",
                    COALESCE(u.status, 'active') AS status,
                    COALESCE(u.provider, 'local') AS provider,
                    u."lastLoginAt",
@@ -95,6 +95,7 @@ export class AdminUsersService {
             user: {
                 id: user.id,
                 email: user.email,
+                username: user.username || null,
                 role: user.role,
                 status: user.status,
                 createdAt: user.createdAt,
@@ -232,6 +233,7 @@ export class AdminUsersService {
         return {
             id: u.id,
             email: u.email,
+            username: u.username || null,
             role: u.role,
             status: u.status,
             createdAt: u.createdAt,

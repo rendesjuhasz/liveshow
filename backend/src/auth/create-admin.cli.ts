@@ -1,6 +1,6 @@
 /**
  * Create or promote an admin. Does not go through public register.
- * Usage (from backend/): npm run create-admin -- email@example.com 'StrongPass1' "Név"
+ * Usage (from backend/): npm run create-admin -- email@example.com 'StrongPass1' "Név" handle
  */
 import { config as loadEnv } from "dotenv";
 import { join } from "path";
@@ -15,9 +15,14 @@ async function main() {
         .toLowerCase();
     const password = String(process.argv[3] || process.env.ADMIN_PASSWORD || "");
     const name = String(process.argv[4] || "Admin").trim() || "Admin";
+    const username = String(process.argv[5] || "")
+        .trim()
+        .toLowerCase();
 
     if (!email.includes("@") || password.length < 8) {
-        console.error("Használat: npm run create-admin -- email@domain.hu 'jelszólegalabb8' \"Megjelenő név\"");
+        console.error(
+            "Használat: npm run create-admin -- email@domain.hu 'jelszólegalabb8' \"Megjelenő név\" felhasznalonev",
+        );
         process.exit(1);
     }
     if (process.env.NODE_ENV === "production" && email === "admin@admin.com") {
@@ -38,13 +43,17 @@ async function main() {
         `.catch(() => undefined);
         console.log(`Frissítve: ${email} (role=admin, email verified)`);
     } else {
+        if (!/^[a-z0-9_]{3,24}$/.test(username)) {
+            console.error("Új adminhoz kötelező a felhasználónév (3–24, a-z 0-9 _).");
+            process.exit(1);
+        }
         const created = await prisma.user.create({
-            data: { email, password: hash, role: "admin", name },
+            data: { email, password: hash, role: "admin", name, username },
         });
         await prisma.$executeRaw`
             UPDATE "User" SET "emailVerified" = true, "updatedAt" = NOW() WHERE id = ${created.id}
         `.catch(() => undefined);
-        console.log(`Létrehozva: ${email} (role=admin)`);
+        console.log(`Létrehozva: ${email} @${username} (role=admin)`);
     }
     await prisma.$disconnect();
 }

@@ -288,9 +288,11 @@ export default function StreamerLiveStudio({
         setConfirmStop(false);
         setReactionCounts(emptyReactionCounts());
         setReactionEvent(null);
-        setSavingArchive(true);
+        camRef.current?.prepareStop();
+        const recPromise = camRef.current?.stopRecording() ?? Promise.resolve(null);
+        onStop();
         try {
-            const blob = await camRef.current?.stopRecording();
+            const blob = await recPromise;
             if (blob && blob.size >= 4096) {
                 const form = new FormData();
                 const mp4 = blob.type.includes("mp4");
@@ -300,9 +302,8 @@ export default function StreamerLiveStudio({
                 await apiUpload(`/streamer/shows/${showId}/live-archive`, form);
             }
         } catch {
-            /* a leállítás akkor is lefusson */
+            /* a kamera már leállt; az archív feltöltés opcionális */
         }
-        onStop();
     }
 
     async function runRestore(kind: "reconnect" | "camera" | "stream") {

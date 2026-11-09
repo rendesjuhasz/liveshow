@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 type ContactStatus = "new" | "opened" | "replied";
 
@@ -45,6 +46,7 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export default function AdminContactPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [data, setData] = useState<ListPayload>({
         items: [],
@@ -239,7 +241,7 @@ export default function AdminContactPage() {
                                             </td>
                                             <td className="whitespace-nowrap px-3 py-3 text-gray-400">
                                                 {row.createdAt
-                                                    ? new Date(row.createdAt).toLocaleString("hu-HU")
+                                                    ? formatDateTime(row.createdAt)
                                                     : ""}
                                             </td>
                                             <td className="max-w-xs px-3 py-3 text-gray-300">{row.preview}</td>

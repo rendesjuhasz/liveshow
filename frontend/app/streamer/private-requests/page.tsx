@@ -5,8 +5,10 @@ import Link from "next/link";
 import { apiFetch } from "@/api/http";
 import StreamerShell from "@/components/StreamerShell";
 import { useStreamerGate } from "@/lib/useStreamerGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function StreamerPrivateRequestsPage() {
+    const { formatDateTime } = useT();
     const gate = useStreamerGate();
     const [rows, setRows] = useState<any[]>([]);
     const [band, setBand] = useState<any>(null);
@@ -46,7 +48,7 @@ export default function StreamerPrivateRequestsPage() {
                         <p className="mt-1 font-semibold">{row.topic}</p>
                         <p className="mt-1 text-zinc-300">{row.details}</p>
                         <p className="mt-2 text-xs text-zinc-500">
-                            Határidő: {new Date(row.deadlineAt).toLocaleString("hu-HU")}
+                            Határidő: {formatDateTime(row.deadlineAt)}
                         </p>
                         <Link
                             href={`/streamer/private-requests/${row.id}`}

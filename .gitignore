@@ -5,6 +5,8 @@ build/
 out/
 coverage/
 uploads/
+!backend/src/uploads/
+!backend/src/uploads/**
 generated/
 mail-outbox/
 logs/

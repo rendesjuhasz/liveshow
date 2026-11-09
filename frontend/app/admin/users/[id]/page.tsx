@@ -6,8 +6,10 @@ import { useParams } from "next/navigation";
 import { apiFetch, publicAssetUrl } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
 import { streamerStatusLabel, userAccountStatusLabel } from "@/lib/streamer-status";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function AdminUserProfilePage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const params = useParams();
     const id = String(params.id || "");
@@ -49,15 +51,16 @@ export default function AdminUserProfilePage() {
                 <h1 className="text-3xl font-bold mb-2">Felhasználói profil</h1>
                 {error && <p className="text-red-400 mb-4">{error}</p>}
                 <div className="bg-gray-800 p-6 rounded-xl mb-6">
-                    <p className="text-xl font-semibold">{u.email}</p>
+                    <p className="text-xl font-semibold">{u.username ? `@${u.username}` : u.email}</p>
+                    {u.username ? <p className="text-sm text-gray-400">{u.email}</p> : null}
                     <p className="text-gray-400 mt-1">
                         {u.role} · {userAccountStatusLabel(u.status)} · {u.provider || "local"} ·{" "}
-                        {new Date(u.createdAt).toLocaleString("hu-HU")}
+                        {formatDateTime(u.createdAt)}
                     </p>
                     <p className="text-sm text-gray-400 mt-2">
                         Utolsó belépés:{" "}
                         {u.lastLoginAt
-                            ? `${new Date(u.lastLoginAt).toLocaleString("hu-HU")} (${u.lastLoginProvider || u.provider || "local"})`
+                            ? `${formatDateTime(u.lastLoginAt)} (${u.lastLoginProvider || u.provider || "local"})`
                             : "még nincs"}
                     </p>
                     <p className="text-sm text-gray-400 mt-1">
@@ -128,7 +131,7 @@ export default function AdminUserProfilePage() {
                         <ul className="space-y-2 text-sm">
                             {data.authEvents.map((e: any) => (
                                 <li key={e.id} className="bg-gray-800 p-3 rounded">
-                                    {e.action} · {e.provider} · {new Date(e.createdAt).toLocaleString("hu-HU")}
+                                    {e.action} · {e.provider} · {formatDateTime(e.createdAt)}
                                 </li>
                             ))}
                         </ul>

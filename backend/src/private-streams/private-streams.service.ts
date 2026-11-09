@@ -103,7 +103,7 @@ export class PrivateStreamsService implements OnModuleInit {
     async listMine(userId: string) {
         await this.expireOpen();
         const rows = await this.prisma.$queryRaw<any[]>`
-            SELECT r.*, u.name AS "userName"
+            SELECT r.*, u.username AS "userName"
             FROM "PrivateRequest" r
             JOIN "User" u ON u.id = r."userId"
             WHERE r."userId" = ${userId}
@@ -115,7 +115,7 @@ export class PrivateStreamsService implements OnModuleInit {
     async listOpenForStreamers() {
         await this.expireOpen();
         const rows = await this.prisma.$queryRaw<any[]>`
-            SELECT r.*, u.name AS "userName"
+            SELECT r.*, u.username AS "userName"
             FROM "PrivateRequest" r
             JOIN "User" u ON u.id = r."userId"
             WHERE r.status = 'open' AND r."deadlineAt" > NOW()
@@ -139,7 +139,7 @@ export class PrivateStreamsService implements OnModuleInit {
     ) {
         await this.expireOpen();
         const rows = await this.prisma.$queryRaw<any[]>`
-            SELECT r.*, u.name AS "userName", u.email AS "userEmail"
+            SELECT r.*, u.username AS "userName", u.email AS "userEmail"
             FROM "PrivateRequest" r
             JOIN "User" u ON u.id = r."userId"
             WHERE r.id = ${id}

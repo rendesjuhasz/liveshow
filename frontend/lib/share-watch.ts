@@ -11,7 +11,7 @@ export function publicWatchSharePath(kind: WatchShareKind, id: string) {
 }
 
 /** Nyilvános oldal URL. Nincs token, aláírás vagy extra jogosultság a linkben. */
-export function publicWatchShareUrl(kind: WatchShareKind, id: string, locale = DEFAULT_LOCALE) {
+export function publicWatchShareUrl(kind: WatchShareKind, id: string, locale: string = DEFAULT_LOCALE) {
     const path = publicWatchSharePath(kind, id);
     if (!path) return "";
     const origin = typeof window !== "undefined" ? window.location.origin : "";

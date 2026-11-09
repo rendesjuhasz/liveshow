@@ -22,11 +22,13 @@ import {
     normalizeRole,
     type UserRole,
 } from "@/lib/roles";
+import { FALLBACK_GUEST_LOCALE, isLocale } from "@/lib/i18n/messages";
 
 export type User = {
     id: string;
     email: string;
     name?: string | null;
+    username?: string | null;
     locale?: string | null;
     timezone?: string | null;
     role: UserRole;
@@ -51,7 +53,13 @@ type AuthContextType = {
     status: AuthStatus;
     login: (email: string, password: string) => Promise<User>;
     logout: () => void;
-    register: (email: string, password: string, name: string, referralCode?: string) => Promise<User>;
+    register: (
+        email: string,
+        password: string,
+        name: string,
+        referralCode?: string,
+        username?: string,
+    ) => Promise<User>;
     registerStreamer: (formData: FormData) => Promise<void>;
     refreshUser: () => Promise<User | null>;
     refreshSession: () => Promise<User | null>;
@@ -85,7 +93,13 @@ function parseUser(data: any): User | null {
         id: String(id),
         email: String(email),
         name: String(raw.name || raw.streamer?.name || data?.streamer?.name || "").trim() || null,
-        locale: raw.locale ? String(raw.locale) : undefined,
+        username: String(raw.username || "").trim() || null,
+        locale: (() => {
+            const value = String(raw.locale || "").trim().toLowerCase();
+            if (isLocale(value)) return value;
+            const primary = value.split("-")[0];
+            return isLocale(primary) ? primary : undefined;
+        })(),
         timezone: raw.timezone ? String(raw.timezone) : undefined,
         role: raw.isAdmin === true || normalizeRole(raw.role) === "admin" ? "admin" : normalizeRole(raw.role),
         isAdmin: raw.isAdmin === true || normalizeRole(raw.role) === "admin",
@@ -210,18 +224,18 @@ export function AuthProvider({
     );
 
     const register = useCallback(
-        async (email: string, password: string, name: string, referralCode?: string) => {
+        async (email: string, password: string, name: string, referralCode?: string, username?: string) => {
             sessionEpoch.current += 1;
-            const locale =
-                typeof document !== "undefined"
-                    ? document.documentElement.lang || "hu"
-                    : "hu";
+            const lang =
+                typeof document !== "undefined" ? document.documentElement.lang : "";
+            const locale = isLocale(lang) ? lang : FALLBACK_GUEST_LOCALE;
             const data = await apiFetch("/auth/register", {
                 method: "POST",
                 body: JSON.stringify({
                     email,
                     password,
                     name,
+                    username,
                     referralCode,
                     locale,
                 }),
@@ -241,6 +255,10 @@ export function AuthProvider({
     const registerStreamer = useCallback(
         async (formData: FormData) => {
             sessionEpoch.current += 1;
+            const lang =
+                typeof document !== "undefined" ? document.documentElement.lang : "";
+            const locale = isLocale(lang) ? lang : FALLBACK_GUEST_LOCALE;
+            if (!formData.get("locale")) formData.append("locale", locale);
             const data = await apiUpload("/auth/register-streamer", formData);
             const fallback = parseUser(data);
             if (fallback) applySession(true, fallback);

@@ -3,6 +3,7 @@ import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { SignedMediaInterceptor } from "./uploads/signed-media.interceptor";
+import { UsernameRequiredInterceptor } from "./auth/username.interceptor";
 
 import { MailModule } from "./mail/mail.module";
 import { AuthModule } from "./auth/auth.module";
@@ -84,6 +85,7 @@ import { securityMiddleware } from "./security/http-guard";
     providers: [
         AppService,
         { provide: APP_INTERCEPTOR, useClass: SignedMediaInterceptor },
+        { provide: APP_INTERCEPTOR, useClass: UsernameRequiredInterceptor },
     ],
 })
 export class AppModule implements NestModule {

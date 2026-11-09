@@ -51,15 +51,18 @@ export class WishesService implements OnModuleInit {
             completedAt: wish.completedAt,
             authorName: publicAuthorName(wish.user),
             streamer: wish.streamer
-                ? { id: wish.streamer.id, name: wish.streamer.name }
+                ? {
+                      id: wish.streamer.id,
+                      name: publicAuthorName(wish.streamer.user, "Tartalomkészítő"),
+                  }
                 : null,
         };
     }
 
     private include() {
         return {
-            user: { select: { name: true } },
-            streamer: { select: { id: true, name: true } },
+            user: { select: { username: true } },
+            streamer: { select: { id: true, user: { select: { username: true } } } },
         } as const;
     }
 

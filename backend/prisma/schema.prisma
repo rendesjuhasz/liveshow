@@ -10,6 +10,8 @@ datasource db {
 model User {
   id             String          @id @default(uuid())
   email          String          @unique
+  /// Public handle. Null until the user picks one. Immutable after set.
+  username       String?         @unique
   name           String?
   password       String?
   createdAt      DateTime        @default(now())
@@ -197,6 +199,8 @@ model Show {
   videoCategory   String            @default("egyeb")
   /// közvetlenül feltöltött VOD, nem élő adásból készült
   isVod           Boolean           @default(false)
+  /// a cím/leírás eredeti nyelve (hu|en|de|it|es|fr)
+  originalLocale  String            @default("hu")
   archiveExists     Boolean   @default(false)
   archiveSize       Int       @default(0)
   archiveDuration   Int       @default(0)

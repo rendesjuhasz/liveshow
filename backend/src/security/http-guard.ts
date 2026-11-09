@@ -23,6 +23,7 @@ const SKIP_CSRF = [
     "/payments/stripe/webhook",
     "/socket.io",
     "/live-io",
+    "/i18n/missing",
 ];
 
 function cookieValue(req: Request, name: string) {

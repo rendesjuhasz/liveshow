@@ -17,6 +17,7 @@ export default function RegisterPage() {
     const { t } = useT();
     const [email, setEmail] = useState("");
     const [name, setName] = useState("");
+    const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
@@ -46,7 +47,7 @@ export default function RegisterPage() {
         setError("");
         setBusy(true);
         try {
-            await register(email, password, name, refCode || undefined);
+            await register(email, password, name, refCode || undefined, username);
             window.localStorage.removeItem(REF_STORAGE_KEY);
             router.replace("/");
         } catch (err: any) {
@@ -80,6 +81,21 @@ export default function RegisterPage() {
                     {t("auth.or")}
                     <span className="h-px flex-1 bg-white/10" />
                 </div>
+                <label className="mb-4 grid gap-2 text-sm">
+                    {t("auth.username")}
+                    <input
+                        className="h-11 rounded-xl bg-[#323232] px-3 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+                        type="text"
+                        name="username"
+                        autoComplete="username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                        minLength={3}
+                        maxLength={24}
+                        required
+                    />
+                </label>
+                <p className="mb-4 text-xs text-zinc-500">{t("auth.usernameHint")}</p>
                 <label className="mb-4 grid gap-2 text-sm">
                     {t("auth.name")}
                     <input

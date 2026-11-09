@@ -27,6 +27,7 @@ import {
     otpauthUrl,
     verifyTotp,
 } from "./totp";
+import { DEFAULT_LOCALE, isLocale } from "../i18n/messages";
 import { assertValidEmail, assertValidPassword } from "../security/rate-limit";
 import { sanitizeUserText } from "../security/sanitize-text";
 import { ensureOAuthSchema } from "./oauth-schema";
@@ -48,18 +49,35 @@ import {
     VERIFY_TOKEN_INVALID_MESSAGE,
     verifyExpiryDate,
 } from "./email-verify";
+import {
+    assertValidUsername,
+    publicUsername,
+    throwUsernameConflict,
+    USERNAME_IMMUTABLE_MESSAGE,
+    USERNAME_TAKEN_MESSAGE,
+} from "./username";
 
 
 export type StreamerRegisterInput = {
     name: string;
     email: string;
     password: string;
+    username: string;
     bio: string;
     category: string;
     contactEmail: string;
     termsAccepted: boolean;
     avatarUrl: string;
+    locale?: string;
 };
+
+function accountLocale(value?: string | null) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (isLocale(raw)) return raw;
+    const primary = raw.split("-")[0];
+    if (isLocale(primary)) return primary;
+    return DEFAULT_LOCALE;
+}
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -127,6 +145,7 @@ export class AuthService implements OnModuleInit {
         email: string;
         role?: string | null;
         name?: string | null;
+        username?: string | null;
         locale?: string | null;
         timezone?: string | null;
         emailVerified?: boolean | null;
@@ -137,8 +156,9 @@ export class AuthService implements OnModuleInit {
             id: row.id,
             email: row.email,
             name: this.displayName(row),
+            username: publicUsername(row, "") || null,
             role: this.accountRole(row),
-            locale: row.locale || "hu",
+            locale: accountLocale(row.locale),
             timezone: (row as { timezone?: string | null }).timezone || null,
             emailVerified: row.emailVerified !== false,
             isAdmin: isAdminRole(row),
@@ -197,7 +217,14 @@ export class AuthService implements OnModuleInit {
         };
     }
 
-    async register(email: string, password: string, name?: string, referralCode?: string, locale?: string) {
+    async register(
+        email: string,
+        password: string,
+        name?: string,
+        referralCode?: string,
+        locale?: string,
+        usernameRaw?: string,
+    ) {
         if (!email?.trim() || !password) {
             throw new BadRequestException("Email és jelszó kötelező.");
         }
@@ -205,6 +232,7 @@ export class AuthService implements OnModuleInit {
         if (!fullName) {
             throw new BadRequestException("A név kötelező.");
         }
+        const username = assertValidUsername(usernameRaw);
         const normalized = email.trim().toLowerCase();
         assertValidEmail(normalized);
         assertValidPassword(password);
@@ -216,19 +244,26 @@ export class AuthService implements OnModuleInit {
         if (existing) {
             throw new ConflictException("Ez az email már létezik.");
         }
+        await this.assertUsernameFree(username);
 
         const hashed = await bcrypt.hash(password, 10);
 
-        const created = await this.prisma.user.create({
+        let created;
+        try {
+            created = await this.prisma.user.create({
             data: {
                 email: normalized,
                 name: fullName,
+                username,
                 password: hashed,
                 role: USER_ROLES.USER,
-                locale: String(locale || "hu").slice(0, 5) || "hu",
+                locale: accountLocale(locale),
                 provider: "local",
             },
-        });
+            });
+        } catch (err) {
+            throwUsernameConflict(err);
+        }
         await this.setEmailVerifiedFlag(created.id, false);
 
         await this.sendRegistrationVerifyMail({ ...created, emailVerified: false }, false);
@@ -242,6 +277,7 @@ export class AuthService implements OnModuleInit {
         const name = sanitizeUserText(input.name, 120);
         const email = String(input.email || "").trim().toLowerCase();
         const password = String(input.password || "");
+        const username = assertValidUsername(input.username);
         const bio = sanitizeUserText(input.bio, 4000);
         const category = String(input.category || "").trim().toLowerCase();
         const contactEmail = String(input.contactEmail || "").trim().toLowerCase();
@@ -276,16 +312,21 @@ export class AuthService implements OnModuleInit {
         if (existingStreamer) {
             throw new ConflictException("Ehhez az emailhez már tartozik tartalomkészítő profil.");
         }
+        await this.assertUsernameFree(username);
 
         const hashed = await bcrypt.hash(password, 10);
 
-        const created = await this.prisma.$transaction(async (tx) => {
+        let created;
+        try {
+            created = await this.prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
                     email,
                     name,
+                    username,
                     password: hashed,
                     role: USER_ROLES.STREAMER,
+                    locale: accountLocale(input.locale),
                 },
             });
 
@@ -305,6 +346,9 @@ export class AuthService implements OnModuleInit {
 
             return { user, streamer };
         });
+        } catch (err) {
+            throwUsernameConflict(err);
+        }
         const verified = process.env.NODE_ENV !== "production";
         await this.setEmailVerifiedFlag(created.user.id, verified);
 
@@ -471,7 +515,7 @@ export class AuthService implements OnModuleInit {
         }
         const data: { name?: string; locale?: string; timezone?: string } = {};
         if (fullName) data.name = fullName;
-        if (body.locale) data.locale = String(body.locale).slice(0, 5);
+        if (body.locale) data.locale = accountLocale(body.locale);
         if (body.timezone) {
             const { assertIanaTimeZone } = await import("../time/timezone");
             data.timezone = assertIanaTimeZone(body.timezone);
@@ -507,9 +551,45 @@ export class AuthService implements OnModuleInit {
         return this.getMe(userId);
     }
 
+    async claimUsername(userId: string, raw?: string) {
+        const username = assertValidUsername(raw);
+        const found = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!found) {
+            throw new UnauthorizedException("A felhasználó nem található.");
+        }
+        if (String((found as { username?: string | null }).username || "").trim()) {
+            throw new BadRequestException(USERNAME_IMMUTABLE_MESSAGE);
+        }
+        await this.assertUsernameFree(username);
+        try {
+            await this.prisma.user.update({
+                where: { id: userId },
+                data: { username },
+            });
+        } catch (err) {
+            throwUsernameConflict(err);
+        }
+        return this.getMe(userId);
+    }
+
+    private async assertUsernameFree(username: string) {
+        const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+            SELECT id FROM "User" WHERE LOWER("username") = ${username} LIMIT 1
+        `.catch(() => [] as { id: string }[]);
+        if (rows[0]) {
+            throw new ConflictException(USERNAME_TAKEN_MESSAGE);
+        }
+    }
+
     private async ensureUserNameColumn() {
         await this.prisma.$executeRawUnsafe(
             `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "name" TEXT`,
+        ).catch(() => undefined);
+        await this.prisma.$executeRawUnsafe(
+            `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "username" TEXT`,
+        ).catch(() => undefined);
+        await this.prisma.$executeRawUnsafe(
+            `CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username")`,
         ).catch(() => undefined);
         await this.prisma.$executeRawUnsafe(
             `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "locale" TEXT NOT NULL DEFAULT 'hu'`,

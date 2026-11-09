@@ -33,7 +33,7 @@ export default function ArchiveWatchSlide({
     listed?: ArchiveListed;
 }) {
     const { user } = useAuth();
-    const { t } = useT();
+    const { t, locale } = useT();
     const videoRef = useRef<HTMLVideoElement>(null);
     const countedRef = useRef(false);
     const watchedRef = useRef(false);
@@ -154,7 +154,7 @@ export default function ArchiveWatchSlide({
             <div className="pointer-events-none absolute inset-x-0 bottom-14 z-[90] bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pb-3 pr-16 pt-16">
                 <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-white/85">
                     <Eye className="size-3.5" aria-hidden />
-                    {formatCount(viewCount)}
+                    {formatCount(viewCount, locale)}
                     {categoryLabel ? <span className="uppercase tracking-wide text-[#25f4ee]">{categoryLabel}</span> : null}
                 </p>
                 <h1 className="mb-1 text-base font-bold leading-tight">{title}</h1>

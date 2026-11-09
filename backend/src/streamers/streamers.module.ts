@@ -18,9 +18,10 @@ import { PayoutsModule } from "../payouts/payouts.module";
 import { ModerationModule } from "../moderation/moderation.module";
 import { ContactModule } from "../contact/contact.module";
 import { WebrtcModule } from "../webrtc-signaling/webrtc.module";
+import { I18nModule } from "../i18n/i18n.module";
 
 @Module({
-    imports: [PrismaModule, AdminGuardModule, AuthGuardModule, IngestModule, ArchiveModule, TicketsModule, QuestionsModule, PayoutsModule, ModerationModule, ContactModule, WebrtcModule],
+    imports: [PrismaModule, AdminGuardModule, AuthGuardModule, IngestModule, ArchiveModule, TicketsModule, QuestionsModule, PayoutsModule, ModerationModule, ContactModule, WebrtcModule, I18nModule],
     controllers: [StreamersController, StreamerDashboardController, ReviewsController],
     providers: [StreamersService, StreamerDashboardService, StreamerApprovedGuard, ReviewsService, ModeratorGuard],
     exports: [StreamersService, StreamerApprovedGuard],

@@ -1,11 +1,20 @@
+import { reportMissingTranslation } from "./report-missing";
+
 export const LOCALES = ["hu", "en", "de", "it", "es", "fr"] as const;
 export type Locale = (typeof LOCALES)[number];
+/** Canonical / dictionary / email fallback when a translation cell is missing. */
 export const DEFAULT_LOCALE: Locale = "hu";
+/** Guest UI when Accept-Language is missing or unsupported (e.g. Japanese). */
+export const FALLBACK_GUEST_LOCALE: Locale = "en";
+
+/** Neutral UI copy when a key is absent from every language. Never show the raw key. */
+export const MISSING_MESSAGE_FALLBACK = "…";
 
 export const LOCALE_META: Record<
     Locale,
     { name: string; nativeName: string; dateLocale: string; currency: string }
 > = {
+    // Currency stays HUF. Country and currency will be separate account fields later; they are not derived from UI language.
     hu: { name: "Hungarian", nativeName: "Magyar", dateLocale: "hu-HU", currency: "HUF" },
     en: { name: "English", nativeName: "English", dateLocale: "en-GB", currency: "HUF" },
     de: { name: "German", nativeName: "Deutsch", dateLocale: "de-DE", currency: "HUF" },
@@ -150,6 +159,27 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
     "auth.showPassword": row("Jelszó megjelenítése", "Show password", "Passwort anzeigen", "Mostra password", "Mostrar contraseña", "Afficher le mot de passe"),
     "auth.hidePassword": row("Jelszó elrejtése", "Hide password", "Passwort verbergen", "Nascondi password", "Ocultar contraseña", "Masquer le mot de passe"),
     "auth.name": row("Név", "Name", "Name", "Nome", "Nombre", "Nom"),
+    "auth.username": row("Felhasználónév", "Username", "Benutzername", "Nome utente", "Usuario", "Identifiant"),
+    "auth.usernameHint": row(
+        "3–24 karakter, csak angol kisbetű, szám és aláhúzás. Később nem módosítható.",
+        "3–24 characters: lowercase letters, numbers, underscore. It cannot be changed later.",
+        "3–24 Zeichen: Kleinbuchstaben, Zahlen, Unterstrich. Später nicht änderbar.",
+        "3–24 caratteri: lettere minuscole, numeri, underscore. Non modificabile dopo.",
+        "3–24 caracteres: minúsculas, números, guion bajo. No se puede cambiar después.",
+        "3–24 caractères : minuscules, chiffres, underscore. Non modifiable ensuite.",
+    ),
+    "auth.usernameTitle": row("Válassz felhasználónevet", "Choose a username", "Benutzername wählen", "Scegli un nome utente", "Elige un usuario", "Choisis un identifiant"),
+    "auth.usernameLead": row(
+        "Ez jelenik meg a nyilvános felületeken. Egyszer kell megadni, utána nem módosítható.",
+        "This is shown in public. You set it once and cannot change it later.",
+        "Das erscheint öffentlich. Einmal setzen, danach unveränderlich.",
+        "Compare in pubblico. Si imposta una volta e non si cambia.",
+        "Se muestra en público. Lo eliges una vez y no se puede cambiar.",
+        "C’est ce qui s’affiche en public. Une seule fois, ensuite figé.",
+    ),
+    "auth.usernameSave": row("Felhasználónév mentése", "Save username", "Benutzername speichern", "Salva nome utente", "Guardar usuario", "Enregistrer l’identifiant"),
+    "auth.usernameError": row("A felhasználónév mentése nem sikerült.", "Could not save the username.", "Benutzername konnte nicht gespeichert werden.", "Impossibile salvare il nome utente.", "No se pudo guardar el usuario.", "Impossible d’enregistrer l’identifiant"),
+    "auth.usernameTaken": row("Ez a felhasználónév már létezik.", "This username already exists.", "Dieser Benutzername existiert bereits.", "Questo nome utente esiste già.", "Este usuario ya existe.", "Cet identifiant existe déjà."),
     "auth.submitLogin": row("Belépés", "Log in", "Anmelden", "Accedi", "Entrar", "Se connecter"),
     "auth.or": row("vagy", "or", "oder", "oppure", "o", "ou"),
     "auth.continueGoogle": row("Folytatás Google-fiókkal", "Continue with Google", "Weiter mit Google", "Continua con Google", "Continuar con Google", "Continuer avec Google"),
@@ -469,6 +499,7 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
     "verify.resend": row("Link újraküldése", "Resend link", "Link erneut senden", "Reinvia link", "Reenviar enlace", "Renvoyer le lien"),
     "verify.resendBusy": row("Küldés...", "Sending...", "Senden...", "Invio...", "Enviando...", "Envoi..."),
     "verify.open": row("Megerősítés", "Confirm", "Bestätigen", "Conferma", "Confirmar", "Confirmer"),
+    "verify.bannerClose": row("Bezárás", "Close", "Schließen", "Chiudi", "Cerrar", "Fermer"),
     "legal.cookies": row("Cookie tájékoztató", "Cookie policy", "Cookie-Richtlinie", "Cookie policy", "Política de cookies", "Politique cookies"),
     "home.watchNow": row("Nézd most", "Watch now", "Jetzt ansehen", "Guarda ora", "Ver ahora", "Regarder"),
     "home.details": row("Részletek", "Details", "Details", "Dettagli", "Detalles", "Détails"),
@@ -552,6 +583,81 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
     "live.vipPrivate": row("VIP privát stream", "VIP private stream", "VIP-Privatstream", "Stream privato VIP", "Stream privado VIP", "Stream privé VIP"),
     "live.vipExtras": row("VIP extra tartalom", "VIP extra content", "VIP-Extra-Inhalt", "Contenuto extra VIP", "Contenido extra VIP", "Contenu extra VIP"),
     "live.vipEmpty": row("VIP extra tartalom: a tartalomkészítő még nem töltött fel anyagot.", "VIP extras: the creator has not uploaded anything yet.", "VIP-Extras: noch nichts hochgeladen.", "Extra VIP: il creator non ha ancora caricato nulla.", "Extra VIP: el creador aún no ha subido nada.", "Extra VIP : le créateur n'a encore rien téléversé."),
+    "studio.originalLocale": row(
+        "Eredeti nyelv",
+        "Original language",
+        "Originalsprache",
+        "Lingua originale",
+        "Idioma original",
+        "Langue d’origine",
+    ),
+    "studio.translations.heading": row(
+        "Fordítások (opcionális)",
+        "Translations (optional)",
+        "Übersetzungen (optional)",
+        "Traduzioni (facoltative)",
+        "Traducciones (opcional)",
+        "Traductions (facultatif)",
+    ),
+    "studio.translations.hint": row(
+        "A cím és a leírás az eredeti nyelven marad az alap. A többi nyelv mezői üresen hagyhatók. A rendszer nem fordítja le őket helyetted.",
+        "Title and description in the original language stay the default. Other languages can be left empty. The system will not translate them for you.",
+        "Titel und Beschreibung in der Originalsprache bleiben die Grundlage. Andere Sprachen können leer bleiben. Das System übersetzt sie nicht automatisch.",
+        "Titolo e descrizione nella lingua originale restano il valore predefinito. Le altre lingue possono restare vuote. Il sistema non le traduce.",
+        "El título y la descripción en el idioma original siguen siendo el valor base. Los demás idiomas pueden quedar vacíos. El sistema no los traduce.",
+        "Le titre et la description dans la langue d’origine restent la base. Les autres langues peuvent rester vides. Le système ne les traduit pas.",
+    ),
+    "studio.translations.open": row(
+        "Más nyelveken is megadom",
+        "I’ll provide it in other languages too",
+        "Ich gebe es auch in anderen Sprachen an",
+        "Lo inserisco anche in altre lingue",
+        "También lo indico en otros idiomas",
+        "Je le renseigne aussi dans d’autres langues",
+    ),
+    "studio.translations.writeHint": row(
+        "Ezt te írod meg, a rendszer nem fordítja le helyetted.",
+        "You write this yourself; the system will not translate it for you.",
+        "Das schreibst du selbst; das System übersetzt es nicht für dich.",
+        "Lo scrivi tu; il sistema non lo traduce al posto tuo.",
+        "Lo escribes tú; el sistema no lo traduce por ti.",
+        "Vous le rédigez vous-même ; le système ne le traduit pas à votre place.",
+    ),
+    "studio.translations.done": row("Kész", "Done", "Fertig", "Fatto", "Listo", "Terminé"),
+    "studio.translations.pickLanguage": row(
+        "Nyelv hozzáadása",
+        "Add a language",
+        "Sprache hinzufügen",
+        "Aggiungi una lingua",
+        "Añadir un idioma",
+        "Ajouter une langue",
+    ),
+    "studio.translations.remove": row(
+        "{lang} eltávolítása",
+        "Remove {lang}",
+        "{lang} entfernen",
+        "Rimuovi {lang}",
+        "Quitar {lang}",
+        "Retirer {lang}",
+    ),
+    "studio.translations.confirmOriginalChange": row(
+        "A(z) {lang} nyelven megadott szöveg el fog veszni, mert ez lesz az eredeti nyelv. Folytatod?",
+        "The text entered in {lang} will be lost because that will become the original language. Continue?",
+        "Der in {lang} eingegebene Text geht verloren, weil das die Originalsprache wird. Fortfahren?",
+        "Il testo inserito in {lang} andrà perso perché diventerà la lingua originale. Continuare?",
+        "El texto escrito en {lang} se perderá porque ese será el idioma original. ¿Continuar?",
+        "Le texte saisi en {lang} sera perdu car ce sera la langue d’origine. Continuer ?",
+    ),
+    "content.originalLanguage": row(
+        "A tartalom az eredeti nyelvén látható.",
+        "This content is shown in its original language.",
+        "Dieser Inhalt wird in der Originalsprache angezeigt.",
+        "Questo contenuto è mostrato nella lingua originale.",
+        "Este contenido se muestra en su idioma original.",
+        "Ce contenu est affiché dans sa langue d’origine.",
+    ),
+    "studio.translations.title": row("Cím ezen a nyelven", "Title in this language", "Titel in dieser Sprache", "Titolo in questa lingua", "Título en este idioma", "Titre dans cette langue"),
+    "studio.translations.description": row("Leírás ezen a nyelven", "Description in this language", "Beschreibung in dieser Sprache", "Descrizione in questa lingua", "Descripción en este idioma", "Description dans cette langue"),
     "show.loadError": row("Nem sikerült betölteni a műsor részleteit.", "Could not load show details.", "Details konnten nicht geladen werden.", "Impossibile caricare i dettagli.", "No se pudieron cargar los detalles.", "Impossible de charger les détails."),
     "show.watch": row("Előnézet / nézés", "Preview / watch", "Vorschau / ansehen", "Anteprima / guarda", "Vista previa / ver", "Aperçu / regarder"),
     "show.replay": row("Visszanézés", "Watch again", "Wiedersehen", "Rivedi", "Ver de nuevo", "Revoir"),
@@ -652,39 +758,85 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
     ),
     "faq.needHelp": row("Nem találtad a választ?", "Didn't find an answer?", "Keine passende Antwort?", "Non hai trovato la risposta?", "¿No encontraste la respuesta?", "Pas trouvé de réponse ?"),
     "faq.contactLead": row("Lépj kapcsolatba velünk.", "Get in touch with us.", "Schreib uns.", "Contattaci.", "Contáctanos.", "Contactez-nous."),
+    "notify.questionRejected": row(
+        "Kérdés elutasítva",
+        "Question declined",
+        "Frage abgelehnt",
+        "Domanda rifiutata",
+        "Pregunta rechazada",
+        "Question refusée",
+    ),
 };
 
 export function isLocale(value?: string | null): value is Locale {
     return LOCALES.includes(String(value || "").toLowerCase() as Locale);
 }
 
+/** Parse RFC 7231 Accept-Language tags, highest q first (stable for ties). */
+export function parseAcceptLanguage(header?: string | null): string[] {
+    const raw = String(header || "").trim();
+    if (!raw) return [];
+    return raw
+        .split(",")
+        .map((part, index) => {
+            const [tagPart, ...params] = part.trim().split(";");
+            const tag = tagPart.trim().toLowerCase();
+            let q = 1;
+            for (const param of params) {
+                const [key, value] = param.trim().split("=");
+                if (key.trim().toLowerCase() === "q") {
+                    const n = Number(value);
+                    if (Number.isFinite(n)) q = n;
+                }
+            }
+            return { tag, q, index };
+        })
+        .filter((row) => row.tag)
+        .sort((a, b) => b.q - a.q || a.index - b.index)
+        .map((row) => row.tag);
+}
+
 export function detectLocale(header?: string | null): Locale {
-    const raw = String(header || "").toLowerCase();
-    for (const loc of LOCALES) {
-        if (raw.includes(loc)) return loc;
+    for (const tag of parseAcceptLanguage(header)) {
+        const primary = tag.split("-")[0];
+        if (isLocale(primary)) return primary;
+        if (isLocale(tag)) return tag;
     }
-    if (raw.includes("es-") || raw.startsWith("es")) return "es";
-    return DEFAULT_LOCALE;
+    return FALLBACK_GUEST_LOCALE;
+}
+
+function cell(row: Record<Locale, string> | undefined, loc: Locale) {
+    return String(row?.[loc] || "").trim();
 }
 
 export function translate(
     key: string,
     locale: string | null | undefined,
-    fallbackLocale: Locale = DEFAULT_LOCALE,
+    _fallbackLocale: Locale = DEFAULT_LOCALE,
 ) {
-    const loc = isLocale(locale) ? locale : fallbackLocale;
+    const requested = isLocale(locale) ? locale : null;
     const row = MESSAGES[key];
-    if (!row) return key;
-    return row[loc] || row[fallbackLocale] || row.hu || key;
+    const picked = row
+        ? (requested && cell(row, requested)) || cell(row, FALLBACK_GUEST_LOCALE) || cell(row, DEFAULT_LOCALE)
+        : "";
+    if (picked) return picked;
+    reportMissingTranslation(key, requested || FALLBACK_GUEST_LOCALE);
+    return MISSING_MESSAGE_FALLBACK;
 }
 
 export function formatMoney(amount: number, locale: string) {
     const loc = isLocale(locale) ? locale : DEFAULT_LOCALE;
+    // Currency is HUF until country/currency are stored separately (not inferred from language).
     return new Intl.NumberFormat(LOCALE_META[loc].dateLocale, {
         style: "currency",
         currency: LOCALE_META[loc].currency,
         maximumFractionDigits: 0,
     }).format(amount);
+}
+
+export function formatNumber(value: number, locale: string) {
+    const loc = isLocale(locale) ? locale : DEFAULT_LOCALE;
+    return new Intl.NumberFormat(LOCALE_META[loc].dateLocale).format(Number(value) || 0);
 }
 
 export function formatDateTime(value: string | Date | null | undefined, locale: string) {

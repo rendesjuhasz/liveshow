@@ -173,6 +173,11 @@ export class RegisterStreamerDto {
     @MaxLength(200)
     password!: string;
 
+    @IsString()
+    @MinLength(3)
+    @MaxLength(24)
+    username!: string;
+
     @IsOptional()
     @IsString()
     @MaxLength(2000)
@@ -192,6 +197,11 @@ export class RegisterStreamerDto {
     @IsString()
     @MaxLength(16)
     termsAccepted?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(8)
+    locale?: string;
 }
 
 export class LiveViewDto {
@@ -419,6 +429,12 @@ export class BannedWordDto {
     @IsString() @MinLength(2) @MaxLength(80) word!: string;
 }
 
+export class ShowContentTranslationDto {
+    @IsString() @IsIn(["hu", "en", "de", "it", "es", "fr"]) @MaxLength(8) locale!: string;
+    @IsOptional() @IsString() @MaxLength(200) title?: string;
+    @IsOptional() @IsString() @MaxLength(8000) description?: string;
+}
+
 export class ShowBodyDto {
     @IsOptional() @IsString() @MaxLength(200) title?: string;
     @IsOptional() @IsString() @MaxLength(8000) description?: string;
@@ -439,9 +455,16 @@ export class ShowBodyDto {
     @IsOptional() @IsString() @MaxLength(120) privateStreamId?: string;
     @IsOptional() @IsString() @MaxLength(80) streamerId?: string;
     @IsOptional() @IsString() @MaxLength(40) videoCategory?: string;
+    @IsOptional() @IsString() @IsIn(["hu", "en", "de", "it", "es", "fr"]) @MaxLength(8) originalLocale?: string;
     @IsOptional() @IsString() @MaxLength(40) status?: string;
     @IsOptional() @Transform(({ value }) => toOptInt(value)) @IsNumber() @Min(0) @Max(100) commissionPercent?: number;
     @IsOptional() @IsString() @MaxLength(8000) extrasContent?: string;
+    @IsOptional()
+    @IsArray()
+    @ArrayMaxSize(6)
+    @ValidateNested({ each: true })
+    @Type(() => ShowContentTranslationDto)
+    translations?: ShowContentTranslationDto[];
 }
 
 export class ShowLiveDto {

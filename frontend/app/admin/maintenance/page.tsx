@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 type Catalog = {
     services: { id: string; label: string }[];
@@ -46,6 +47,7 @@ function toIso(local: string) {
 }
 
 export default function AdminMaintenancePage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [catalog, setCatalog] = useState<Catalog>({ services: [], kinds: [] });
     const [rows, setRows] = useState<EventRow[]>([]);
@@ -260,7 +262,7 @@ export default function AdminMaintenancePage() {
                                 {row.name} · {row.status} · {row.kind}
                             </p>
                             <p className="text-sm text-gray-400">
-                                {new Date(row.startsAt).toLocaleString("hu-HU")} – {new Date(row.endsAt).toLocaleString("hu-HU")}
+                                {formatDateTime(row.startsAt)} – {formatDateTime(row.endsAt)}
                             </p>
                             <p className="text-sm text-gray-400">{(row.services || []).join(", ") || "nincs korlátozás"}</p>
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -286,7 +288,7 @@ export default function AdminMaintenancePage() {
                                 {row.name} · {row.status}
                             </p>
                             <p className="text-gray-400">
-                                {new Date(row.startsAt).toLocaleString("hu-HU")} – {new Date(row.endsAt).toLocaleString("hu-HU")}
+                                {formatDateTime(row.startsAt)} – {formatDateTime(row.endsAt)}
                                 {row.createdByName ? ` · ${row.createdByName}` : ""}
                             </p>
                             <button type="button" className="mt-2 text-yellow-300 underline" onClick={() => openLogs(row.id)}>
@@ -309,7 +311,7 @@ export default function AdminMaintenancePage() {
                                 <li key={log.id} className="border-b border-white/5 pb-2">
                                     <span className="text-yellow-200">{log.action}</span>
                                     {log.actorName ? ` · ${log.actorName}` : ""}
-                                    {log.createdAt ? ` · ${new Date(log.createdAt).toLocaleString("hu-HU")}` : ""}
+                                    {log.createdAt ? ` · ${formatDateTime(log.createdAt)}` : ""}
                                     {log.description ? ` — ${log.description}` : ""}
                                 </li>
                             ))}

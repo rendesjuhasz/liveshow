@@ -23,6 +23,7 @@ import { EmailVerifiedGuard } from "./email-verified.guard";
 import { assertRateLimit, clientKey } from "../security/rate-limit";
 import { assertUploadedMedia } from "../uploads/upload-magic";
 import {
+    ClaimUsernameDto,
     ForgotPasswordDto,
     LoginDto,
     RegisterDto,
@@ -84,6 +85,7 @@ export class AuthController {
             body.name,
             body.referralCode,
             body.locale,
+            body.username,
         );
         setAuthCookies(req, res, session);
         return publicSession(session);
@@ -123,11 +125,13 @@ export class AuthController {
             name: body.name || "",
             email: body.email || "",
             password: body.password || "",
+            username: body.username || "",
             bio: body.bio || "",
             category: body.category || "",
             contactEmail: body.contactEmail || "",
             termsAccepted: accepted === "true" || accepted === "on" || accepted === "1",
             avatarUrl: `/uploads/avatars/${file.filename}`,
+            locale: body.locale,
         });
         setAuthCookies(req, res, session);
         return publicSession(session);
@@ -215,6 +219,15 @@ export class AuthController {
     @UseGuards(JwtAuthGuard)
     me(@Req() req: { user: { id: string; email: string; role: string } }) {
         return this.authService.getMe(req.user.id);
+    }
+
+    @Post("username")
+    @UseGuards(JwtAuthGuard)
+    claimUsername(
+        @Req() req: { user: { id: string } },
+        @Body() body: ClaimUsernameDto,
+    ) {
+        return this.authService.claimUsername(req.user.id, body.username);
     }
 
     @Get("ws-ticket")

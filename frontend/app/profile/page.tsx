@@ -7,7 +7,7 @@ import { displayInitial, displayName } from "@/lib/display-name";
 import { apiFetch, asList } from "@/api/http";
 import { ticketStatusLabelHu, isTicketActiveStatus } from "@/lib/ticket-status";
 import TicketPackShop from "@/components/TicketPackShop";
-import { getFavorites, getWatched } from "@/lib/library";
+import { getFavorites, getWatched, type LibraryCard } from "@/lib/library";
 import EventCard from "@/components/media/EventCard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -197,7 +197,7 @@ export default function ProfilePage() {
     const [resendNote, setResendNote] = useState("");
     const [tab, setTab] = useState<Tab>("purchases");
     const [favs, setFavs] = useState<ReturnType<typeof getFavorites>>([]);
-    const [watched, setWatched] = useState<ReturnType<typeof getWatched>>([]);
+    const [watched, setWatched] = useState<LibraryCard[]>([]);
     const [privateRows, setPrivateRows] = useState<any[]>([]);
 
     const applyWallet = (d: any) => {
@@ -278,7 +278,10 @@ export default function ProfilePage() {
                 </div>
                 <div className="min-w-0">
                     <h1 className="text-2xl font-extrabold">{displayName(user)}</h1>
-                    <p className="truncate text-sm text-zinc-400">{t("profile.title")} · {user.email}</p>
+                    <p className="truncate text-sm text-zinc-400">
+                        {t("profile.title")} · {user.email}
+                        {user.username ? ` · @${user.username}` : ""}
+                    </p>
                     <p className="mt-1 text-sm text-accent">{user.xp ?? 0} XP</p>
                     {(user.badges || []).length > 0 && (
                         <div className="mt-3 space-y-2">

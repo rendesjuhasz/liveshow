@@ -340,6 +340,7 @@ function LiveTopBar({
     host: { id?: string; name?: string; avatarUrl?: string | null } | null;
     onAirQuestion?: string;
 }) {
+    const { locale } = useT();
     return (
         <div className="pointer-events-none absolute inset-x-2 top-[calc(0.75rem+env(safe-area-inset-top))] z-[210] flex items-start gap-2 sm:inset-x-3">
             <p className="mb-0 flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 bg-black/70 py-1 pl-1 pr-2 text-xs font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-xl sm:pr-2.5 md:text-sm">
@@ -347,7 +348,7 @@ function LiveTopBar({
                     <span className="rounded-full bg-[#fe2c55] px-2 py-0.5 text-[10px] font-black tracking-wide">ÉLŐ</span>
                 ) : null}
                 <Eye className="size-4 text-white/85" aria-hidden />
-                {formatCount(viewers)}
+                {formatCount(viewers, locale)}
             </p>
             <div className="flex min-w-0 max-w-[min(72vw,36rem)] flex-col gap-1 sm:max-w-[min(56vw,40rem)]">
                 <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-full border border-white/20 bg-black/75 px-2.5 py-1 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-xl sm:px-3">

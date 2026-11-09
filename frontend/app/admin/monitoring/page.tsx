@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { useAdminGate } from "@/lib/useAdminGate";
+import { useT } from "@/lib/i18n/I18nProvider";
 
 function formatUptime(sec?: number) {
     const s = Math.max(0, Math.floor(Number(sec) || 0));
@@ -23,6 +24,7 @@ function Status({ value }: { value?: string }) {
 }
 
 export default function AdminMonitoringPage() {
+    const { formatDateTime } = useT();
     const gate = useAdminGate();
     const [data, setData] = useState<any>(null);
     const [error, setError] = useState("");
@@ -132,13 +134,13 @@ export default function AdminMonitoringPage() {
                         <p className="text-sm text-gray-400">Utolsó sikeres + ellenőrzött</p>
                         <p className="mt-1 font-semibold">
                             {backup.lastSuccessAt
-                                ? new Date(backup.lastSuccessAt).toLocaleString("hu-HU")
+                                ? formatDateTime(backup.lastSuccessAt)
                                 : "Még nincs"}
                         </p>
                         <p className="text-sm text-gray-400">
                             {backup.lastSuccessMethod || "—"}
                             {backup.lastVerifiedAt
-                                ? ` · ellenőrizve ${new Date(backup.lastVerifiedAt).toLocaleString("hu-HU")}`
+                                ? ` · ellenőrizve ${formatDateTime(backup.lastVerifiedAt)}`
                                 : ""}
                         </p>
                         {backup.sameVolumeAsApp ? (
@@ -173,7 +175,7 @@ export default function AdminMonitoringPage() {
                     {email.lastError && (
                         <p className="mt-2 text-sm text-red-300">
                             {email.lastRecipient || ""} · {email.lastError}
-                            {email.lastAt ? ` · ${new Date(email.lastAt).toLocaleString("hu-HU")}` : ""}
+                            {email.lastAt ? ` · ${formatDateTime(email.lastAt)}` : ""}
                         </p>
                     )}
                 </div>
@@ -190,7 +192,7 @@ export default function AdminMonitoringPage() {
                             </p>
                             <p className="text-red-300">{row.message}</p>
                             <p className="text-xs text-gray-500">
-                                {row.createdAt ? new Date(row.createdAt).toLocaleString("hu-HU") : ""}
+                                {row.createdAt ? formatDateTime(row.createdAt) : ""}
                             </p>
                         </li>
                     ))}

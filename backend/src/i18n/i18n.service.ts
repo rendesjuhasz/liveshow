@@ -8,10 +8,17 @@ import {
     LOCALE_META,
     LOCALES,
     MESSAGES,
+    setMissingTranslationReporter,
     translate,
     type Locale,
 } from "./messages";
 import { CACHE_TTL, PublicTtlCache } from "../cache/public-cache.module";
+import {
+    groupShowTranslations,
+    localizeShowCopy,
+    persistShowContentTranslations,
+    type ShowTranslationInput,
+} from "./show-content-translations";
 
 @Injectable()
 export class I18nService implements OnModuleInit {
@@ -21,6 +28,9 @@ export class I18nService implements OnModuleInit {
     ) {}
 
     async onModuleInit() {
+        setMissingTranslationReporter((key, locale) => {
+            void this.logMissing(key, locale);
+        });
         await this.ensureSchema();
         await this.seed();
     }
@@ -152,7 +162,32 @@ export class I18nService implements OnModuleInit {
             ON CONFLICT ("entityType", "entityId", field, locale)
             DO UPDATE SET value = ${body.value}
         `;
+        this.bustShowCaches();
         return body;
+    }
+
+    async persistShowTranslations(
+        showId: string,
+        translations?: ShowTranslationInput[] | null,
+        originalLocale?: string | null,
+    ) {
+        const result = await persistShowContentTranslations(this.prisma, showId, translations, originalLocale);
+        if (result.written) this.bustShowCaches();
+        return result;
+    }
+
+    groupedShowTranslations(
+        rows: { field?: string; locale?: string; value?: string }[],
+        originalLocale?: string | null,
+    ) {
+        return groupShowTranslations(rows, originalLocale);
+    }
+
+    private bustShowCaches() {
+        this.publicCache.deletePrefix("i18n:");
+        this.publicCache.deletePrefix("home:");
+        this.publicCache.deletePrefix("shows:");
+        this.publicCache.deletePrefix("archives:");
     }
 
     async contentMap(entityType: string, ids: string[], locale: string) {
@@ -175,19 +210,17 @@ export class I18nService implements OnModuleInit {
         return map;
     }
 
-    async localizeShows<T extends { id: string; title?: string | null; description?: string | null }>(
+    async localizeShows<T extends { id: string; title?: string | null; description?: string | null; originalLocale?: string | null }>(
         shows: T[],
         locale?: string | null,
     ) {
         const lang = this.resolveLocale(locale);
-        if (lang === DEFAULT_LOCALE) return shows;
         const map = await this.contentMap("show", shows.map((s) => s.id), lang);
         return shows.map((show) => {
-            const hit = map.get(show.id) || {};
+            const overlay = localizeShowCopy(show, lang, map.get(show.id) || {});
             return {
                 ...show,
-                title: hit.title || show.title,
-                description: hit.description || show.description,
+                ...overlay,
                 locale: lang,
             };
         });

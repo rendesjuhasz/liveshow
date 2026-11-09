@@ -27,6 +27,11 @@ export class RegisterDto {
     @MaxLength(120)
     name!: string;
 
+    @IsString()
+    @MinLength(3)
+    @MaxLength(24)
+    username!: string;
+
     @IsOptional()
     @IsString()
     @MaxLength(32)
@@ -34,8 +39,15 @@ export class RegisterDto {
 
     @IsOptional()
     @IsString()
-    @MaxLength(5)
+    @MaxLength(8)
     locale?: string;
+}
+
+export class ClaimUsernameDto {
+    @IsString()
+    @MinLength(3)
+    @MaxLength(24)
+    username!: string;
 }
 
 export class VerifyEmailDto {

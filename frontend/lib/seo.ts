@@ -74,6 +74,7 @@ export function isPrivateSeoPath(path: string) {
         "/forgot-password",
         "/reset-password",
         "/verify-email",
+        "/username",
     ].includes(path);
 }
 

@@ -206,18 +206,18 @@ describe("LivekitService", () => {
         expect(tickets.assertCanWatch).not.toHaveBeenCalled();
     });
 
-    it("refuses viewer tokens until a LiveKit publisher is live", async () => {
+    it("issues viewer tokens when LiveKit is planned, even before the publisher is live", async () => {
         withKeys();
-        const { svc, prisma } = makeService();
+        const { svc, prisma, tickets } = makeService();
         prisma.show.findUnique.mockResolvedValue({
             id: "s1",
             streamId: "st1",
             privateStreamId: null,
             streamer: { userId: "owner" },
         });
-        await expect(
-            svc.issueToken({ id: "v1", role: "user" }, { showId: "s1", role: "viewer" }),
-        ).rejects.toBeInstanceOf(ForbiddenException);
+        const issued = await svc.issueToken({ id: "v1", role: "user" }, { showId: "s1", role: "viewer" });
+        expect(tickets.assertCanWatch).toHaveBeenCalled();
+        expect(issued.role).toBe("viewer");
     });
 
     it("rejects unknown shows", async () => {

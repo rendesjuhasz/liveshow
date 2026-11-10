@@ -101,6 +101,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
     const recreateViewersRef = useRef<(ids?: string[]) => Promise<void>>(async () => undefined);
     const recoverVideoRef = useRef<() => Promise<boolean>>(async () => false);
     const publishedBackendRef = useRef<"mesh" | "livekit" | null>(null);
+    const lkBusyRef = useRef(false);
 
     async function publishNewVideo(next: MediaStreamTrack) {
         const current = streamRef.current;
@@ -228,6 +229,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
         },
         async restoreStream() {
             if (stoppingRef.current) return false;
+            if (lkBusyRef.current) return true;
             const sock = socketRef.current;
             if (sock && !sock.connected) sock.connect();
             if (sock?.connected) {
@@ -243,6 +245,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                 const media = streamRef.current;
                 let room = livekitRoomRef.current;
                 if (media && room) {
+                    if (isLivekitConnecting(room)) return true;
                     if (room.state !== ConnectionState.Connected) {
                         const issued = await fetchLivekitToken(showId, "publisher");
                         await disconnectLivekitRoom(room);
@@ -359,19 +362,38 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                     socket.emit("live:publisher", { showId, videoBackend });
                     if (socket.connected && videoBackend === "mesh") onLinkRef.current?.("good", false);
                 };
-                socket.on("disconnect", () => onLinkRef.current?.("critical", true));
-                socket.on("reconnect_attempt", () => onLinkRef.current?.("critical", true));
+                socket.on("disconnect", () => {
+                    if (useLivekit && (lkBusyRef.current || isLivekitConnecting(livekitRoomRef.current))) {
+                        onLinkRef.current?.("fair", true);
+                        return;
+                    }
+                    if (useLivekit && livekitRoomRef.current?.state === ConnectionState.Connected) return;
+                    onLinkRef.current?.("critical", true);
+                });
+                socket.on("reconnect_attempt", () => {
+                    if (useLivekit && livekitRoomRef.current?.state === ConnectionState.Connected) return;
+                    if (useLivekit && (lkBusyRef.current || isLivekitConnecting(livekitRoomRef.current))) {
+                        onLinkRef.current?.("fair", true);
+                        return;
+                    }
+                    onLinkRef.current?.("critical", true);
+                });
 
                 if (useLivekit) {
                     const mapQuality = (q: ConnectionQuality): LiveLinkQuality => {
                         if (q === ConnectionQuality.Excellent || q === ConnectionQuality.Good) return "good";
                         if (q === ConnectionQuality.Poor) return "fair";
-                        return "critical";
+                        if (String(q) === "lost") return "critical";
+                        return "good";
                     };
-                    async function connectPublisherRoom() {
+                    async function connectPublisherRoom(force = false) {
+                        const current = livekitRoomRef.current;
+                        if (!force && (lkBusyRef.current || isLivekitConnecting(current))) return;
+                        if (!force && current?.state === ConnectionState.Connected) return;
                         const issued = await fetchLivekitToken(showId, "publisher");
                         if (cancelled) return;
                         plannedLk = true;
+                        lkBusyRef.current = true;
                         try {
                             const prev = livekitRoomRef.current;
                             await disconnectLivekitRoom(prev);
@@ -380,9 +402,14 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                             if (streamRef.current) await publishMediaStream(room, streamRef.current);
                             const emitLink = () => {
                                 const connected = room.state === ConnectionState.Connected;
+                                const connecting = isLivekitConnecting(room);
                                 onLinkRef.current?.(
-                                    connected ? mapQuality(room.localParticipant.connectionQuality) : "critical",
-                                    !connected,
+                                    connected
+                                        ? mapQuality(room.localParticipant.connectionQuality)
+                                        : connecting
+                                          ? "fair"
+                                          : "critical",
+                                    connecting,
                                 );
                             };
                             room.on(RoomEvent.ConnectionQualityChanged, emitLink);
@@ -391,10 +418,11 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                             clearLkRefresh();
                             clearLkRefresh = scheduleTokenRefresh(issued.expiresIn, () => {
                                 if (cancelled) return;
-                                void connectPublisherRoom().catch(() => onLinkRef.current?.("critical", true));
+                                void connectPublisherRoom(true).catch(() => onLinkRef.current?.("critical", true));
                             });
                         } finally {
                             plannedLk = false;
+                            lkBusyRef.current = false;
                         }
                     }
                     await connectPublisherRoom();
@@ -406,7 +434,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
                         const current = livekitRoomRef.current;
                         if (!media) return;
                         if (!current || current.state !== ConnectionState.Connected) {
-                            if (plannedLk) return;
+                            if (plannedLk || lkBusyRef.current || isLivekitConnecting(current)) return;
                             await connectPublisherRoom();
                             return;
                         }
@@ -681,6 +709,16 @@ export function phoneHttpsLiveUrl() {
 
 function waitMs(ms: number) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isLivekitConnecting(room: { state?: string } | null) {
+    if (!room) return false;
+    const state = String(room.state || "");
+    return (
+        state === ConnectionState.Connecting ||
+        state === ConnectionState.Reconnecting ||
+        /reconnecting/i.test(state)
+    );
 }
 
 function cameraErrorHu(err: unknown) {

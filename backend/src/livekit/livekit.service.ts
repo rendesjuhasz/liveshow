@@ -92,7 +92,7 @@ export class LivekitService {
             }
         } else {
             const published = this.session.get(showId);
-            if (published !== "livekit") {
+            if (published === "mesh" || (published !== "livekit" && !usesLivekitForShow(showId))) {
                 throw new ForbiddenException("Ehhez a műsorhoz most nincs LiveKit adás.");
             }
             await this.tickets.assertCanWatch(user, streamId, showId, "live");

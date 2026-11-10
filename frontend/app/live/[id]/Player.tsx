@@ -99,7 +99,10 @@ export default function Player({
                 const cfg = await fetchLiveVideoConfig(id);
                 if (cancelled) return;
                 if (committedBackendRef.current) return;
-                const next = lockLiveVideoBackend(committedBackendRef.current, cfg.backend);
+                const next = lockLiveVideoBackend(
+                    committedBackendRef.current,
+                    cfg.backend || cfg.plannedBackend,
+                );
                 if (!next) {
                     timer = window.setTimeout(pull, 1500);
                     return;

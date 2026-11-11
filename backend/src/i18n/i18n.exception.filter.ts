@@ -17,6 +17,9 @@ function pickLocale(req: { query?: Record<string, unknown>; headers?: Record<str
 }
 
 function localizeMessage(message: string, locale: string) {
+    if (/^internal server error$/i.test(message.trim())) {
+        return translate("common.error", locale);
+    }
     if (MESSAGES[message]) return translate(message, locale);
     for (const [key, row] of Object.entries(MESSAGES)) {
         if (row.hu === message) return translate(key, locale);

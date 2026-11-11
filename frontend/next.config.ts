@@ -47,6 +47,8 @@ function lanDevOrigins(): string[] {
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: lanDevOrigins(),
+  // VOD/cover uploads go through middleware + /api rewrite (vod-multer is 2 GB).
+  middlewareClientMaxBodySize: "2048mb",
   async headers() {
     const isProd = process.env.NODE_ENV === "production";
     const security = [

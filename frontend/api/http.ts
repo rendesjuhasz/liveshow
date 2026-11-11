@@ -4,7 +4,7 @@ import {
     isCsrfFailure,
     setCsrfToken,
 } from "./auth-storage";
-import { FALLBACK_GUEST_LOCALE, isLocale } from "@/lib/i18n/messages";
+import { FALLBACK_GUEST_LOCALE, isLocale, translate } from "@/lib/i18n/messages";
 
 export const API_URL =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL?.trim()) ||
@@ -140,23 +140,38 @@ async function parseJson(response: Response) {
     return data;
 }
 
+function requestLocale() {
+    if (typeof window === "undefined") return FALLBACK_GUEST_LOCALE;
+    const fromDom = document.documentElement.lang;
+    if (isLocale(fromDom)) return fromDom;
+    const stored = window.localStorage.getItem("liveshow_locale");
+    if (isLocale(stored)) return stored;
+    return FALLBACK_GUEST_LOCALE;
+}
+
+function isGenericHttpFailureLabel(text: string) {
+    const value = text.trim();
+    if (!value) return true;
+    if (/^internal server error$/i.test(value)) return true;
+    if (/<html[\s>]/i.test(value)) return true;
+    return false;
+}
+
 function throwIfNotOk(response: Response, data: any) {
     if (response.ok) return;
     const raw = data?.message ?? data?.error;
-    const message = Array.isArray(raw)
+    const joined = Array.isArray(raw)
         ? raw.map((item) => String(item || "").trim()).filter(Boolean).join(" ")
-        : raw;
+        : String(raw || "").trim();
+    const locale = requestLocale();
+    const shown = isGenericHttpFailureLabel(joined)
+        ? translate("common.error", locale)
+        : joined || `API error: ${response.status}`;
     const fields =
         data?.fields && typeof data.fields === "object" && !Array.isArray(data.fields)
             ? (data.fields as Record<string, string>)
             : undefined;
-    throw new ApiError(
-        typeof message === "string" && message.trim()
-            ? message
-            : `API error: ${response.status}`,
-        response.status,
-        fields,
-    );
+    throw new ApiError(shown, response.status, fields);
 }
 
 type Extra = { skipRefresh?: boolean };
@@ -164,14 +179,7 @@ type Extra = { skipRefresh?: boolean };
 export async function apiFetch(path: string, options: RequestInit & Extra = {}) {
     const { skipRefresh, ...rest } = options;
     let url = path.startsWith("http") ? path : `${apiBase()}${path}`;
-    const locale = (() => {
-        if (typeof window === "undefined") return FALLBACK_GUEST_LOCALE;
-        const fromDom = document.documentElement.lang;
-        if (isLocale(fromDom)) return fromDom;
-        const stored = window.localStorage.getItem("liveshow_locale");
-        if (isLocale(stored)) return stored;
-        return FALLBACK_GUEST_LOCALE;
-    })();
+    const locale = requestLocale();
     if (!url.startsWith("http") || url.includes("/api")) {
         const hasLang = url.includes("lang=");
         const method = String(rest.method || "GET").toUpperCase();
@@ -225,8 +233,10 @@ export async function apiFetch(path: string, options: RequestInit & Extra = {}) 
 
 export async function apiUpload(path: string, formData: FormData, method = "POST", retried = false) {
     const url = path.startsWith("http") ? path : `${apiBase()}${path}`;
+    const locale = requestLocale();
 
     const headers: Record<string, string> = {
+        "X-Locale": locale,
         ...csrfHeader(method),
     };
 

@@ -71,7 +71,7 @@ Röviden:
 
 - HTTP 80 → ACME + redirect 443
 - TLS 1.2 / 1.3; egy cert: apex + `www` + `api`
-- `client_max_body_size 2048m` (VOD `vod-multer` 2 GB; a feltöltés a **www** host `/api` rewrite-ján megy)
+- `client_max_body_size 2048m` (VOD `vod-multer` 2 GB; a www host `/api` az nginxen a Nestre megy, nem a Next rewrite-on)
 - HLS `/output/`: `proxy_buffering off`; `index.m3u8` no-store
 - WebSocket: `Upgrade` / `$connection_upgrade` az API hoston
 - UDP RTP **nem** megy Nginxen

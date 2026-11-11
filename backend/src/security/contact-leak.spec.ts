@@ -4,6 +4,7 @@ describe("findOffPlatformContact", () => {
     it("detects emails and obfuscation", () => {
         expect(findOffPlatformContact("írj ide: anna@example.com")).toBe("email");
         expect(findOffPlatformContact("anna kukac gmail pont com")).toBe("email");
+        expect(findOffPlatformContact("alma kukac alma pont (com)")).toBe("email");
     });
 
     it("detects Hungarian phones and WhatsApp links", () => {
@@ -20,5 +21,7 @@ describe("findOffPlatformContact", () => {
     it("allows normal show talk", () => {
         expect(findOffPlatformContact("Mikor lesz a következő 90 perces műsor 5000 Ft-ért?")).toBeNull();
         expect(findOffPlatformContact("Kezdés 20:30-kor.")).toBeNull();
+        expect(findOffPlatformContact("Mi a véleményed a .com végű oldalakról?")).toBeNull();
+        expect(findOffPlatformContact("Hányadikán lesz a következő adás pont délben?")).toBeNull();
     });
 });

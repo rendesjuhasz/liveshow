@@ -11,11 +11,15 @@ function fold(text: string) {
 }
 
 function normalizeForScan(text: string) {
-    return fold(text)
+    let n = fold(text)
         .replace(/\[(?:at|kukac)\]|\((?:at|kukac)\)|\s+(?:at|kukac)\s+/g, "@")
         .replace(/\[(?:dot|pont)\]|\((?:dot|pont)\)|\s+(?:dot|pont)\s+/g, ".")
         .replace(/\s+/g, " ")
         .trim();
+    if (n.includes("@")) {
+        n = n.replace(/[(\[]([a-z]{2,})[)\]]/g, "$1");
+    }
+    return n;
 }
 
 const EMAIL_RE = /[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i;

@@ -38,6 +38,7 @@ export default function ArchiveWatchSlide({
     const countedRef = useRef(false);
     const watchedRef = useRef(false);
     const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reviewsDialogRef = useRef<HTMLDialogElement>(null);
     const [showControls, setShowControls] = useState(false);
     const [info, setInfo] = useState<any>(() => peekArchiveInfo(showId));
     const [src, setSrc] = useState(() => peekArchiveSrc(showId));
@@ -55,6 +56,13 @@ export default function ArchiveWatchSlide({
             if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
         };
     }, []);
+
+    useEffect(() => {
+        const dialog = reviewsDialogRef.current;
+        if (!dialog) return;
+        if (reviewsOpen && !dialog.open) dialog.showModal();
+        if (!reviewsOpen && dialog.open) dialog.close();
+    }, [reviewsOpen, dialogReady]);
 
     function revealControls() {
         setShowControls(true);
@@ -189,7 +197,11 @@ export default function ArchiveWatchSlide({
                 </div>
             </div>
 
-            <div className="absolute bottom-44 right-3 z-[200] flex flex-col items-end gap-2">
+            <div
+                className="absolute bottom-44 right-3 z-[200] flex flex-col items-end gap-2"
+                onTouchStart={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+            >
                 <ViewerReactionBar inline shareKind="archive" shareId={String(showId)} />
                 <button
                     type="button"
@@ -204,7 +216,7 @@ export default function ArchiveWatchSlide({
             {dialogReady && reviewsOpen
                 ? createPortal(
                       <dialog
-                          open
+                          ref={reviewsDialogRef}
                           className="viewer-share-dialog"
                           onClose={() => setReviewsOpen(false)}
                           onCancel={(event) => {

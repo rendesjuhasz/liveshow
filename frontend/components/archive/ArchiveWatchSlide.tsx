@@ -115,7 +115,6 @@ export default function ArchiveWatchSlide({
                         src={src}
                         controls
                         playsInline
-                        loop
                         preload="auto"
                         className="absolute inset-0 z-0 h-full w-full max-w-none bg-black object-cover"
                         style={{ touchAction: "pan-y" }}
@@ -151,7 +150,7 @@ export default function ArchiveWatchSlide({
                 )}
             </div>
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-14 z-[90] bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pb-3 pr-16 pt-16">
+            <div className="pointer-events-none absolute inset-x-0 bottom-24 z-[90] bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pb-3 pr-16 pt-16">
                 <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-white/85">
                     <Eye className="size-3.5" aria-hidden />
                     {formatCount(viewCount, locale)}
@@ -165,7 +164,7 @@ export default function ArchiveWatchSlide({
                 </div>
             </div>
 
-            <div className="absolute bottom-36 right-3 z-[200] flex flex-col items-end gap-2">
+            <div className="absolute bottom-44 right-3 z-[200] flex flex-col items-end gap-2">
                 <ViewerReactionBar inline shareKind="archive" shareId={String(showId)} />
                 <button
                     type="button"

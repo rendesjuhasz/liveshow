@@ -37,6 +37,8 @@ export default function ArchiveWatchSlide({
     const videoRef = useRef<HTMLVideoElement>(null);
     const countedRef = useRef(false);
     const watchedRef = useRef(false);
+    const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [showControls, setShowControls] = useState(false);
     const [info, setInfo] = useState<any>(() => peekArchiveInfo(showId));
     const [src, setSrc] = useState(() => peekArchiveSrc(showId));
     const [error, setError] = useState("");
@@ -47,6 +49,23 @@ export default function ArchiveWatchSlide({
     useEffect(() => {
         setDialogReady(true);
     }, []);
+
+    useEffect(() => {
+        return () => {
+            if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+        };
+    }, []);
+
+    function revealControls() {
+        setShowControls(true);
+        if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+        hideControlsTimer.current = setTimeout(() => setShowControls(false), 2500);
+    }
+
+    function hideControlsSoon() {
+        if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+        hideControlsTimer.current = setTimeout(() => setShowControls(false), 400);
+    }
 
     useEffect(() => {
         countedRef.current = false;
@@ -96,6 +115,7 @@ export default function ArchiveWatchSlide({
         } else {
             video.pause();
             video.muted = true;
+            setShowControls(false);
         }
     }, [active, src, showId, info?.title, info?.image, listed?.title, listed?.image, user?.id]);
 
@@ -107,13 +127,18 @@ export default function ArchiveWatchSlide({
     const description = String(info?.description || listed?.description || "").trim();
 
     return (
-        <article className="relative h-dvh w-full overflow-hidden bg-black text-white">
+        <article
+            className="relative h-dvh w-full overflow-hidden bg-black text-white"
+            onMouseMove={revealControls}
+            onTouchStart={revealControls}
+            onMouseLeave={hideControlsSoon}
+        >
             <div className="absolute inset-0 overflow-hidden bg-black">
                 {src ? (
                     <video
                         ref={videoRef}
                         src={src}
-                        controls
+                        controls={showControls}
                         playsInline
                         preload="auto"
                         className="absolute inset-0 z-0 h-full w-full max-w-none bg-black object-cover"
@@ -150,7 +175,7 @@ export default function ArchiveWatchSlide({
                 )}
             </div>
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-24 z-[90] bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pb-3 pr-16 pt-16">
+            <div className="pointer-events-none absolute inset-x-0 bottom-24 z-[90] px-3 pb-3 pr-16 [text-shadow:0_1px_3px_rgba(0,0,0,0.9),0_0_12px_rgba(0,0,0,0.55)]">
                 <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-white/85">
                     <Eye className="size-3.5" aria-hidden />
                     {formatCount(viewCount, locale)}

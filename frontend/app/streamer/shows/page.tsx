@@ -80,7 +80,7 @@ function ShowList({
                         )}
                         <Link href={`/streamer/shows/${show.id}`}>Szerkesztés</Link>
                         {show.status === "archived" ? (
-                            <Link href={`/archive/${show.id}`}>Nyilvános</Link>
+                            <Link href={`/archive/${show.id}`}>Visszanézés</Link>
                         ) : show.status === "active" || show.status === "missed" ? (
                             <Link href={`/shows/${show.id}`}>Nyilvános</Link>
                         ) : null}

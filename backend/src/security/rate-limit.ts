@@ -3,6 +3,26 @@ import Redis from "ioredis";
 
 const hits = new Map<string, number[]>();
 let redis: Redis | null | undefined;
+let redisWarnAt = 0;
+
+function warnRedisDown(err: unknown) {
+    const now = Date.now();
+    if (now - redisWarnAt < 60_000) return;
+    redisWarnAt = now;
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(`Redis rate limiter nem elérhető, memóriás korlátot használok: ${reason}`);
+}
+
+function dropRedis() {
+    if (redis) {
+        try {
+            redis.disconnect();
+        } catch {
+            /* ignore */
+        }
+    }
+    redis = undefined;
+}
 
 function redisUrl() {
     return String(process.env.REDIS_URL || "").trim();
@@ -13,9 +33,10 @@ function getRedis() {
     if (!url) return null;
     if (redis === undefined) {
         redis = new Redis(url, {
-            maxRetriesPerRequest: 2,
+            maxRetriesPerRequest: 1,
             enableReadyCheck: true,
             lazyConnect: true,
+            connectTimeout: 2000,
         });
         redis.on("error", () => undefined);
     }
@@ -24,16 +45,23 @@ function getRedis() {
 
 export async function pingRateLimitStore() {
     if (process.env.NODE_ENV !== "production") return;
-    const client = getRedis();
-    if (!client) {
-        throw new Error("REDIS_URL kötelező éles környezetben.");
+    if (!redisUrl()) {
+        warnRedisDown(new Error("REDIS_URL üres"));
+        return;
     }
-    if (client.status === "wait") {
-        await client.connect();
-    }
-    const pong = await client.ping();
-    if (String(pong).toUpperCase() !== "PONG") {
-        throw new Error("A Redis rate limiter nem elérhető.");
+    try {
+        const client = getRedis();
+        if (!client) return;
+        if (client.status === "wait") {
+            await client.connect();
+        }
+        const pong = await client.ping();
+        if (String(pong).toUpperCase() !== "PONG") {
+            throw new Error("A Redis nem adott PONG-ot.");
+        }
+    } catch (err) {
+        warnRedisDown(err);
+        dropRedis();
     }
 }
 
@@ -71,9 +99,8 @@ export async function assertRateLimit(key: string, max: number, windowMs: number
         if (used) return;
     } catch (err) {
         if (err instanceof HttpException) throw err;
-        if (process.env.NODE_ENV === "production") {
-            throw new HttpException("A rate limiter nem elérhető.", HttpStatus.SERVICE_UNAVAILABLE);
-        }
+        warnRedisDown(err);
+        dropRedis();
     }
     hitMemory(key, max, windowMs);
 }

@@ -29,6 +29,7 @@ function redisUrl() {
 }
 
 function getRedis() {
+    if (process.env.NODE_ENV !== "production") return null;
     const url = redisUrl();
     if (!url) return null;
     if (redis === undefined) {
@@ -37,10 +38,28 @@ function getRedis() {
             enableReadyCheck: true,
             lazyConnect: true,
             connectTimeout: 2000,
+            commandTimeout: 2000,
+            enableOfflineQueue: false,
         });
         redis.on("error", () => undefined);
     }
     return redis;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string) {
+    return new Promise<T>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error(label)), ms);
+        p.then(
+            (v) => {
+                clearTimeout(t);
+                resolve(v);
+            },
+            (err) => {
+                clearTimeout(t);
+                reject(err);
+            },
+        );
+    });
 }
 
 export async function pingRateLimitStore() {
@@ -53,9 +72,9 @@ export async function pingRateLimitStore() {
         const client = getRedis();
         if (!client) return;
         if (client.status === "wait") {
-            await client.connect();
+            await withTimeout(client.connect(), 2500, "Redis connect timeout");
         }
-        const pong = await client.ping();
+        const pong = await withTimeout(client.ping(), 2500, "Redis ping timeout");
         if (String(pong).toUpperCase() !== "PONG") {
             throw new Error("A Redis nem adott PONG-ot.");
         }
@@ -69,13 +88,13 @@ async function hitRedis(key: string, max: number, windowMs: number) {
     const client = getRedis();
     if (!client) return false;
     if (client.status === "wait") {
-        await client.connect();
+        await withTimeout(client.connect(), 2500, "Redis connect timeout");
     }
     const bucket = Math.floor(Date.now() / windowMs);
     const redisKey = `rl:${key}:${bucket}`;
-    const n = await client.incr(redisKey);
+    const n = await withTimeout(client.incr(redisKey), 2000, "Redis incr timeout");
     if (n === 1) {
-        await client.pexpire(redisKey, windowMs);
+        await withTimeout(client.pexpire(redisKey, windowMs), 2000, "Redis pexpire timeout");
     }
     if (n > max) {
         throw new HttpException("Túl sok kérés. Próbáld újra később.", HttpStatus.TOO_MANY_REQUESTS);

@@ -55,10 +55,11 @@ BARION_ENV=test
 
 # --- backup (automatikus; default bekapcsolva) ---
 BACKUP_ENABLED=true
+BACKUP_MEDIA=false
 BACKUP_INTERVAL_HOURS=24
 BACKUP_KEEP_DAYS=7
 BACKUP_DIR=
-BACKUP_STARTUP_DELAY_MS=15000
+BACKUP_STARTUP_DELAY_MS=3600000
 BACKUP_OFFSITE_ENABLED=true
 BACKUP_OFFSITE_REQUIRED=
 BACKUP_OFFSITE_KEEP_DAYS=14
@@ -124,10 +125,11 @@ ALERT_TELEGRAM_CHAT_ID=
 | `BARION_PAYEE` | igen | fizetés | kedvezményezett e-mail / fiók |
 | `BARION_ENV` | igen | API host | `test` (default) vagy `prod` / `production` |
 | `BACKUP_ENABLED` | igen | `backup.service.ts` | `false` / `0` / `off` kikapcsolja. Default: be |
+| `BACKUP_MEDIA` | igen | `backup-policy.ts` | `true` másolja az uploads/output fájlokat (mp4 nélkül). Default: **ki** |
 | `BACKUP_INTERVAL_HOURS` | igen | ugyanott | default `24` |
 | `BACKUP_KEEP_DAYS` | igen | ugyanott | default `7` |
 | `BACKUP_DIR` | igen | ugyanott | default `backend/backups` (app lemez — élesben **offsite** mount; lásd ops-inventory) |
-| `BACKUP_STARTUP_DELAY_MS` | igen | ugyanott | első futás késleltetése, default `15000` |
+| `BACKUP_STARTUP_DELAY_MS` | igen | `backup-policy.ts` | első automatikus futás, default **3600000** (1 óra) |
 | `BACKUP_OFFSITE_ENABLED` | igen | `offsite-s3.ts` | default be, ha van bucket+kulcs |
 | `BACKUP_OFFSITE_REQUIRED` | igen | ugyanott | productionban default true — BackupRun elbukik offsite nélkül |
 | `BACKUP_OFFSITE_KEEP_DAYS` | igen | ugyanott | remote megőrzés, default 14 |

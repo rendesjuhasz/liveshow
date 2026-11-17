@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, OnModuleInit } from "@nestjs/common";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { unlinkSync, writeFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { unlinkSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { OpsService } from "../ops/ops.service";
+import { readFileHead } from "../uploads/file-head";
 import { gradePreflight, type PreflightMetrics } from "./preflight-grade";
 import { PreflightSaveDto } from "../dto/bodies";
 import type { Prisma } from "@prisma/client";
@@ -161,7 +162,7 @@ export class PreflightService implements OnModuleInit {
 
     private sniffContainer(filePath: string) {
         try {
-            const head = readFileSync(filePath).subarray(0, 16);
+            const head = readFileHead(filePath, 16);
             if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return true;
             if (head.slice(4, 8).toString("ascii") === "ftyp") return true;
             return false;

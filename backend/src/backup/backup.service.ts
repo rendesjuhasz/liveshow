@@ -6,6 +6,12 @@ import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
 import { isBackupDirOnAppVolume, verifyBackupSnapshot } from "./snapshot-verify";
 import {
+    backupMediaEnabled,
+    backupStartupDelayMs,
+    recentBackupIsFresh,
+    shouldSkipBackupFile,
+} from "./backup-policy";
+import {
     offsiteKeepDays,
     offsitePublicStatus,
     pruneOffsiteSnapshots,
@@ -37,8 +43,6 @@ export type BackupManifest = {
     offsite?: OffsiteResult;
 };
 
-const SKIP_MEDIA_EXT = new Set([".ts", ".m3u8", ".tmp", ".part"]);
-
 @Injectable()
 export class BackupService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(BackupService.name);
@@ -64,7 +68,7 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
             void this.run({ automatic: true });
         }, this.intervalMs());
         this.logger.log(
-            `Automatikus backup: első futás ${Math.round(this.startupDelayMs() / 1000)} mp múlva, utána ${Math.round(this.intervalMs() / 3600000)} óránként. Könyvtár: ${this.rootDir()}`,
+            `Automatikus backup: első futás ${Math.round(this.startupDelayMs() / 1000)} mp múlva, utána ${Math.round(this.intervalMs() / 3600000)} óránként, média=${this.mediaEnabled() ? "be" : "ki"}. Könyvtár: ${this.rootDir()}`,
         );
     }
 
@@ -107,6 +111,7 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
             running: this.running,
             intervalHours: Math.round(this.intervalMs() / 3600000),
             keepDays: this.keepDays(),
+            mediaEnabled: this.mediaEnabled(),
             offsiteKeepDays: offsiteKeepDays(),
             dir: this.rootDir(),
             last: this.last || this.readLatestManifest(),
@@ -147,6 +152,11 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
     }
 
     async run(opts?: { automatic?: boolean }) {
+        const automatic = opts?.automatic !== false;
+        if (automatic && this.recentAutomaticBackup()) {
+            this.logger.log("Automatikus backup kihagyva: nemrég volt sikeres mentés.");
+            return { ok: true, skipped: true, last: this.last || this.readLatestManifest() };
+        }
         if (this.running) {
             return { ok: false, error: "Már fut egy mentés.", last: this.last };
         }
@@ -158,7 +168,7 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
             startedAt: new Date().toISOString(),
             finishedAt: null,
             ok: false,
-            automatic: opts?.automatic !== false,
+            automatic,
             dir,
             parts: {
                 database: { ok: false },
@@ -208,8 +218,17 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
     }
 
     private startupDelayMs() {
-        const ms = Number(process.env.BACKUP_STARTUP_DELAY_MS || 15_000);
-        return Number.isFinite(ms) && ms >= 0 ? ms : 15_000;
+        return backupStartupDelayMs();
+    }
+
+    mediaEnabled() {
+        return backupMediaEnabled();
+    }
+
+    private recentAutomaticBackup() {
+        const last = this.last || this.readLatestManifest();
+        if (!last?.ok) return false;
+        return recentBackupIsFresh(last.finishedAt, this.intervalMs());
     }
 
     private stamp() {
@@ -563,15 +582,24 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
 
     private async backupMedia(dir: string): Promise<BackupPart> {
         try {
+            if (!this.mediaEnabled()) {
+                fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(
+                    path.join(dir, "skipped.json"),
+                    JSON.stringify({ skipped: true, reason: "BACKUP_MEDIA=false" }),
+                    "utf8",
+                );
+                return { ok: true, method: "skip", bytes: 0, files: 0 };
+            }
             fs.mkdirSync(dir, { recursive: true });
             const uploads = path.join(process.cwd(), "uploads");
             const output = path.join(process.cwd(), "output");
             let files = 0;
             if (fs.existsSync(uploads)) {
-                files += this.copyFiltered(uploads, path.join(dir, "uploads"));
+                files += await this.copyFiltered(uploads, path.join(dir, "uploads"));
             }
             if (fs.existsSync(output)) {
-                files += this.copyFiltered(output, path.join(dir, "output"));
+                files += await this.copyFiltered(output, path.join(dir, "output"));
             }
             return { ok: true, method: "copy", bytes: this.dirBytes(dir), files };
         } catch (err: any) {
@@ -647,25 +675,25 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
         ) && !/(SECRET|PASS|ACCESS_KEY|TOKEN)/i.test(key);
     }
 
-    private copyFiltered(src: string, dest: string) {
+    private async copyFiltered(src: string, dest: string) {
         let files = 0;
-        const walk = (from: string, to: string) => {
-            fs.mkdirSync(to, { recursive: true });
-            for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+        const walk = async (from: string, to: string) => {
+            await fs.promises.mkdir(to, { recursive: true });
+            const entries = await fs.promises.readdir(from, { withFileTypes: true });
+            for (const entry of entries) {
                 const nextFrom = path.join(from, entry.name);
                 const nextTo = path.join(to, entry.name);
                 if (entry.isDirectory()) {
-                    walk(nextFrom, nextTo);
+                    await walk(nextFrom, nextTo);
                     continue;
                 }
                 if (!entry.isFile()) continue;
-                const ext = path.extname(entry.name).toLowerCase();
-                if (SKIP_MEDIA_EXT.has(ext)) continue;
-                fs.copyFileSync(nextFrom, nextTo);
+                if (shouldSkipBackupFile(entry.name)) continue;
+                await fs.promises.copyFile(nextFrom, nextTo);
                 files += 1;
             }
         };
-        walk(src, dest);
+        await walk(src, dest);
         return files;
     }
 

@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, unlinkSync } from "fs";
+import { readFileHead } from "./file-head";
 
 export type MediaKind = "image" | "video";
 
@@ -58,7 +59,7 @@ export function assertUploadedMedia(filePath: string, mime: string, kind: MediaK
         unlinkQuiet(filePath);
         throw new BadRequestException("Ismeretlen vagy tiltott MIME típus.");
     }
-    const sniffedEarly = sniff(readFileSync(filePath).subarray(0, 64));
+    const sniffedEarly = sniff(readFileHead(filePath, 64));
     if (type === "application/octet-stream" && kind === "video") {
         if (sniffedEarly === "mp4" || sniffedEarly === "webm" || sniffedEarly === "mov") {
             return;

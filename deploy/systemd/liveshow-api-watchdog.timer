@@ -1,0 +1,11 @@
+[Unit]
+Description=LiveShow API health check every 10 seconds
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=10
+AccuracySec=1
+Unit=liveshow-api-watchdog.service
+
+[Install]
+WantedBy=timers.target

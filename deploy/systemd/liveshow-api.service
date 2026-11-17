@@ -1,0 +1,25 @@
+[Unit]
+Description=LiveShow API (Nest on 3200)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=8
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/liveshow/backend
+EnvironmentFile=-/var/www/liveshow/backend/.env
+Environment=NODE_ENV=production
+Environment=PORT=3200
+Environment=RTMP_DISABLED=1
+ExecStart=/usr/bin/env node dist/main.js
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=liveshow-api
+
+[Install]
+WantedBy=multi-user.target

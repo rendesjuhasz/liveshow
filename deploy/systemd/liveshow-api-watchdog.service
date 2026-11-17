@@ -1,0 +1,8 @@
+[Unit]
+Description=LiveShow API health watchdog (oneshot)
+After=liveshow-api.service
+
+[Service]
+Type=oneshot
+ExecStart=/var/www/liveshow/deploy/systemd/liveshow-api-watchdog.sh
+Nice=10

@@ -2,6 +2,7 @@ import { ConflictException, Injectable, Logger, OnModuleInit } from "@nestjs/com
 import * as net from "net";
 import { IngestService } from "./ingest.service";
 import { rtmpAppName, rtmpListenPort } from "./ingest-ffmpeg";
+import { rtmpIngestEnabled } from "./rtmp-policy";
 import { sanitizeStreamId } from "../streaming/hls-paths";
 
 type RtmpSession = {
@@ -29,8 +30,8 @@ export class RtmpIngestService implements OnModuleInit {
     constructor(private readonly ingest: IngestService) {}
 
     async onModuleInit() {
-        if (process.env.RTMP_DISABLED === "1") {
-            this.log.log("RTMP ingest kikapcsolva (RTMP_DISABLED=1). Élő adás: WebRTC.");
+        if (!rtmpIngestEnabled()) {
+            this.log.log("RTMP ingest kikapcsolva (éles default / RTMP_DISABLED). Élő adás: LiveKit/WebRTC.");
             return;
         }
         const port = rtmpListenPort();

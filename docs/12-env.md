@@ -16,6 +16,7 @@ DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/streaming?schema=public
 
 # --- HTTP ---
 PORT=3200
+RTMP_DISABLED=1
 FRONTEND_URL=http://localhost:3000
 BACKEND_URL=http://127.0.0.1:3200
 
@@ -124,6 +125,7 @@ ALERT_TELEGRAM_CHAT_ID=
 | `BARION_POS_KEY` | igen | Barion Start / state | merchant POS Key |
 | `BARION_PAYEE` | igen | fizetés | kedvezményezett e-mail / fiók |
 | `BARION_ENV` | igen | API host | `test` (default) vagy `prod` / `production` |
+| `RTMP_DISABLED` | élő ingest | `rtmp-policy.ts` | `1` ki (éles default). `0` bekapcsolja a helyi node-media-server-t. Productionban üresen is ki. |
 | `BACKUP_ENABLED` | igen | `backup.service.ts` | `false` / `0` / `off` kikapcsolja. Default: be |
 | `BACKUP_MEDIA` | igen | `backup-policy.ts` | `true` másolja az uploads/output fájlokat (mp4 nélkül). Default: **ki** |
 | `BACKUP_INTERVAL_HOURS` | igen | ugyanott | default `24` |

@@ -9,10 +9,10 @@ import { useT } from "@/lib/i18n/I18nProvider";
 import { useMounted } from "@/lib/use-mounted";
 
 export default function HeroBanner({ item }: { item: MediaItem }) {
-    const { t } = useT();
+    const { t, locale } = useT();
     const mounted = useMounted();
     const watchTo = watchHref(item);
-    const when = mounted ? formatWhen(item.startAtUtc || item.startTime) : "";
+    const when = mounted ? formatWhen(item.startAtUtc || item.startTime, locale) : "";
 
     return (
         <section className="relative min-h-[70dvh] w-full overflow-hidden md:min-h-[88vh]">

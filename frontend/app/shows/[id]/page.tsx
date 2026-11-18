@@ -22,7 +22,7 @@ import { useMounted } from "@/lib/use-mounted";
 export default function ShowDetailsPage() {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
-    const { t } = useT();
+    const { t, locale } = useT();
     const mounted = useMounted();
     const [show, setShow] = useState<any>(null);
     const [similar, setSimilar] = useState<MediaItem[]>([]);
@@ -95,7 +95,7 @@ export default function ShowDetailsPage() {
                         <span>{show.title}</span>
                     </h1>
                     <p className="mt-3 text-sm uppercase tracking-widest text-accent">
-                        {mounted ? formatWhen(show.startAtUtc || show.startTime) : ""}
+                        {mounted ? formatWhen(show.startAtUtc || show.startTime, locale) : ""}
                         {show.streamer?.name ? ` · ${show.streamer.name}` : ""}
                     </p>
                     <div className="mt-2 max-w-xl text-sm font-normal normal-case tracking-normal text-zinc-300">

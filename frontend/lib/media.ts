@@ -1,4 +1,5 @@
 import { detectBrowserTimeZone, formatEventDateTime } from "@/lib/timezone";
+import { dateLocaleTag } from "@/lib/i18n/messages";
 
 const COVER_POOL = [
     "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1600&q=80",
@@ -57,11 +58,11 @@ export function coverUrl(item: MediaItem) {
     return COVER_POOL[hashId(id) % COVER_POOL.length];
 }
 
-export function formatWhen(iso?: string | null) {
+export function formatWhen(iso?: string | null, locale?: string | null) {
     if (!iso) return "";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
-    return formatEventDateTime(d, detectBrowserTimeZone());
+    return formatEventDateTime(d, detectBrowserTimeZone(), dateLocaleTag(locale));
 }
 
 export function isUpcoming(item: MediaItem, now = Date.now()) {

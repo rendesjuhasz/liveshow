@@ -537,6 +537,14 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
         "Entra como espectador y ten un ticket para valorar.",
         "Connecte-toi en spectateur et aie un ticket pour noter.",
     ),
+    "review.ended": row(
+        "Értékelni akkor lehet, ha az adás már leállt.",
+        "You can leave a review after the stream has ended.",
+        "Bewerten ist erst möglich, wenn die Sendung beendet ist.",
+        "Puoi recensire solo dopo che la diretta è terminata.",
+        "Puedes valorar cuando la emisión ya haya terminado.",
+        "Tu peux noter une fois que le direct est terminé.",
+    ),
     "review.send": row("Értékelés küldése", "Send review", "Bewertung senden", "Invia recensione", "Enviar reseña", "Envoyer l'avis"),
     "report.cta": row("Jelentés", "Report", "Melden", "Segnala", "Denunciar", "Signaler"),
     "player.waitCamera": row("Várakozás a tartalomkészítő kamerájára...", "Waiting for the creator camera...", "Warten auf die Creator-Kamera...", "In attesa della camera del creator...", "Esperando la cámara del creador...", "En attente de la caméra du créateur..."),
@@ -847,6 +855,11 @@ export function formatMoney(amount: number, locale: string) {
 export function formatNumber(value: number, locale: string) {
     const loc = isLocale(locale) ? locale : DEFAULT_LOCALE;
     return new Intl.NumberFormat(LOCALE_META[loc].dateLocale).format(Number(value) || 0);
+}
+
+export function dateLocaleTag(locale?: string | null) {
+    const loc = isLocale(locale) ? locale : DEFAULT_LOCALE;
+    return LOCALE_META[loc].dateLocale;
 }
 
 export function formatDateTime(value: string | Date | null | undefined, locale: string) {

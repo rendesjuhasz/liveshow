@@ -6,6 +6,7 @@ import {
     formatEventDateTime,
     formatUtcClock,
 } from "@/lib/timezone";
+import { dateLocaleTag } from "@/lib/i18n/messages";
 import { useT } from "@/lib/i18n/I18nProvider";
 
 export default function EventTimeDisplay({
@@ -15,11 +16,12 @@ export default function EventTimeDisplay({
     startAtUtc?: string | null;
     compact?: boolean;
 }) {
-    const { t } = useT();
+    const { t, locale } = useT();
     if (!startAtUtc) return null;
     const localTz = detectBrowserTimeZone();
-    const clock = formatEventClock(startAtUtc, localTz);
-    const full = formatEventDateTime(startAtUtc, localTz);
+    const dateLocale = dateLocaleTag(locale);
+    const clock = formatEventClock(startAtUtc, localTz, dateLocale);
+    const full = formatEventDateTime(startAtUtc, localTz, dateLocale);
     const utc = formatUtcClock(startAtUtc);
     const localLabel = t("show.localTime");
     if (compact) {

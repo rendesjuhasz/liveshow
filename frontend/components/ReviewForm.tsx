@@ -108,11 +108,11 @@ export default function ReviewForm({ showId }: { showId: string }) {
             {!data?.canReview && !data?.mine && (
                 <p className="text-sm text-neutral-500 mb-4">
                     {!data
-                        ? "Betöltés..."
+                        ? t("common.loading")
                         : data.needsTicket
                           ? "Értékeléshez 1 felhasználható jegy kell a jegycsomagból. Az első küldéskor levonódik."
                           : data.ended === false
-                            ? "Értékelni akkor lehet, ha az adás már leállt."
+                            ? t("review.ended")
                             : t("review.login")}
                 </p>
             )}

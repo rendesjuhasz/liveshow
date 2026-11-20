@@ -30,9 +30,11 @@ export class ModeratorGuard implements CanActivate {
         }
 
         const current = {
+            ...request.user,
             id: user.id,
             email: user.email,
             role: normalizeRole(user.role),
+            username: String((user as { username?: string | null }).username || "").trim() || null,
         };
 
         if (!isModeratorUser(current)) {

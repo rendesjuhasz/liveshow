@@ -233,6 +233,8 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
         recordWatched({ id: showId, title }, user?.id);
     }, [user, showId, streamId, title]);
 
+    const favoriteItem = { id: showId, title, image: coverImage };
+
     if (!mounted) {
         return <LiveBootShell />;
     }
@@ -240,7 +242,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
     if (!ready || checking) {
         return (
             <div data-live-viewer className="relative flex h-dvh items-center justify-center bg-black text-white">
-                <LiveTopBar live viewers={viewerCount} title={title} categoryLabel={categoryLabel} host={host} onAirQuestion={onAirQuestion} />
+                <LiveTopBar live viewers={viewerCount} title={title} categoryLabel={categoryLabel} host={host} onAirQuestion={onAirQuestion} favoriteItem={favoriteItem} />
                 <p className="text-sm text-white/70">{t("common.loading")}</p>
             </div>
         );
@@ -249,7 +251,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
     if (error && !streamId) {
         return (
             <div data-live-viewer className="relative flex h-dvh flex-col items-center justify-center bg-black px-6 text-center text-white">
-                <LiveTopBar live={false} viewers={viewerCount} title={title} categoryLabel={categoryLabel} host={host} onAirQuestion={onAirQuestion} />
+                <LiveTopBar live={false} viewers={viewerCount} title={title} categoryLabel={categoryLabel} host={host} onAirQuestion={onAirQuestion} favoriteItem={favoriteItem} />
                 <p className="mb-2 text-sm text-red-400">{error}</p>
                 <p className="text-sm text-white/55">{t("live.loadHint")}</p>
             </div>
@@ -259,7 +261,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
     if (!streamId || isPlaceholderStreamId(streamId)) {
         return (
             <div data-live-viewer className="relative flex h-dvh flex-col items-center justify-center bg-black px-6 text-center text-white">
-                <LiveTopBar live={false} viewers={viewerCount} title={title} categoryLabel={categoryLabel} host={host} onAirQuestion={onAirQuestion} />
+                <LiveTopBar live={false} viewers={viewerCount} title={title} categoryLabel={categoryLabel} host={host} onAirQuestion={onAirQuestion} favoriteItem={favoriteItem} />
                 <p className="text-sm text-white/70">{t("live.noStream")}</p>
             </div>
         );
@@ -290,7 +292,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
                     categoryLabel={categoryLabel}
                     host={host}
                     onAirQuestion={onAirQuestion}
-                    favoriteItem={{ id: showId, title, image: coverImage }}
+                    favoriteItem={favoriteItem}
                 />
                 {ownShow && (
                     <p className="absolute left-3 top-[calc(5.5rem+env(safe-area-inset-top))] z-40 mb-0 max-w-[min(72%,20rem)] rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs shadow-[0_8px_20px_rgba(0,0,0,0.25)] backdrop-blur-md">

@@ -13,6 +13,7 @@ import { Eye } from "lucide-react";
 import { formatCount } from "@/lib/views";
 import { useT } from "@/lib/i18n/I18nProvider";
 import LocaleLink from "@/components/LocaleLink";
+import TheaterFavoriteButton from "@/components/TheaterFavoriteButton";
 import { useMounted } from "@/lib/use-mounted";
 
 type LiveWatchScreenProps = {
@@ -40,6 +41,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
     const { t } = useT();
     const mounted = useMounted();
     const [title, setTitle] = useState("");
+    const [coverImage, setCoverImage] = useState<string | null>(null);
     const [categoryLabel, setCategoryLabel] = useState("");
     const [streamId, setStreamId] = useState("");
     const [streamUrl, setStreamUrl] = useState<string | null>(null);
@@ -87,6 +89,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
     function applyShow(show: any) {
         if (!show) return;
         setTitle(show?.title || t("live.title"));
+        setCoverImage(typeof show?.image === "string" ? show.image : null);
         setCategoryLabel(show?.videoCategoryLabel || "");
         setStreamId(typeof show?.streamId === "string" ? show.streamId.trim() : "");
         setStreamUrl(show?.streamUrl ?? null);
@@ -287,6 +290,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
                     categoryLabel={categoryLabel}
                     host={host}
                     onAirQuestion={onAirQuestion}
+                    favoriteItem={{ id: showId, title, image: coverImage }}
                 />
                 {ownShow && (
                     <p className="absolute left-3 top-[calc(5.5rem+env(safe-area-inset-top))] z-40 mb-0 max-w-[min(72%,20rem)] rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs shadow-[0_8px_20px_rgba(0,0,0,0.25)] backdrop-blur-md">
@@ -332,6 +336,7 @@ function LiveTopBar({
     categoryLabel,
     host,
     onAirQuestion = "",
+    favoriteItem,
 }: {
     live: boolean;
     viewers: number;
@@ -339,6 +344,7 @@ function LiveTopBar({
     categoryLabel: string;
     host: { id?: string; name?: string; avatarUrl?: string | null } | null;
     onAirQuestion?: string;
+    favoriteItem: { id: string; title: string; image: string | null };
 }) {
     const { locale } = useT();
     return (
@@ -369,7 +375,8 @@ function LiveTopBar({
                     </p>
                 ) : null}
             </div>
-            <div className="pointer-events-auto ml-auto shrink-0">
+            <div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2">
+                <TheaterFavoriteButton item={favoriteItem} />
                 <HostChip host={host} />
             </div>
         </div>

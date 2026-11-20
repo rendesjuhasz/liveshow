@@ -6,6 +6,7 @@ import { Eye, Star, X } from "lucide-react";
 import { apiFetch } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import { recordWatched } from "@/lib/library";
+import TheaterFavoriteButton from "@/components/TheaterFavoriteButton";
 import { loadArchiveInfo, peekArchiveInfo, peekArchiveSrc, warmArchivePlayback } from "@/lib/archive-src-cache";
 import ReviewForm from "@/components/ReviewForm";
 import CreatorPublicLinks from "@/components/CreatorPublicLinks";
@@ -181,6 +182,16 @@ export default function ArchiveWatchSlide({
                         {error || t("common.loading")}
                     </p>
                 )}
+            </div>
+
+            <div className="absolute right-3 top-[calc(0.75rem+env(safe-area-inset-top))] z-[210]">
+                <TheaterFavoriteButton
+                    item={{
+                        id: String(showId),
+                        title,
+                        image: info?.image || listed?.image || null,
+                    }}
+                />
             </div>
 
             <div className="pointer-events-none absolute inset-x-0 bottom-24 z-[90] px-3 pb-3 pr-16 [text-shadow:0_1px_3px_rgba(0,0,0,0.9),0_0_12px_rgba(0,0,0,0.55)]">

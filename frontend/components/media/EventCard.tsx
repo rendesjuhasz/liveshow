@@ -10,8 +10,7 @@ import { formatCount } from "@/lib/views";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { useEventCountdown } from "@/hooks/useEventCountdown";
 import type { EventCountdown } from "@/lib/event-countdown";
-import { isFavorite, toggleFavorite } from "@/lib/library";
-import { useAuth } from "@/context/AuthContext";
+import { useFavorite } from "@/lib/use-favorite";
 import { apiFetch } from "@/api/http";
 import OriginalLanguageBadge from "@/components/OriginalLanguageBadge";
 import {
@@ -35,22 +34,17 @@ function EventCard({
     wide?: boolean;
     hoverPreview?: boolean;
 }) {
-    const { user } = useAuth();
     const { t, locale } = useT();
     const id = mediaId(item);
     const to = href || watchHref(item);
     const ended = isEndedShow(item);
     const countdown = useEventCountdown(item.live || ended ? { ended: true } : item);
-    const [fav, setFav] = useState(false);
+    const { fav, toggle: toggleFav } = useFavorite(item);
     const [previewing, setPreviewing] = useState(false);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const hoverTimer = useRef<number | null>(null);
     const fetchAbort = useRef<AbortController | null>(null);
     const clip = useRef({ start: 0, end: 0 });
-
-    useEffect(() => {
-        setFav(isFavorite(id, user?.id));
-    }, [id, user?.id]);
 
     function clearHoverTimer() {
         if (hoverTimer.current) {
@@ -234,7 +228,7 @@ function EventCard({
                 className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-2 opacity-100 backdrop-blur-md transition sm:opacity-0 sm:group-hover:opacity-100 sm:p-1.5"
                 onClick={(e) => {
                     e.preventDefault();
-                    setFav(toggleFavorite(item, user?.id));
+                    void toggleFav();
                 }}
             >
                 <Heart className={cn("size-4", fav ? "fill-accent text-accent" : "text-white")} />

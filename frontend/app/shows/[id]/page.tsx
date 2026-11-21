@@ -5,11 +5,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Heart, Play } from "lucide-react";
 import { apiFetch } from "@/api/http";
-import { useAuth } from "@/context/AuthContext";
 import ReviewForm from "@/components/ReviewForm";
 import ShowTalk from "@/app/live/[id]/ShowTalk";
 import { coverUrl, formatWhen, type MediaItem } from "@/lib/media";
-import { isFavorite, toggleFavorite } from "@/lib/library";
+import { useFavorite } from "@/lib/use-favorite";
 import { Button } from "@/components/ui/button";
 import MediaRow from "@/components/media/MediaRow";
 import TicketPackShop from "@/components/TicketPackShop";
@@ -21,22 +20,22 @@ import { useMounted } from "@/lib/use-mounted";
 
 export default function ShowDetailsPage() {
     const { id } = useParams<{ id: string }>();
-    const { user } = useAuth();
     const { t, locale } = useT();
     const mounted = useMounted();
     const [show, setShow] = useState<any>(null);
     const [similar, setSimilar] = useState<MediaItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [fav, setFav] = useState(false);
+    const [favItem, setFavItem] = useState<MediaItem | null>(null);
+    const { fav, toggle: toggleFav } = useFavorite(favItem || (id ? { id: String(id) } : null));
 
     useEffect(() => {
         if (!id) return;
-        setFav(isFavorite(String(id), user?.id));
         async function loadShow() {
             try {
                 const data = await apiFetch(`/shows/${id}`);
                 setShow(data);
+                setFavItem(data);
             } catch (err: any) {
                 setError(err.message || t("show.loadError"));
             } finally {
@@ -121,7 +120,7 @@ export default function ShowDetailsPage() {
                             variant="ghost"
                             size="lg"
                             className="w-full sm:w-auto"
-                            onClick={() => setFav(toggleFavorite(show, user?.id))}
+                            onClick={() => void toggleFav()}
                         >
                             <Heart className={fav ? "fill-accent text-accent" : ""} />
                             {fav ? t("media.favorite") : t("media.favoriteAdd")}

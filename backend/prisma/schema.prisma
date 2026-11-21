@@ -68,6 +68,7 @@ model User {
   ticketSpends   TicketSpend[] @relation("TicketSpendViewer")
   privateRequests PrivateRequest[]
   streamerFollows StreamerFollow[]
+  showFavorites   ShowFavorite[]
   categoryFollows CategoryFollow[]
   notificationPref NotificationPref?
   marketingKits    MarketingKit[]
@@ -225,6 +226,7 @@ model Show {
   streamAlerts    StreamAlert[]
   streamClips     StreamClip[]
   marketingJobs   MarketingJob[]
+  favorites       ShowFavorite[]
 
   @@index([status])
   @@index([live])
@@ -501,6 +503,18 @@ model UserNotification {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
+}
+
+model ShowFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  showId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, showId])
   @@index([userId, createdAt])
 }
 

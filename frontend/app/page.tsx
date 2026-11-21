@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import HeroBanner from "@/components/media/HeroBanner";
 import MediaRow from "@/components/media/MediaRow";
 import { isUpcoming, mediaId, watchHref, type MediaItem } from "@/lib/media";
-import { getFavorites } from "@/lib/library";
+import { getFavorites, onFavoritesChange, remoteFavoriteCards } from "@/lib/library";
 import FaqList, { type FaqItem } from "@/components/FaqList";
 import WishWall from "@/components/WishWall";
 import Link from "next/link";
@@ -106,7 +106,12 @@ export default function HomePage() {
     }, [locale]);
 
     useEffect(() => {
-        setFavs(getFavorites(user?.id).map((f) => ({ id: f.id, title: f.title, image: f.image, startTime: f.startTime })));
+        const sync = () => {
+            const rows = user ? remoteFavoriteCards() : getFavorites(null);
+            setFavs(rows.map((f) => ({ id: f.id, title: f.title, image: f.image, startTime: f.startTime })));
+        };
+        sync();
+        return onFavoritesChange(sync);
     }, [user?.id]);
 
     useLayoutEffect(() => {

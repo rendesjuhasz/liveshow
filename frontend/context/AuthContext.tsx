@@ -15,6 +15,7 @@ import {
     clearAuthToken,
     isUnauthorizedError,
 } from "@/api/auth-storage";
+import { clearRemoteFavorites, mergeGuestFavorites } from "@/lib/library";
 import {
     isAdminRole,
     isModeratorRole,
@@ -139,11 +140,13 @@ export function AuthProvider({
             signedInRef.current = true;
             setToken(COOKIE_SESSION);
             setUser(nextUser);
+            void mergeGuestFavorites(nextUser.id);
         } else {
             signedInRef.current = false;
             clearAuthToken();
             setToken(null);
             setUser(null);
+            clearRemoteFavorites();
         }
     }, []);
 

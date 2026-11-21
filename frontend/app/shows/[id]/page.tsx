@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Heart, Play } from "lucide-react";
 import { apiFetch } from "@/api/http";
+import { useAuth } from "@/context/AuthContext";
 import ReviewForm from "@/components/ReviewForm";
 import ShowTalk from "@/app/live/[id]/ShowTalk";
 import { coverUrl, formatWhen, type MediaItem } from "@/lib/media";
@@ -20,6 +21,7 @@ import { useMounted } from "@/lib/use-mounted";
 
 export default function ShowDetailsPage() {
     const { id } = useParams<{ id: string }>();
+    const { user } = useAuth();
     const { t, locale } = useT();
     const mounted = useMounted();
     const [show, setShow] = useState<any>(null);
@@ -49,7 +51,7 @@ export default function ShowDetailsPage() {
                 setSimilar(rows.filter((s: any) => s.id !== id).slice(0, 16));
             })
             .catch(() => setSimilar([]));
-    }, [id, user?.id]);
+    }, [id, t]);
 
     if (loading) {
         return <p className="px-6 py-20 text-zinc-400">{t("common.loading")}</p>;

@@ -196,7 +196,7 @@ export default function ProfilePage() {
     const [ticketsLoading, setTicketsLoading] = useState(false);
     const [resendNote, setResendNote] = useState("");
     const [tab, setTab] = useState<Tab>("purchases");
-    const [favs, setFavs] = useState<ReturnType<typeof getFavorites>>([]);
+    const [favs, setFavs] = useState<LibraryCard[]>([]);
     const [watched, setWatched] = useState<LibraryCard[]>([]);
     const [privateRows, setPrivateRows] = useState<any[]>([]);
 
@@ -469,7 +469,7 @@ export default function ProfilePage() {
             {tab === "favorites" && (
                 <div className="flex flex-wrap gap-4">
                     {favs.length === 0 && <p className="text-zinc-400">Még nincs kedvenced. Nyomj szívet egy kártyán.</p>}
-                    {favs.map((f) => (
+                    {favs.map((f: LibraryCard) => (
                         <EventCard key={f.id} item={{ id: f.id, title: f.title, image: f.image, startTime: f.startTime }} />
                     ))}
                 </div>

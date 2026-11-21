@@ -181,7 +181,7 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
                         }}
                     >
                         <span className="flex size-5 items-center justify-center">
-                            {mounted && (mobileOpen ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />)}
+                            {mobileOpen ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
                         </span>
                     </button>
                     <LocaleLink
@@ -377,7 +377,7 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
                                     </div>
                                 )}
                             </div>
-                        ) : guest ? (
+                        ) : (
                             <div className="ml-1 flex items-center gap-2">
                                 <LocaleLink
                                     href="/register"
@@ -396,8 +396,6 @@ export default function SiteNav({ initialPath = "/" }: { initialPath?: string })
                                     <span className="hidden min-[380px]:inline">{t("nav.login")}</span>
                                 </LocaleLink>
                             </div>
-                        ) : (
-                            <div className="ml-1 h-9 w-[5.5rem] rounded-xl bg-white/5" aria-hidden />
                         )}
                     </div>
                 </nav>

@@ -15,7 +15,7 @@ import {
     clearAuthToken,
     isUnauthorizedError,
 } from "@/api/auth-storage";
-import { clearRemoteFavorites, mergeGuestFavorites } from "@/lib/library";
+import { clearRemoteFavorites, mergeGuestFavorites, refreshRemoteFavorites } from "@/lib/library";
 import {
     isAdminRole,
     isModeratorRole,
@@ -140,7 +140,7 @@ export function AuthProvider({
             signedInRef.current = true;
             setToken(COOKIE_SESSION);
             setUser(nextUser);
-            void mergeGuestFavorites(nextUser.id);
+            void refreshRemoteFavorites().catch(() => undefined);
         } else {
             signedInRef.current = false;
             clearAuthToken();
@@ -187,25 +187,32 @@ export function AuthProvider({
 
     useEffect(() => {
         let cancelled = false;
-        const epoch = sessionEpoch.current + 1;
+        const timer = window.setTimeout(() => {
+            if (cancelled) return;
+            setReady(true);
+            if (!signedInRef.current) applySession(false, null);
+        }, 4000);
 
         (async () => {
             try {
-                await loadMe();
-            } catch (err) {
+                const data = await apiFetch("/auth/me", { skipRefresh: true, timeoutMs: 8000 });
                 if (cancelled) return;
-                if (isUnauthorizedError(err) && epoch === sessionEpoch.current) {
-                    applySession(false, null);
-                }
+                const next = parseUser(data);
+                if (next) applySession(true, next);
+                else applySession(false, null);
+            } catch {
+                if (!cancelled) applySession(false, null);
+            } finally {
+                window.clearTimeout(timer);
+                if (!cancelled) setReady(true);
             }
-            if (!cancelled) setReady(true);
         })();
 
         return () => {
             cancelled = true;
-            sessionEpoch.current += 1;
+            window.clearTimeout(timer);
         };
-    }, [applySession, loadMe]);
+    }, [applySession]);
 
     const login = useCallback(
         async (email: string, password: string) => {
@@ -217,9 +224,14 @@ export function AuthProvider({
             const fallback = parseUser(data);
             if (fallback) applySession(true, fallback);
             try {
-                return await loadMe();
+                const next = await loadMe();
+                if (next?.id) void mergeGuestFavorites(next.id);
+                return next;
             } catch {
-                if (fallback) return fallback;
+                if (fallback) {
+                    void mergeGuestFavorites(fallback.id);
+                    return fallback;
+                }
                 throw new Error("A belépés sikerült, de a profil nem tölthető be. Frissítsd az oldalt.");
             }
         },
@@ -246,9 +258,14 @@ export function AuthProvider({
             const fallback = parseUser(data);
             if (fallback) applySession(true, fallback);
             try {
-                return await loadMe();
+                const next = await loadMe();
+                if (next?.id) void mergeGuestFavorites(next.id);
+                return next;
             } catch {
-                if (fallback) return fallback;
+                if (fallback) {
+                    void mergeGuestFavorites(fallback.id);
+                    return fallback;
+                }
                 throw new Error("A regisztráció sikerült, de a profil nem tölthető be.");
             }
         },
@@ -265,7 +282,12 @@ export function AuthProvider({
             const data = await apiUpload("/auth/register-streamer", formData);
             const fallback = parseUser(data);
             if (fallback) applySession(true, fallback);
-            await loadMe();
+            try {
+                const next = await loadMe();
+                if (next?.id) void mergeGuestFavorites(next.id);
+            } catch {
+                if (fallback?.id) void mergeGuestFavorites(fallback.id);
+            }
         },
         [applySession, loadMe],
     );

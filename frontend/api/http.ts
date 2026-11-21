@@ -174,10 +174,10 @@ function throwIfNotOk(response: Response, data: any) {
     throw new ApiError(shown, response.status, fields);
 }
 
-type Extra = { skipRefresh?: boolean };
+type Extra = { skipRefresh?: boolean; timeoutMs?: number };
 
 export async function apiFetch(path: string, options: RequestInit & Extra = {}) {
-    const { skipRefresh, ...rest } = options;
+    const { skipRefresh, timeoutMs, ...rest } = options;
     let url = path.startsWith("http") ? path : `${apiBase()}${path}`;
     const locale = requestLocale();
     if (!url.startsWith("http") || url.includes("/api")) {
@@ -201,11 +201,15 @@ export async function apiFetch(path: string, options: RequestInit & Extra = {}) 
 
     let response: Response;
     try {
+        const signal =
+            rest.signal ||
+            (typeof timeoutMs === "number" && timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined);
         response = await fetch(url, {
             ...rest,
             method,
             credentials: "include",
             headers,
+            signal,
         });
     } catch {
         throw new ApiError(

@@ -6,7 +6,14 @@ import { useAuth } from "@/context/AuthContext";
 import HeroBanner from "@/components/media/HeroBanner";
 import MediaRow from "@/components/media/MediaRow";
 import { isUpcoming, mediaId, watchHref, type MediaItem } from "@/lib/media";
-import { getFavorites, onFavoritesChange, remoteFavoriteCards } from "@/lib/library";
+import {
+    getFavorites,
+    getWatched,
+    onFavoritesChange,
+    onWatchedChange,
+    remoteFavoriteCards,
+    remoteWatchedCards,
+} from "@/lib/library";
 import FaqList, { type FaqItem } from "@/components/FaqList";
 import WishWall from "@/components/WishWall";
 import Link from "next/link";
@@ -46,6 +53,7 @@ export default function HomePage() {
     const [popular, setPopular] = useState<MediaItem[]>([]);
     const [faqItems, setFaqItems] = useState<FaqItem[]>([]);
     const [favs, setFavs] = useState<MediaItem[]>([]);
+    const [watched, setWatched] = useState<MediaItem[]>([]);
     const snapRef = useRef<ReturnType<typeof readHomeScroll>>(null);
     const rootRef = useRef<HTMLDivElement>(null);
     const appliedY = useRef(false);
@@ -114,6 +122,15 @@ export default function HomePage() {
         return onFavoritesChange(sync);
     }, [user?.id]);
 
+    useEffect(() => {
+        const sync = () => {
+            const rows = user ? remoteWatchedCards() : getWatched(null);
+            setWatched(rows.map((f) => ({ id: f.id, title: f.title, image: f.image, startTime: f.startTime })));
+        };
+        sync();
+        return onWatchedChange(sync);
+    }, [user?.id]);
+
     useLayoutEffect(() => {
         history.scrollRestoration = "manual";
         const snap = readHomeScroll();
@@ -159,7 +176,7 @@ export default function HomePage() {
         document.querySelectorAll<HTMLElement>("[data-home-row]").forEach((el, i) => {
             if (typeof rows[i] === "number") el.scrollLeft = rows[i];
         });
-    }, [featured.length, live.length, archives.length, popular.length, all.length, upcoming.length]);
+    }, [featured.length, live.length, archives.length, popular.length, all.length, upcoming.length, watched.length, favs.length]);
 
     useEffect(() => {
         if (!reservePx) return;
@@ -178,7 +195,7 @@ export default function HomePage() {
         const ro = new ResizeObserver(measure);
         ro.observe(root);
         return () => ro.disconnect();
-    }, [reservePx, featured.length, live.length, archives.length, popular.length, all.length, upcoming.length]);
+    }, [reservePx, featured.length, live.length, archives.length, popular.length, all.length, upcoming.length, watched.length, favs.length]);
 
     return (
         <div
@@ -203,6 +220,7 @@ export default function HomePage() {
                 <MediaRow title={t("home.liveStreams")} items={live} hrefFor={hrefLive} wide />
                 <MediaRow title={t("home.popularEvents")} items={popular} hrefFor={hrefArchive} wide hoverPreview />
                 <MediaRow title={t("home.watchAgain")} items={archives} hrefFor={hrefArchive} wide hoverPreview />
+                {watched.length > 0 && <MediaRow title={t("home.watched")} items={watched} hrefFor={watchHref} />}
                 {favs.length > 0 && <MediaRow title={t("home.favorites")} items={favs} hrefFor={watchHref} />}
             </div>
 

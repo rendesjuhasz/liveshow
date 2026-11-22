@@ -199,6 +199,7 @@ export const MESSAGES: Record<string, Record<Locale, string>> = {
     "home.popularEvents": row("Legnépszerűbb események", "Most popular", "Beliebteste Events", "I più popolari", "Más populares", "Les plus populaires"),
     "home.watchAgain": row("Visszanézhető tartalmak", "Watch again", "Zum Nachschauen", "Da rivedere", "Para repetir", "À revoir"),
     "home.favorites": row("Kedvenceid", "Your favorites", "Deine Favoriten", "I tuoi preferiti", "Tus favoritos", "Vos favoris"),
+    "home.watched": row("Mostanában nézett", "Recently watched", "Zuletzt angesehen", "Visti di recente", "Vistos recientemente", "Regardés récemment"),
     "home.continue": row("Folytasd a nézést", "Continue watching", "Weiterschauen", "Continua a guardare", "Seguir viendo", "Continuer"),
     "home.empty": row("Hamarosan új események.", "New events coming soon.", "Neue Events folgen.", "Nuovi eventi in arrivo.", "Pronto habrá eventos.", "De nouveaux événements arrivent."),
     "tickets.packs": row("Jegycsomagok", "Ticket packs", "Ticketpakete", "Pacchetti biglietti", "Paquetes de tickets", "Packs de tickets"),

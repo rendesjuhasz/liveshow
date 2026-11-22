@@ -54,14 +54,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 data-home={isHomePath(path) ? "1" : undefined}
                 suppressHydrationWarning
             >
-            <head>
-                <script
-                    nonce={nonce}
-                    dangerouslySetInnerHTML={{
-                        __html: `(function(){function w(){try{var s=localStorage,r=[],i,k;for(i=0;i<s.length;i++){k=s.key(i);if(k&&k.indexOf("liveshow:watch")===0)r.push(k)}for(i=0;i<r.length;i++)s.removeItem(r[i])}catch(e){}}w();addEventListener("pageshow",w)})();`,
-                    }}
-                />
-            </head>
             <body
                 className="min-h-dvh bg-background font-sans antialiased"
                 data-csp-nonce={nonce}

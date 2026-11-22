@@ -10,24 +10,11 @@ export type LibraryCard = {
     at: number;
 };
 
-const WATCH_PURGE = "liveshow:watch-purged:4";
 const FAV_EVENT = "liveshow:favorites";
+const WATCH_EVENT = "liveshow:watched";
 
 function key(kind: "fav" | "watch", userId?: string | null) {
     return `liveshow:${kind}:${userId || "anon"}`;
-}
-
-function purgeWatchLists() {
-    if (typeof window === "undefined") return;
-    if (localStorage.getItem(WATCH_PURGE) === "1") return;
-    const remove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (!k) continue;
-        if (k.startsWith("liveshow:watch:") || k.startsWith("liveshow:watch-cleared:")) remove.push(k);
-    }
-    for (const k of remove) localStorage.removeItem(k);
-    localStorage.setItem(WATCH_PURGE, "1");
 }
 
 function read(kind: "fav" | "watch", userId?: string | null): LibraryCard[] {
@@ -179,11 +166,94 @@ export async function mergeGuestFavorites(userId: string) {
     return mergeInFlight;
 }
 
-export function getWatched(_userId?: string | null): LibraryCard[] {
-    purgeWatchLists();
-    return [];
+let remoteWatchCards: LibraryCard[] = [];
+let remoteWatchLoaded = false;
+let watchMergeInFlight: Promise<void> | null = null;
+
+function emitWatched() {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new Event(WATCH_EVENT));
 }
 
-export function recordWatched(_item: MediaItem, _userId?: string | null) {
-    purgeWatchLists();
+export function onWatchedChange(handler: () => void) {
+    if (typeof window === "undefined") return () => undefined;
+    window.addEventListener(WATCH_EVENT, handler);
+    return () => window.removeEventListener(WATCH_EVENT, handler);
+}
+
+export function remoteWatchedCards() {
+    return remoteWatchCards;
+}
+
+export function clearRemoteWatched() {
+    remoteWatchCards = [];
+    remoteWatchLoaded = false;
+    emitWatched();
+}
+
+export async function refreshRemoteWatched() {
+    const data = await apiFetch("/watched");
+    remoteWatchCards = asCards(data);
+    remoteWatchLoaded = true;
+    emitWatched();
+    return remoteWatchCards;
+}
+
+export function getWatched(userId?: string | null): LibraryCard[] {
+    if (userId && remoteWatchLoaded) return remoteWatchCards;
+    return read("watch", userId || null);
+}
+
+export function recordWatched(item: MediaItem, userId?: string | null) {
+    const id = mediaId(item);
+    if (!id) return;
+    const card = snapshot(item);
+    if (userId) {
+        remoteWatchCards = [card, ...remoteWatchCards.filter((row) => row.id !== id)].slice(0, 80);
+        remoteWatchLoaded = true;
+        emitWatched();
+        void apiFetch("/watched", {
+            method: "POST",
+            body: JSON.stringify({ showId: id }),
+        }).catch(() => undefined);
+        return;
+    }
+    const list = read("watch", null);
+    write("watch", null, [card, ...list.filter((row) => row.id !== id)]);
+    emitWatched();
+}
+
+export async function mergeGuestWatched(userId: string) {
+    if (typeof window === "undefined" || !userId) return;
+    if (watchMergeInFlight) return watchMergeInFlight;
+    watchMergeInFlight = (async () => {
+        const ids = [
+            ...read("watch", null).map((row) => row.id),
+            ...read("watch", userId).map((row) => row.id),
+        ].filter(Boolean);
+        if (ids.length) {
+            try {
+                const data = await apiFetch("/watched/import", {
+                    method: "POST",
+                    body: JSON.stringify({ showIds: ids }),
+                });
+                remoteWatchCards = asCards(data);
+                remoteWatchLoaded = true;
+                write("watch", null, []);
+                write("watch", userId, []);
+                emitWatched();
+                return;
+            } catch {
+                /* username / háló — a helyi lista megmarad */
+            }
+        }
+        try {
+            await refreshRemoteWatched();
+        } catch {
+            if (!remoteWatchLoaded) remoteWatchCards = [];
+        }
+    })().finally(() => {
+        watchMergeInFlight = null;
+    });
+    return watchMergeInFlight;
 }

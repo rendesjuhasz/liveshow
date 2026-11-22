@@ -7,7 +7,13 @@ import { displayInitial, displayName } from "@/lib/display-name";
 import { apiFetch, asList } from "@/api/http";
 import { ticketStatusLabelHu, isTicketActiveStatus } from "@/lib/ticket-status";
 import TicketPackShop from "@/components/TicketPackShop";
-import { getWatched, onFavoritesChange, remoteFavoriteCards, type LibraryCard } from "@/lib/library";
+import {
+    getWatched,
+    onFavoritesChange,
+    onWatchedChange,
+    remoteFavoriteCards,
+    type LibraryCard,
+} from "@/lib/library";
 import EventCard from "@/components/media/EventCard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -236,7 +242,6 @@ export default function ProfilePage() {
         apiFetch("/tickets/balance")
             .then((d) => applyWallet(d))
             .catch(() => undefined);
-        setWatched(getWatched(user.id));
         apiFetch("/private-requests")
             .then((data) => setPrivateRows(asList(data)))
             .catch(() =>
@@ -252,6 +257,13 @@ export default function ProfilePage() {
         const sync = () => setFavs(remoteFavoriteCards());
         sync();
         return onFavoritesChange(sync);
+    }, [user?.id]);
+
+    useEffect(() => {
+        if (!user) return;
+        const sync = () => setWatched(getWatched(user.id));
+        sync();
+        return onWatchedChange(sync);
     }, [user?.id]);
 
     if (!ready) {

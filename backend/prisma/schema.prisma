@@ -69,6 +69,7 @@ model User {
   privateRequests PrivateRequest[]
   streamerFollows StreamerFollow[]
   showFavorites   ShowFavorite[]
+  showWatches     ShowWatch[]
   categoryFollows CategoryFollow[]
   notificationPref NotificationPref?
   marketingKits    MarketingKit[]
@@ -227,6 +228,7 @@ model Show {
   streamClips     StreamClip[]
   marketingJobs   MarketingJob[]
   favorites       ShowFavorite[]
+  watches         ShowWatch[]
 
   @@index([status])
   @@index([live])
@@ -516,6 +518,18 @@ model ShowFavorite {
 
   @@unique([userId, showId])
   @@index([userId, createdAt])
+}
+
+model ShowWatch {
+  id        String   @id @default(uuid())
+  userId    String
+  showId    String
+  watchedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, showId])
+  @@index([userId, watchedAt])
 }
 
 model StreamerFollow {

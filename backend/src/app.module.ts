@@ -30,6 +30,7 @@ import { I18nModule } from "./i18n/i18n.module";
 import { PrivateStreamsModule } from "./private-streams/private-streams.module";
 import { FollowsModule } from "./follows/follows.module";
 import { FavoritesModule } from "./favorites/favorites.module";
+import { WatchedModule } from "./watched/watched.module";
 import { BackupModule } from "./backup/backup.module";
 import { OpsModule } from "./ops/ops.module";
 import { CostModule } from "./cost/cost.module";
@@ -52,6 +53,7 @@ import { securityMiddleware } from "./security/http-guard";
         UsersModule,
         FollowsModule,
         FavoritesModule,
+        WatchedModule,
         StreamersModule,
         ShowsModule,
         TicketsModule,

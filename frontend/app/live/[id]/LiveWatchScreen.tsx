@@ -229,7 +229,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
     }, [showId]);
 
     useEffect(() => {
-        if (!user || !showId || !streamId) return;
+        if (!showId || !streamId) return;
         recordWatched({ id: showId, title }, user?.id);
     }, [user, showId, streamId, title]);
 

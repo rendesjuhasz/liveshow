@@ -33,16 +33,6 @@ export default function AppShell({
         document.documentElement.setAttribute("data-cookie-ready", "1");
         history.scrollRestoration = "manual";
         document.documentElement.style.overflowAnchor = "none";
-        try {
-            const drop: string[] = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const k = localStorage.key(i);
-                if (k && k.startsWith("liveshow:watch")) drop.push(k);
-            }
-            for (const k of drop) localStorage.removeItem(k);
-        } catch {
-            /* private mode */
-        }
     }, []);
 
     useLayoutEffect(() => {

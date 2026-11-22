@@ -15,7 +15,14 @@ import {
     clearAuthToken,
     isUnauthorizedError,
 } from "@/api/auth-storage";
-import { clearRemoteFavorites, mergeGuestFavorites, refreshRemoteFavorites } from "@/lib/library";
+import {
+    clearRemoteFavorites,
+    clearRemoteWatched,
+    mergeGuestFavorites,
+    mergeGuestWatched,
+    refreshRemoteFavorites,
+    refreshRemoteWatched,
+} from "@/lib/library";
 import {
     isAdminRole,
     isModeratorRole,
@@ -141,12 +148,14 @@ export function AuthProvider({
             setToken(COOKIE_SESSION);
             setUser(nextUser);
             void refreshRemoteFavorites().catch(() => undefined);
+            void refreshRemoteWatched().catch(() => undefined);
         } else {
             signedInRef.current = false;
             clearAuthToken();
             setToken(null);
             setUser(null);
             clearRemoteFavorites();
+            clearRemoteWatched();
         }
     }, []);
 
@@ -225,11 +234,15 @@ export function AuthProvider({
             if (fallback) applySession(true, fallback);
             try {
                 const next = await loadMe();
-                if (next?.id) void mergeGuestFavorites(next.id);
+                if (next?.id) {
+                    void mergeGuestFavorites(next.id);
+                    void mergeGuestWatched(next.id);
+                }
                 return next;
             } catch {
                 if (fallback) {
                     void mergeGuestFavorites(fallback.id);
+                    void mergeGuestWatched(fallback.id);
                     return fallback;
                 }
                 throw new Error("A belépés sikerült, de a profil nem tölthető be. Frissítsd az oldalt.");
@@ -259,11 +272,15 @@ export function AuthProvider({
             if (fallback) applySession(true, fallback);
             try {
                 const next = await loadMe();
-                if (next?.id) void mergeGuestFavorites(next.id);
+                if (next?.id) {
+                    void mergeGuestFavorites(next.id);
+                    void mergeGuestWatched(next.id);
+                }
                 return next;
             } catch {
                 if (fallback) {
                     void mergeGuestFavorites(fallback.id);
+                    void mergeGuestWatched(fallback.id);
                     return fallback;
                 }
                 throw new Error("A regisztráció sikerült, de a profil nem tölthető be.");
@@ -284,9 +301,15 @@ export function AuthProvider({
             if (fallback) applySession(true, fallback);
             try {
                 const next = await loadMe();
-                if (next?.id) void mergeGuestFavorites(next.id);
+                if (next?.id) {
+                    void mergeGuestFavorites(next.id);
+                    void mergeGuestWatched(next.id);
+                }
             } catch {
-                if (fallback?.id) void mergeGuestFavorites(fallback.id);
+                if (fallback?.id) {
+                    void mergeGuestFavorites(fallback.id);
+                    void mergeGuestWatched(fallback.id);
+                }
             }
         },
         [applySession, loadMe],

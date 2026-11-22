@@ -145,6 +145,31 @@ export class StreamerDashboardController {
         return this.dashboard.ingestLiveArchive(req.streamer, id, file);
     }
 
+    @Post("shows/:id/live-archive-chunk")
+    @UseInterceptors(FileInterceptor("video", liveArchiveMulterOptions()))
+    ingestLiveArchiveChunk(
+        @Req() req: Authed,
+        @Param("id") id: string,
+        @UploadedFile() file: { path?: string; size?: number } | undefined,
+    ) {
+        return this.dashboard.ingestLiveArchiveChunk(
+            req.streamer,
+            id,
+            file,
+            (req as Authed & { body?: { index?: unknown } }).body?.index,
+        );
+    }
+
+    @Post("shows/:id/live-archive-finalize")
+    @UseInterceptors(FileInterceptor("video", liveArchiveMulterOptions()))
+    finalizeLiveArchive(
+        @Req() req: Authed,
+        @Param("id") id: string,
+        @UploadedFile() file: { path?: string; size?: number } | undefined,
+    ) {
+        return this.dashboard.finalizeLiveArchive(req.streamer, id, file);
+    }
+
     @Get("follow-stats")
     followStats(@Req() req: Authed) {
         return this.dashboard.followStats(req.streamer);

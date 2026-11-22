@@ -49,6 +49,7 @@ type Props = {
     }) => void;
     onReactionCounts?: (counts: ReactionCounts) => void;
     onSupport?: (payload: { author: string; tickets: number; ts: number }) => void;
+    onArchiveChunk?: (blob: Blob) => void;
 };
 
 function qualityFromStats(opts: {
@@ -64,7 +65,7 @@ function qualityFromStats(opts: {
 }
 
 const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function StreamerLiveCamera(
-    { stream, showId, fill, zoomPreview = 1, onLink, onAudioBroken, onSignalingError, onMediaHealth, onReaction, onReactionCounts, onSupport },
+    { stream, showId, fill, zoomPreview = 1, onLink, onAudioBroken, onSignalingError, onMediaHealth, onReaction, onReactionCounts, onSupport, onArchiveChunk },
     ref,
 ) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -83,6 +84,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
     const onReactionRef = useRef(onReaction);
     const onCountsRef = useRef(onReactionCounts);
     const onSupportRef = useRef(onSupport);
+    const onArchiveChunkRef = useRef(onArchiveChunk);
     onLinkRef.current = onLink;
     onAudioRef.current = onAudioBroken;
     onErrRef.current = onSignalingError;
@@ -90,6 +92,7 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
     onReactionRef.current = onReaction;
     onCountsRef.current = onReactionCounts;
     onSupportRef.current = onSupport;
+    onArchiveChunkRef.current = onArchiveChunk;
     streamRef.current = stream;
     const [error, setError] = useState("");
     const skipEndedRef = useRef(false);
@@ -277,7 +280,9 @@ const StreamerLiveCamera = forwardRef<StreamerLiveCameraHandle, Props>(function 
         if (stream && video) void video.play().catch(() => undefined);
         if (!stream || !showId) return;
 
-        startLiveRecorder(stream, recorderRef, recChunksRef, recMimeRef);
+        startLiveRecorder(stream, recorderRef, recChunksRef, recMimeRef, (blob) => {
+            onArchiveChunkRef.current?.(blob);
+        });
 
         let cancelled = false;
         let beat = 0;
@@ -862,6 +867,7 @@ function startLiveRecorder(
     recorderRef: { current: MediaRecorder | null },
     chunksRef: { current: Blob[] },
     mimeRef: { current: string },
+    onChunk?: (blob: Blob) => void,
 ) {
     if (typeof MediaRecorder === "undefined") return;
     if (recorderRef.current && recorderRef.current.state !== "inactive") return;
@@ -873,7 +879,12 @@ function startLiveRecorder(
             ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1_200_000 })
             : new MediaRecorder(stream);
         rec.ondataavailable = (event) => {
-            if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
+            if (!event.data || event.data.size < 1) return;
+            if (onChunk) {
+                onChunk(event.data);
+                return;
+            }
+            chunksRef.current.push(event.data);
         };
         rec.start(4000);
         recorderRef.current = rec;

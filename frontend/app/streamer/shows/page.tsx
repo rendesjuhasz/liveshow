@@ -21,6 +21,7 @@ type ShowRow = {
     viewCount?: number;
     peakViewers?: number;
     avgWatchSeconds?: number;
+    archiveExists?: boolean;
 };
 
 function ShowList({
@@ -79,8 +80,10 @@ function ShowList({
                             </button>
                         )}
                         <Link href={`/streamer/shows/${show.id}`}>Szerkesztés</Link>
-                        {show.status === "archived" ? (
+                        {show.status === "archived" && show.archiveExists ? (
                             <Link href={`/archive/${show.id}`}>Visszanézés</Link>
+                        ) : show.status === "archived" ? (
+                            <span className="text-neutral-500">Nincs felvétel</span>
                         ) : show.status === "active" || show.status === "missed" ? (
                             <Link href={`/shows/${show.id}`}>Nyilvános</Link>
                         ) : null}

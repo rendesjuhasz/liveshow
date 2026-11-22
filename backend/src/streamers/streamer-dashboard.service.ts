@@ -18,7 +18,18 @@ import { LIVE_ALLOWED_STATUSES, normalizeShowStatus } from "../shows/show-status
 import { setShowStatus, withShowStatus, withShowStatuses } from "../shows/show-status-db";
 import { shouldPersistMissed, showAudiencePhase, hasEverGoneLive } from "../shows/show-ended";
 import { sanitizeStreamId } from "../streaming/hls-paths";
+import {
+    MAX_LIVE_CHUNK_INDEX,
+    concatLiveChunkFiles,
+    ensureLiveChunksDir,
+    getLiveChunkPath,
+    getLiveChunksDir,
+    getLiveConcatFile,
+    listLiveChunkPaths,
+    resetLiveChunks,
+} from "../streaming/live-chunks";
 import * as fs from "fs";
+import { promises as fsp } from "fs";
 import { assertNoOffPlatformContact } from "../security/contact-leak";
 import { parseAndValidatePublicLinks } from "./public-links";
 import { assertUploadedMedia } from "../uploads/upload-magic";
@@ -138,6 +149,7 @@ export class StreamerDashboardService {
         return Promise.all(
             tagged.map(async (show) => ({
                 ...show,
+                archiveExists: Boolean((show as { archiveExists?: boolean }).archiveExists),
                 ...videoCategoryFields(catMap.get(show.id)),
                 scheduleStatus: showAudiencePhase(show),
                 viewCount: viewCounts.get(show.id) || 0,
@@ -319,6 +331,83 @@ export class StreamerDashboardService {
         }
     }
 
+    async ingestLiveArchiveChunk(
+        streamer: StreamerRow,
+        showId: string,
+        file: { path?: string; size?: number } | undefined,
+        indexRaw: unknown,
+    ) {
+        const show = await this.ownShow(streamer.id, showId);
+        const streamId = sanitizeStreamId(String(show.streamId || "").trim());
+        if (!streamId) throw new BadRequestException("Élő adáshoz stream ID kell.");
+        const index = Number(indexRaw);
+        if (!Number.isInteger(index) || index < 0 || index > MAX_LIVE_CHUNK_INDEX) {
+            if (file?.path) fs.unlink(file.path, () => undefined);
+            throw new BadRequestException("Érvénytelen felvételdarab.");
+        }
+        if (!file?.path || Number(file.size || 0) < 1) {
+            if (file?.path) fs.unlink(file.path, () => undefined);
+            throw new BadRequestException("A felvételdarab üres.");
+        }
+        try {
+            if (index === 0) await resetLiveChunks(streamId);
+            else await ensureLiveChunksDir(streamId);
+            const dest = getLiveChunkPath(streamId, index);
+            try {
+                await fsp.access(dest);
+                fs.unlink(file.path, () => undefined);
+                return { ok: true, index, skipped: true };
+            } catch {
+                /* new chunk */
+            }
+            try {
+                await fsp.rename(file.path, dest);
+            } catch {
+                await fsp.copyFile(file.path, dest);
+                fs.unlink(file.path, () => undefined);
+            }
+            return { ok: true, index };
+        } catch (err) {
+            fs.unlink(file.path, () => undefined);
+            throw err;
+        }
+    }
+
+    async finalizeLiveArchive(
+        streamer: StreamerRow,
+        showId: string,
+        file?: { path?: string; size?: number },
+    ) {
+        const show = await this.ownShow(streamer.id, showId);
+        const streamId = sanitizeStreamId(String(show.streamId || "").trim());
+        if (!streamId) {
+            if (file?.path) fs.unlink(file.path, () => undefined);
+            throw new BadRequestException("Élő adáshoz stream ID kell.");
+        }
+        try {
+            const parts = await listLiveChunkPaths(streamId);
+            const extra =
+                file?.path && Number(file.size || 0) >= 1024 ? file.path : "";
+            const files = extra ? [...parts, extra] : parts;
+            if (!files.length) {
+                throw new BadRequestException("Nem volt rögzített kép. A visszanézés üres maradt.");
+            }
+            const concat = getLiveConcatFile(streamId);
+            await concatLiveChunkFiles(files, concat);
+            const archive = await this.archiveService.ingestUploaded(show.id, concat);
+            await fsp.rm(getLiveChunksDir(streamId), { recursive: true, force: true }).catch(() => undefined);
+            await fsp.rm(concat, { force: true }).catch(() => undefined);
+            return { ok: true, archive };
+        } catch (err: unknown) {
+            if (err instanceof HttpException) throw err;
+            throw new BadRequestException(
+                "A felvétel feldolgozása nem sikerült. Ellenőrizd, hogy az FFmpeg telepítve van-e.",
+            );
+        } finally {
+            if (file?.path) fs.unlink(file.path, () => undefined);
+        }
+    }
+
     async getShow(streamer: StreamerRow, showId: string) {
         const show = await this.ownShow(streamer.id, showId);
         const tagged = await withShowStatus(this.prisma, show);
@@ -326,6 +415,7 @@ export class StreamerDashboardService {
         const translationRows = await this.i18n.contentFor("show", show.id);
         return {
             ...tagged,
+            archiveExists: Boolean((tagged as { archiveExists?: boolean }).archiveExists),
             startAtUtc: tagged.startTime,
             endAtUtc: (tagged as any).endTime ?? null,
             timezone: (tagged as any).timezone || "Europe/Budapest",

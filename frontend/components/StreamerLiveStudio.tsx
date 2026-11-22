@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Eye, FlipHorizontal, Maximize2, Mic, MicOff, Minus, Plus } from "lucide-react";
-import { apiFetch, apiUpload } from "@/api/http";
+import { apiFetch } from "@/api/http";
 import StreamerLiveCamera, {
     type StreamerLiveCameraHandle,
 } from "@/components/StreamerLiveCamera";
+import { createLiveArchiveUploader } from "@/lib/live-archive-upload";
 import { clockClass, type LiveLinkQuality } from "@/lib/live-link-quality";
 import { playStreamerAlert } from "@/lib/streamer-alert-tone";
 import { createLiveWakeLock } from "@/lib/live-wake-lock";
@@ -33,12 +34,14 @@ export default function StreamerLiveStudio({
     startedAt,
     busy,
     onStop,
+    onArchiveDone,
 }: {
     showId: string;
     stream: MediaStream;
     startedAt: number;
     busy: boolean;
     onStop: () => void;
+    onArchiveDone?: () => void;
 }) {
     const studioRef = useRef<HTMLDivElement>(null);
     const camRef = useRef<StreamerLiveCameraHandle>(null);
@@ -65,7 +68,9 @@ export default function StreamerLiveStudio({
     const [recall, setRecall] = useState(false);
     const [emptyHint, setEmptyHint] = useState(false);
     const [qBusy, setQBusy] = useState(false);
+    const uploaderRef = useRef(createLiveArchiveUploader(showId));
     const [savingArchive, setSavingArchive] = useState(false);
+    const [archiveError, setArchiveError] = useState("");
     const [signError, setSignError] = useState("");
     const [reactionCounts, setReactionCounts] = useState<ReactionCounts>(emptyReactionCounts);
     const [reactionEvent, setReactionEvent] = useState<{ value: string; ts: number } | null>(null);
@@ -283,27 +288,43 @@ export default function StreamerLiveStudio({
         };
     }, [stream]);
 
+    useEffect(() => {
+        const warn = (event: BeforeUnloadEvent) => {
+            if (savingArchive || archiveError || uploaderRef.current.pending()) {
+                event.preventDefault();
+                event.returnValue = "";
+            }
+        };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [savingArchive, archiveError]);
+
+    async function finishArchive() {
+        setSavingArchive(true);
+        setArchiveError("");
+        try {
+            await camRef.current?.stopRecording();
+            await uploaderRef.current.finalize();
+            onArchiveDone?.();
+        } catch (err: unknown) {
+            setArchiveError(
+                err instanceof Error ? err.message : "A felvétel feltöltése nem sikerült.",
+            );
+        } finally {
+            setSavingArchive(false);
+        }
+    }
+
     async function handleStop() {
         if (busy || savingArchive) return;
         setConfirmStop(false);
         setReactionCounts(emptyReactionCounts());
         setReactionEvent(null);
         camRef.current?.prepareStop();
-        const recPromise = camRef.current?.stopRecording() ?? Promise.resolve(null);
+        setSavingArchive(true);
+        await camRef.current?.stopRecording();
         onStop();
-        try {
-            const blob = await recPromise;
-            if (blob && blob.size >= 4096) {
-                const form = new FormData();
-                const mp4 = blob.type.includes("mp4");
-                const mime = (blob.type.split(";")[0] || (mp4 ? "video/mp4" : "video/webm")).trim();
-                const file = new File([blob], mp4 ? "live.mp4" : "live.webm", { type: mime });
-                form.append("video", file);
-                await apiUpload(`/streamer/shows/${showId}/live-archive`, form);
-            }
-        } catch {
-            /* a kamera már leállt; az archív feltöltés opcionális */
-        }
+        await finishArchive();
     }
 
     async function runRestore(kind: "reconnect" | "camera" | "stream") {
@@ -394,6 +415,7 @@ export default function StreamerLiveStudio({
                     }}
                     onReactionCounts={(counts) => setReactionCounts(mergeReactionCounts(counts))}
                     onSupport={(payload) => setSupportNotice(payload)}
+                    onArchiveChunk={(blob) => uploaderRef.current.enqueue(blob)}
                 />
             </div>
             <StreamerReactionFloat event={reactionEvent} session={startedAt} />
@@ -426,10 +448,33 @@ export default function StreamerLiveStudio({
                         Nincs kérdés
                     </p>
                 ) : null}
-                {savingArchive ? (
-                    <p className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/55 text-center text-base font-semibold text-white backdrop-blur-sm">
-                        Felvétel feltöltése…
-                    </p>
+                {savingArchive || archiveError ? (
+                    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 px-4 text-center backdrop-blur-sm">
+                        {archiveError ? (
+                            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/75 p-5 shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
+                                <p className="text-lg font-bold">A felvétel nem ért fel</p>
+                                <p className="mt-2 text-sm text-white/75">{archiveError}</p>
+                                <div className="mt-5 grid gap-2">
+                                    <button
+                                        type="button"
+                                        className="min-h-12 rounded-xl bg-[#25f4ee] font-bold text-black"
+                                        onClick={() => void finishArchive()}
+                                    >
+                                        Újrapróbálás
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="min-h-11 rounded-xl border border-white/20 text-sm text-white/80"
+                                        onClick={() => onArchiveDone?.()}
+                                    >
+                                        Most nincs felvétel
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-base font-semibold text-white">Felvétel feltöltése…</p>
+                        )}
+                    </div>
                 ) : null}
 
             {confirmStop ? (
@@ -457,7 +502,7 @@ export default function StreamerLiveStudio({
                 </div>
             ) : null}
 
-            {showCrisis && !confirmStop && !savingArchive ? (
+            {showCrisis && !confirmStop && !savingArchive && !archiveError ? (
                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
                     <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/70 p-5 text-center shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
                         <p className="text-lg font-bold">

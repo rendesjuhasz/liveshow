@@ -172,10 +172,6 @@ export default function ArchiveWatchSlide({
                         preload="auto"
                         className="absolute inset-0 z-0 h-full w-full max-w-none bg-black object-cover"
                         style={{ touchAction: "pan-y" }}
-                        onError={() => {
-                            setSrc("");
-                            setError(t("archive.missing"));
-                        }}
                         onTimeUpdate={(e) => {
                             const video = e.currentTarget;
                             const seconds = Number(video.currentTime) || 0;

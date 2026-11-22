@@ -7,7 +7,14 @@ import { apiFetch } from "@/api/http";
 import { useAuth } from "@/context/AuthContext";
 import { recordWatched } from "@/lib/library";
 import TheaterFavoriteButton from "@/components/TheaterFavoriteButton";
-import { loadArchiveInfo, peekArchiveInfo, peekArchiveSrc, warmArchivePlayback } from "@/lib/archive-src-cache";
+import {
+    ArchiveMissingError,
+    isArchiveMissing,
+    loadArchiveInfo,
+    peekArchiveInfo,
+    peekArchiveSrc,
+    warmArchivePlayback,
+} from "@/lib/archive-src-cache";
 import ReviewForm from "@/components/ReviewForm";
 import CreatorPublicLinks from "@/components/CreatorPublicLinks";
 import ViewerReactionBar from "@/components/ViewerReactionBar";
@@ -87,19 +94,32 @@ export default function ArchiveWatchSlide({
             setInfo(cachedInfo);
             setViewCount(Number(cachedInfo?.viewCount) || 0);
         }
-        const streamId = listed?.streamId || cachedInfo?.streamId;
-        warmArchivePlayback(showId, streamId, listed?.publicPath || cachedInfo?.publicPath)
-            .then((url) => setSrc(url))
-            .catch((err: any) => setError(err.message || "Nem sikerült elindítani a lejátszást."));
+        if (isArchiveMissing(cachedInfo)) {
+            setSrc("");
+            setError(t("archive.missing"));
+            return;
+        }
         loadArchiveInfo(showId)
             .then((data) => {
                 setInfo(data);
                 setViewCount(Number(data?.viewCount) || 0);
-                if (!streamId && data?.streamId) {
-                    return warmArchivePlayback(showId, data.streamId, data.publicPath).then((url) => setSrc(url));
+                if (isArchiveMissing(data)) {
+                    setSrc("");
+                    setError(t("archive.missing"));
+                    return;
                 }
+                return warmArchivePlayback(showId, data?.streamId || listed?.streamId, data?.publicPath || listed?.publicPath).then(
+                    (url) => setSrc(url),
+                );
             })
-            .catch((err: any) => setError(err.message || t("archive.unknownCat")));
+            .catch((err: unknown) => {
+                if (err instanceof ArchiveMissingError) {
+                    setSrc("");
+                    setError(t("archive.missing"));
+                    return;
+                }
+                setError(err instanceof Error ? err.message : t("archive.loadError"));
+            });
     }, [showId, listed?.streamId, listed?.publicPath, t]);
 
     useEffect(() => {
@@ -143,7 +163,7 @@ export default function ArchiveWatchSlide({
             onMouseLeave={hideControlsSoon}
         >
             <div className="absolute inset-0 overflow-hidden bg-black">
-                {src ? (
+                {src && !isArchiveMissing(info) ? (
                     <video
                         ref={videoRef}
                         src={src}
@@ -152,6 +172,10 @@ export default function ArchiveWatchSlide({
                         preload="auto"
                         className="absolute inset-0 z-0 h-full w-full max-w-none bg-black object-cover"
                         style={{ touchAction: "pan-y" }}
+                        onError={() => {
+                            setSrc("");
+                            setError(t("archive.missing"));
+                        }}
                         onTimeUpdate={(e) => {
                             const video = e.currentTarget;
                             const seconds = Number(video.currentTime) || 0;
@@ -178,7 +202,11 @@ export default function ArchiveWatchSlide({
                         }}
                     />
                 ) : (
-                    <p className="pointer-events-none absolute inset-x-3 top-1/2 z-10 -translate-y-1/2 text-center text-sm text-white/50">
+                    <p
+                        className={`pointer-events-none absolute inset-x-4 top-1/2 z-10 -translate-y-1/2 text-center ${
+                            error ? "text-base font-semibold text-white" : "text-sm text-white/50"
+                        }`}
+                    >
                         {error || t("common.loading")}
                     </p>
                 )}

@@ -28,6 +28,18 @@ export function peekArchiveInfo(showId: string) {
     return cache.get(String(showId))?.info || null;
 }
 
+export function isArchiveMissing(info: unknown) {
+    const row = info as { exists?: boolean } | null | undefined;
+    return Boolean(row) && row?.exists === false;
+}
+
+export class ArchiveMissingError extends Error {
+    constructor() {
+        super("ARCHIVE_MISSING");
+        this.name = "ArchiveMissingError";
+    }
+}
+
 async function signSrc(showId: string, streamId: string, publicPath?: string | null) {
     const signed = await buildSignedArchiveUrl(streamId, showId, publicPath);
     return signed.url;
@@ -41,14 +53,13 @@ export function warmArchivePlayback(
     const row = rowFor(showId);
     if (row.src) return Promise.resolve(row.src);
     if (row.srcPromise) return row.srcPromise;
-    const sid = String(streamId || "").trim();
-    row.srcPromise = (sid
-        ? signSrc(showId, sid, publicPath)
-        : loadArchiveInfo(showId).then((info) => {
-              if (!info?.streamId) throw new Error("Hiányzik a stream ID.");
-              return signSrc(showId, info.streamId, info.publicPath);
-          })
-    )
+    row.srcPromise = loadArchiveInfo(showId)
+        .then((info) => {
+            if (isArchiveMissing(info)) throw new ArchiveMissingError();
+            const sid = String(streamId || info?.streamId || "").trim();
+            if (!sid) throw new Error("Hiányzik a stream ID.");
+            return signSrc(showId, sid, publicPath || info?.publicPath);
+        })
         .then((url) => {
             row.src = url;
             return url;

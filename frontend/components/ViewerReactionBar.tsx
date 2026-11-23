@@ -68,7 +68,7 @@ export default function ViewerReactionBar({
             className={
                 inline
                     ? "pointer-events-auto flex flex-col items-end gap-2"
-                    : "pointer-events-auto fixed right-3 top-[42%] z-[200] flex flex-col items-end gap-2"
+                    : "pointer-events-auto fixed z-[200] flex flex-col items-end gap-2 right-[calc(0.75rem+env(safe-area-inset-right))] bottom-[calc(0.75rem+env(safe-area-inset-bottom))]"
             }
             role="group"
             aria-label={onReact ? t("react.group") : t("share.button")}

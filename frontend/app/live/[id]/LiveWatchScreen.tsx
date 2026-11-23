@@ -301,7 +301,7 @@ function LiveWatchScreen({ showId }: LiveWatchScreenProps) {
                 )}
                 <aside
                     data-live-chat-overlay
-                    className="live-watch-overlay absolute inset-x-0 bottom-0 z-40 max-h-[min(38vh,20rem)] overflow-y-auto px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-16 md:left-3 md:right-auto md:w-[min(22rem,calc(100%-6rem))] md:pr-3"
+                    className="live-watch-overlay absolute inset-x-0 bottom-0 z-40 max-h-[min(38vh,20rem)] overflow-y-auto px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-[max(4rem,calc(env(safe-area-inset-right)+3.5rem))] md:left-3 md:right-auto md:w-[min(22rem,calc(100%-6rem))] md:pr-3"
                 >
                     <LiveChat showId={showId} live={showLive} />
                     {!showLive && !ownShow && (

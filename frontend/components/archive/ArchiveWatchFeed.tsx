@@ -8,31 +8,16 @@ import { warmArchivePlayback } from "@/lib/archive-src-cache";
 import ArchiveWatchSlide, { type ArchiveListed } from "@/components/archive/ArchiveWatchSlide";
 
 export default function ArchiveWatchFeed({ initialId }: { initialId: string }) {
-    const { t, locale } = useT();
+    const { locale } = useT();
     const scrollerRef = useRef<HTMLDivElement>(null);
     const didSnapRef = useRef(false);
     const [ids, setIds] = useState<string[]>([initialId]);
     const [listed, setListed] = useState<Record<string, ArchiveListed>>({});
     const [activeId, setActiveId] = useState(initialId);
-    const [phoneLandscape, setPhoneLandscape] = useState(false);
 
     useLayoutEffect(() => {
         document.documentElement.setAttribute("data-live-watch", "1");
         return () => document.documentElement.removeAttribute("data-live-watch");
-    }, []);
-
-    useEffect(() => {
-        const check = () => {
-            const phone = window.matchMedia("(pointer: coarse) and (max-width: 900px)").matches;
-            setPhoneLandscape(phone && window.innerWidth > window.innerHeight);
-        };
-        check();
-        window.addEventListener("resize", check);
-        window.addEventListener("orientationchange", check);
-        return () => {
-            window.removeEventListener("resize", check);
-            window.removeEventListener("orientationchange", check);
-        };
     }, []);
 
     useEffect(() => {
@@ -111,6 +96,18 @@ export default function ArchiveWatchFeed({ initialId }: { initialId: string }) {
     }, [ids]);
 
     useEffect(() => {
+        function keepActiveSlide() {
+            window.requestAnimationFrame(() => {
+                scrollerRef.current
+                    ?.querySelector(`[data-archive-slide="${activeId}"]`)
+                    ?.scrollIntoView({ block: "start" });
+            });
+        }
+        window.addEventListener("orientationchange", keepActiveSlide);
+        return () => window.removeEventListener("orientationchange", keepActiveSlide);
+    }, [activeId]);
+
+    useEffect(() => {
         function onKey(event: KeyboardEvent) {
             if (event.key === "ArrowDown" || event.key === "PageDown") {
                 event.preventDefault();
@@ -137,30 +134,24 @@ export default function ArchiveWatchFeed({ initialId }: { initialId: string }) {
 
     return (
         <div data-live-viewer className="fixed inset-0 z-[80] bg-black">
-            {phoneLandscape ? (
-                <div className="flex h-dvh items-center justify-center px-6 text-center text-white">
-                    <p className="text-base font-semibold">{t("archive.rotate")}</p>
-                </div>
-            ) : (
-                <div
-                    ref={scrollerRef}
-                    className="h-dvh w-full overflow-y-auto overscroll-none snap-y snap-mandatory"
-                >
-                    {ids.map((id, i) => (
-                        <section
-                            key={id}
-                            data-archive-slide={id}
-                            className="h-dvh w-full snap-start snap-always"
-                        >
-                            {Math.abs(i - index) <= 2 ? (
-                                <ArchiveWatchSlide showId={id} active={id === activeId} listed={listed[id]} />
-                            ) : (
-                                <div className="h-dvh bg-black" />
-                            )}
-                        </section>
-                    ))}
-                </div>
-            )}
+            <div
+                ref={scrollerRef}
+                className="h-dvh w-full overflow-y-auto overscroll-none snap-y snap-mandatory"
+            >
+                {ids.map((id, i) => (
+                    <section
+                        key={id}
+                        data-archive-slide={id}
+                        className="h-dvh w-full snap-start snap-always"
+                    >
+                        {Math.abs(i - index) <= 2 ? (
+                            <ArchiveWatchSlide showId={id} active={id === activeId} listed={listed[id]} />
+                        ) : (
+                            <div className="h-dvh bg-black" />
+                        )}
+                    </section>
+                ))}
+            </div>
         </div>
     );
 }

@@ -78,6 +78,17 @@ body {
     min-height: 100dvh;
 }
 
+input,
+select,
+textarea {
+    max-width: 100%;
+}
+
+input[type="file"] {
+    min-width: 0;
+    max-width: 100%;
+}
+
 html[data-live-watch],
 html:has([data-live-viewer]),
 html[data-live-watch] body,

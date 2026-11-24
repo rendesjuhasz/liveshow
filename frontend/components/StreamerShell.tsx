@@ -68,12 +68,12 @@ export default function StreamerShell({
     const openGroup = LINKS.find((item): item is NavGroup => isGroup(item) && groupActive(item, pathname));
 
     return (
-        <div className="min-h-dvh bg-background text-white">
-            <div className="mx-auto max-w-6xl p-4 md:p-8">
-                <div className="mb-6 flex items-start justify-between gap-3">
-                    <div>
+        <div className="min-h-dvh min-w-0 overflow-x-hidden bg-background text-white">
+            <div className="mx-auto w-full min-w-0 max-w-6xl p-4 md:p-8">
+                <div className="mb-6 flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
                         <p className="text-sm text-accent mb-1">Tartalomkészítő felület</p>
-                        <h1 className="text-2xl font-bold md:text-3xl">{title}</h1>
+                        <h1 className="break-words text-2xl font-bold md:text-3xl">{title}</h1>
                     </div>
                     <StreamerHelpMenu />
                 </div>

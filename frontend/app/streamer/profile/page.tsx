@@ -32,7 +32,7 @@ function LegalForm() {
 
     return (
         <form
-            className="max-w-xl grid gap-4 bg-neutral-900 p-6 rounded-2xl mt-8"
+            className="mt-8 grid w-full min-w-0 max-w-xl gap-4 overflow-hidden rounded-2xl bg-neutral-900 p-6"
             onSubmit={async (e) => {
                 e.preventDefault();
                 setError("");
@@ -73,14 +73,14 @@ function LegalForm() {
             </label>
             <label className="grid gap-1 text-sm">
                 Preferált kifizetési mód
-                <select className="p-3 rounded text-black" value={method} onChange={(e) => setMethod(e.target.value)}>
+                <select className="w-full min-w-0 max-w-full rounded p-3 text-black" value={method} onChange={(e) => setMethod(e.target.value)}>
                     <option value="bank_transfer">Banki átutalás</option>
                     <option value="other">Egyéb</option>
                 </select>
             </label>
-            {error && <p className="text-red-400">{error}</p>}
-            {message && <p className="text-green-400">{message}</p>}
-            <button className="bg-neutral-800 font-bold p-3 rounded-xl">Nyilatkozatok mentése</button>
+            {error && <p className="break-words text-red-400">{error}</p>}
+            {message && <p className="break-words text-green-400">{message}</p>}
+            <button className="w-full max-w-full rounded-xl bg-neutral-800 p-3 font-bold">Nyilatkozatok mentése</button>
         </form>
     );
 }
@@ -157,29 +157,29 @@ export default function StreamerProfilePage() {
 
     return (
         <StreamerShell title="Profil szerkesztés">
-            <form onSubmit={submit} className="max-w-xl grid gap-4 bg-neutral-900 p-6 rounded-2xl">
+            <form onSubmit={submit} className="grid w-full min-w-0 max-w-xl gap-4 overflow-hidden rounded-2xl bg-neutral-900 p-6">
                 {avatarUrl && (
                     <img src={publicAssetUrl(avatarUrl)} alt="" className="w-20 h-20 rounded-full object-cover" />
                 )}
                 <label className="grid gap-1">
                     Teljes név
-                    <input className="p-3 rounded text-black" value={name} onChange={(e) => setName(e.target.value)} required />
+                    <input className="w-full min-w-0 max-w-full rounded p-3 text-black" value={name} onChange={(e) => setName(e.target.value)} required />
                 </label>
                 <label className="grid gap-1">
                     Bemutatkozás
-                    <textarea className="p-3 rounded text-black min-h-24" value={bio} onChange={(e) => setBio(e.target.value)} />
+                    <textarea className="min-h-24 w-full min-w-0 max-w-full rounded p-3 text-black" value={bio} onChange={(e) => setBio(e.target.value)} />
                 </label>
                 <ContactLeakHint warning={contactLeakWarning(bio)} />
-                <div className="grid gap-2">
+                <div className="grid min-w-0 gap-2">
                     <p className="font-semibold">Nyilvános linkek</p>
                     <p className="text-xs text-neutral-500">
                         Legfeljebb 5 https-link. A nézők csak az archív videó alatt látják. Élő adásban, chatben
                         és kérdésnél nem jelennek meg. Discord-meghívó (discord.gg / discord.com/invite) engedélyezett.
                     </p>
                     {publicLinks.map((row, index) => (
-                        <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+                        <div key={index} className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
                             <input
-                                className="p-3 rounded text-black"
+                                className="w-full min-w-0 max-w-full rounded p-3 text-black"
                                 placeholder="Címke (pl. Instagram)"
                                 value={row.label}
                                 maxLength={40}
@@ -190,7 +190,7 @@ export default function StreamerProfilePage() {
                                 }}
                             />
                             <input
-                                className="p-3 rounded text-black"
+                                className="w-full min-w-0 max-w-full rounded p-3 text-black"
                                 placeholder="https://"
                                 value={row.url}
                                 maxLength={500}
@@ -221,7 +221,7 @@ export default function StreamerProfilePage() {
                 </div>
                 <label className="grid gap-1">
                     Kategória
-                    <select className="p-3 rounded text-black" value={category} onChange={(e) => setCategory(e.target.value)}>
+                    <select className="w-full min-w-0 max-w-full rounded p-3 text-black" value={category} onChange={(e) => setCategory(e.target.value)}>
                         {STREAMER_CATEGORIES.map((c) => (
                             <option key={c.value} value={c.value}>{c.label}</option>
                         ))}
@@ -233,15 +233,15 @@ export default function StreamerProfilePage() {
                         Csak a platform és az admin látja. A nézőknek nem jelenik meg, és nem
                         használható a nézőkkel való közvetlen kapcsolattartásra.
                     </span>
-                    <input className="p-3 rounded text-black" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
+                    <input className="w-full min-w-0 max-w-full rounded p-3 text-black" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
                 </label>
-                <label className="grid gap-1">
+                <label className="grid min-w-0 gap-1">
                     Új profilkép
-                    <input className="p-3 rounded bg-neutral-800" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                    <input className="w-full min-w-0 max-w-full rounded bg-neutral-800 p-3" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
                 </label>
-                {error && <p className="text-red-400">{error}</p>}
-                {message && <p className="text-green-400">{message}</p>}
-                <button className="bg-yellow-500 text-black font-bold p-3 rounded-xl">Mentés</button>
+                {error && <p className="break-words text-red-400">{error}</p>}
+                {message && <p className="break-words text-green-400">{message}</p>}
+                <button className="w-full max-w-full rounded-xl bg-yellow-500 p-3 font-bold text-black">Mentés</button>
             </form>
             <LegalForm />
         </StreamerShell>

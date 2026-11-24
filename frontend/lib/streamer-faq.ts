@@ -146,7 +146,7 @@ export const STREAMER_FAQ: StreamerFaqItem[] = [
         category: "Platform funkciók",
         question: "Hol jelennek meg a nyilvános linkjeim?",
         answer:
-            "A Profil oldalon, a bemutatkozás alatt adhatsz meg legfeljebb 5 https-linket (YouTube, Instagram, saját web, Discord-meghívó). A nézők csak az archív videó alatt látják, a lejátszó után, az értékelés előtt. Az élő oldalon, a chatben és a kérdésbeküldésnél nem jelennek meg. Ha módosítod a profilt, a régi archívok alatt is az új lista látszik.",
+            "A Profil oldalon, a bemutatkozás alatt adhatsz meg legfeljebb 5 https-linket (YouTube, Instagram, saját web, Discord-meghívó). A nézők a visszanézésnél a megosztás gomb feletti kis gombbal nyitják meg a listát. Az élő oldalon, a chatben és a kérdésbeküldésnél nem jelennek meg. Ha módosítod a profilt, a régi archívoknál is az új lista látszik.",
     },
     {
         id: "plat-rev",

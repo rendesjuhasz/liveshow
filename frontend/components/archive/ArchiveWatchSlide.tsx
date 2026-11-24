@@ -227,9 +227,6 @@ export default function ArchiveWatchSlide({
                 <h1 className="mb-1 text-base font-bold leading-tight">{title}</h1>
                 {creator ? <p className="mb-1 text-sm font-semibold text-white/90">@{creator}</p> : null}
                 {description ? <p className="mb-2 line-clamp-3 text-sm text-white/80">{description}</p> : null}
-                <div className="pointer-events-auto max-w-[min(100%,22rem)]">
-                    <CreatorPublicLinks name={info?.creatorLinks?.name} links={info?.creatorLinks?.links} />
-                </div>
             </div>
 
             <div
@@ -237,6 +234,7 @@ export default function ArchiveWatchSlide({
                 onTouchStart={(event) => event.stopPropagation()}
                 onPointerDown={(event) => event.stopPropagation()}
             >
+                <CreatorPublicLinks name={info?.creatorLinks?.name} links={info?.creatorLinks?.links} />
                 <ViewerReactionBar inline shareKind="archive" shareId={String(showId)} />
                 <button
                     type="button"

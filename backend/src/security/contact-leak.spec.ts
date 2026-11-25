@@ -5,6 +5,9 @@ describe("findOffPlatformContact", () => {
         expect(findOffPlatformContact("írj ide: anna@example.com")).toBe("email");
         expect(findOffPlatformContact("anna kukac gmail pont com")).toBe("email");
         expect(findOffPlatformContact("alma kukac alma pont (com)")).toBe("email");
+        expect(findOffPlatformContact("tibi,kukac,gmail,hu")).toBe("email");
+        expect(findOffPlatformContact("tibi.kukac.gmail.hu")).toBe("email");
+        expect(findOffPlatformContact("alma,kukac,teszt,pont,com")).toBe("email");
     });
 
     it("detects Hungarian phones and WhatsApp links", () => {

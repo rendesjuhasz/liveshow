@@ -12,12 +12,12 @@ function fold(text: string) {
 
 function normalizeForScan(text: string) {
     let n = fold(text)
-        .replace(/\[(?:at|kukac)\]|\((?:at|kukac)\)|\s+(?:at|kukac)\s+/g, "@")
-        .replace(/\[(?:dot|pont)\]|\((?:dot|pont)\)|\s+(?:dot|pont)\s+/g, ".")
+        .replace(/\[(?:at|kukac)\]|\((?:at|kukac)\)|[\s,.;:/-]*\b(?:at|kukac)\b[\s,.;:/-]*/g, "@")
+        .replace(/\[(?:dot|pont)\]|\((?:dot|pont)\)|[\s,.;:/-]*\b(?:dot|pont)\b[\s,.;:/-]*/g, ".")
         .replace(/\s+/g, " ")
         .trim();
     if (n.includes("@")) {
-        n = n.replace(/[(\[]([a-z]{2,})[)\]]/g, "$1");
+        n = n.replace(/,/g, ".").replace(/[(\[]([a-z]{2,})[)\]]/g, "$1");
     }
     return n;
 }
@@ -48,7 +48,7 @@ export function findOffPlatformContact(text: string): string | null {
     }
     if (URL_RE.test(raw) || URL_RE.test(n)) return "url";
     if (HANDLE_RE.test(n) || PHRASE_RE.test(n)) return "channel";
-    const compact = n.replace(/[\s()./-]/g, "");
+    const compact = n.replace(/[\s(),./-]/g, "");
     if (HU_PHONE_RE.test(n) || HU_PHONE_RE.test(compact)) return "phone";
     if (INTL_PLUS_RE.test(raw) || INTL_PLUS_RE.test(n) || INTL_PLUS_RE.test(compact.replace(/^00/, "+"))) {
         return "phone";
